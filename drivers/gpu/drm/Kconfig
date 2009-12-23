@@ -155,3 +155,9 @@ config DRM_SAVAGE
 	help
 	  Choose this option if you have a Savage3D/4/SuperSavage/Pro/Twister
 	  chipset. If M is selected the module will be called savage.
+
+config DRM_QXL
+	tristate "QXL virtual GPU"
+	depends on DRM
+	help
+		QXL 4eva
