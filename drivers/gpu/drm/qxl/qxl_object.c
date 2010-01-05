@@ -31,8 +31,6 @@ void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain)
 	if (domain & QXL_GEM_DOMAIN_VRAM)
 		qbo->placements[c++] = TTM_PL_FLAG_WC | TTM_PL_FLAG_UNCACHED |
 					TTM_PL_FLAG_VRAM;
-//	if (domain & QXL_GEM_DOMAIN_GTT)
-//		qbo->placements[c++] = TTM_PL_MASK_CACHING | TTM_PL_FLAG_TT;
 	if (domain & QXL_GEM_DOMAIN_CPU)
 		qbo->placements[c++] = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
 	if (!c)
@@ -179,7 +177,7 @@ int qxl_bo_init(struct qxl_device *qdev)
 	return qxl_ttm_init(qdev);
 }
 
-int qxl_bo_fini(struct qxl_device *qdev)
+void qxl_bo_fini(struct qxl_device *qdev)
 {
 	qxl_ttm_fini(qdev);
 }

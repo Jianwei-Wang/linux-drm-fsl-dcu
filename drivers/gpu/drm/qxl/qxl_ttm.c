@@ -97,15 +97,15 @@ static int qxl_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		break;
 	case TTM_PL_VRAM:
 		/* "On-card" video ram */
-//		man->gpu_offset = qdev->mc.vram_location;
+		man->gpu_offset = 0;
 		man->flags = TTM_MEMTYPE_FLAG_FIXED |
 			     TTM_MEMTYPE_FLAG_NEEDS_IOREMAP |
 			     TTM_MEMTYPE_FLAG_MAPPABLE;
 		man->available_caching = TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC;
 		man->default_caching = TTM_PL_FLAG_WC;
 		man->io_addr = NULL;
-//		man->io_offset = qdev->mc.aper_base;
-//		man->io_size = qdev->mc.aper_size;
+		man->io_offset = qdev->vram_base;
+		man->io_size = qdev->vram_size;
 		break;
 	default:
 		DRM_ERROR("Unsupported memory type %u\n", (unsigned)type);
@@ -177,18 +177,14 @@ int qxl_ttm_init(struct qxl_device *qdev)
 		DRM_ERROR("failed initializing buffer object driver(%d).\n", r);
 		return r;
 	}
-#if 0
 	r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_VRAM,
-				qdev->mc.real_vram_size >> PAGE_SHIFT);
+			   qdev->vram_size >> PAGE_SHIFT);
 	if (r) {
 		DRM_ERROR("Failed initializing VRAM heap.\n");
 		return r;
 	}
-#endif
-//	DRM_INFO("qxl: %uM of VRAM memory ready\n",
-//		 (unsigned)qdev->mc.real_vram_size / (1024 * 1024));
-//	DRM_INFO("qxl: %uM of GTT memory ready.\n",
-//		 (unsigned)(qdev->mc.gtt_size / (1024 * 1024)));
+	DRM_INFO("qxl: %uM of VRAM memory ready\n",
+		 (unsigned)qdev->vram_size / (1024 * 1024));
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL)) {
 		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
 	}

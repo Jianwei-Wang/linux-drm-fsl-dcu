@@ -109,9 +109,9 @@ int qxl_gem_set_domain(struct drm_gem_object *gobj,
 	return 0;
 }
 
-int qxl_gem_init(struct qxl_device *rdev)
+int qxl_gem_init(struct qxl_device *qdev)
 {
-	INIT_LIST_HEAD(&rdev->gem.objects);
+	INIT_LIST_HEAD(&qdev->gem.objects);
 	return 0;
 }
 

@@ -501,6 +501,7 @@ struct qxl_device {
 	struct pci_dev			*pdev;
 	unsigned long flags;
 
+	resource_size_t vram_base, vram_size;
 	resource_size_t rom_base, rom_size;
 	struct qxl_rom *rom;
 	struct qxl_mode *modes;
@@ -512,6 +513,10 @@ struct qxl_device {
 	struct qxl_gem		gem;
 	struct qxl_mode_info mode_info;
 
+	struct fb_info			*fbdev_info;
+	struct qxl_bo		*fbdev_rbo;
+	struct qxl_framebuffer	*fbdev_rfb;
+
 	
 };
 
@@ -520,6 +525,9 @@ int qxl_driver_unload(struct drm_device *dev);
 
 int qxl_modeset_init(struct qxl_device *qdev);
 void qxl_modeset_fini(struct qxl_device *qdev);
+
+int qxl_bo_init(struct qxl_device *qdev);
+void qxl_bo_fini(struct qxl_device *qdev);
 
 /* qxl_fb.c */
 #define QXLFB_CONN_LIMIT 1

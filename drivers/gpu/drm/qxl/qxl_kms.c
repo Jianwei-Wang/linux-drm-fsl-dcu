@@ -30,6 +30,7 @@ static bool qxl_check_device(struct qxl_device *qdev)
 	DRM_INFO("%d byte draw area at 0x%x\n",
 		 rom->draw_area_size, rom->draw_area_offset);
 
+	qdev->vram_size = rom->draw_area_size;
 	DRM_INFO("RAM header offset: 0x%x\n", rom->ram_header_offset);
 
 	mode_offset = rom->modes_offset / 4;
@@ -46,6 +47,7 @@ int qxl_device_init(struct qxl_device *qdev,
 		    struct pci_dev *pdev,
 		    unsigned long flags)
 {
+	int r;
 	DRM_INFO("qxl: Initialising\n");
 
 	qdev->dev = &pdev->dev;
@@ -53,10 +55,13 @@ int qxl_device_init(struct qxl_device *qdev,
 	qdev->pdev = pdev;
 	qdev->flags = flags;
 
-//	INIT_LIST_HEAD(&rdev->gem.objects);
+	mutex_init(&qdev->gem.mutex);
+	INIT_LIST_HEAD(&qdev->gem.objects);
 
 	qdev->rom_base = drm_get_resource_start(qdev->ddev, 2);
 	qdev->rom_size = drm_get_resource_len(qdev->ddev, 2);
+	qdev->vram_base = drm_get_resource_start(qdev->ddev, 0);
+
 
 	qdev->rom = ioremap(qdev->rom_base, qdev->rom_size);
 	if (!qdev->rom){
@@ -64,12 +69,20 @@ int qxl_device_init(struct qxl_device *qdev,
 		return -ENOMEM;
 	}
 
+	qdev->io_base = drm_get_resource_start(qdev->ddev, 3);
 	qxl_check_device(qdev);
+
+	r = qxl_bo_init(qdev);
+	if (r) {
+		DRM_ERROR("bo init failed %d\n", r);
+		return r;
+	}
 	return 0;
 }
 
-int qxl_device_fini(struct qxl_device *qdev)
+void qxl_device_fini(struct qxl_device *qdev)
 {
+	qxl_bo_fini(qdev);
 	iounmap(qdev->rom);
 	qdev->rom = NULL;
 	qdev->mode_info.modes = NULL;

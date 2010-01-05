@@ -72,7 +72,7 @@ static void qxl_user_framebuffer_destroy(struct drm_framebuffer *fb)
 		qxlfb_remove(dev, fb);
 
 	if (qxl_fb->obj) {
-//		qxl_gem_object_unpin(qxl_fb->obj);
+		qxl_gem_object_unpin(qxl_fb->obj);
 		mutex_lock(&dev->struct_mutex);
 		drm_gem_object_unreference(qxl_fb->obj);
 		mutex_unlock(&dev->struct_mutex);
@@ -111,7 +111,7 @@ static bool qxl_crtc_mode_fixup(struct drm_crtc *crtc,
 				  struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
 {
-
+	return true;
 }
 
 static int qxl_crtc_mode_set(struct drm_crtc *crtc,
@@ -120,13 +120,26 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 			       int x, int y,
 			       struct drm_framebuffer *old_fb)
 {
+	struct drm_device *dev = crtc->dev;
+	struct qxl_device *qdev = dev->dev_private;
+	struct qxl_mode *m = (void *)mode->private;
+
+	if (!m)
+		return -1;
+
+	DRM_ERROR("%dx%d: qxl id %d\n", mode->hdisplay, mode->vdisplay, m->id);
+	
+
+	outb(0, qdev->io_base + QXL_IO_RESET);
+	outb(m->id, qdev->io_base + QXL_IO_SET_MODE);
+	return 0;
 }
 
 static int
 qxl_crtc_set_base(struct drm_crtc *crtc, int x, int y,
 		  struct drm_framebuffer *old_fb)
 {
-
+	return 0;
 }
 
 static void qxl_crtc_prepare (struct drm_crtc *crtc)
@@ -317,6 +330,7 @@ int qdev_output_init(struct drm_device *dev, int num_output)
 	drm_encoder_init(dev, &qxl_output->enc, &qxl_enc_funcs,
 			 DRM_MODE_ENCODER_LVDS);
 
+	encoder->possible_crtcs = 0x1;
 	drm_mode_connector_attach_encoder(&qxl_output->base,
 					  &qxl_output->enc);
 	drm_encoder_helper_add(encoder, &qxl_enc_helper_funcs);
@@ -352,12 +366,14 @@ int qxl_modeset_init(struct qxl_device *qdev)
 	qdev->ddev->mode_config.max_width = 2048;
 	qdev->ddev->mode_config.max_height = 2048;
 
+	qdev->ddev->mode_config.fb_base = qdev->vram_base;
 	qdev_crtc_init(qdev->ddev, 1);
 
 	qdev_output_init(qdev->ddev, 1);
 
-	drm_helper_initial_config(qdev->ddev);
 	qdev->mode_info.mode_config_initialized = true;
+
+	drm_helper_initial_config(qdev->ddev);
 
 	return 0;
 }

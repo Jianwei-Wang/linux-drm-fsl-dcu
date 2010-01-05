@@ -37,6 +37,7 @@
 #include "qxl_drm.h"
 #include "qxl_drv.h"
 
+#include "qxl_object.h"
 #include "drm_fb_helper.h"
 
 struct qxl_fb_device {
@@ -122,26 +123,27 @@ int qxlfb_create(struct drm_device *dev,
 	u64 fb_gpuaddr;
 	void *fbptr = NULL;
 	unsigned long tmp;
-	bool fb_tiled = false; /* useful for testing */
-	u32 tiling_flags = 0;
 	int crtc_count;
 
 	mode_cmd.width = surface_width;
 	mode_cmd.height = surface_height;
 
 	mode_cmd.bpp = surface_bpp;
+	mode_cmd.pitch = ALIGN(mode_cmd.width * ((mode_cmd.bpp + 1) / 8), 64);
 	/* need to align pitch with crtc limits */
 	//	mode_cmd.pitch = qxl_align_pitch(qdev, mode_cmd.width, mode_cmd.bpp, fb_tiled) * ((mode_cmd.bpp + 1) / 8);
 	mode_cmd.depth = surface_depth;
 
 	size = mode_cmd.pitch * mode_cmd.height;
+
+	DRM_ERROR("%d\n", size);
+
 	aligned_size = ALIGN(size, PAGE_SIZE);
 
-#if 0
 	ret = qxl_gem_object_create(qdev, aligned_size, 0,
-			QXL_GEM_DOMAIN_VRAM,
-			false, ttm_bo_type_kernel,
-			&gobj);
+				    QXL_GEM_DOMAIN_VRAM,
+				    false, ttm_bo_type_kernel,
+				    &gobj);
 	if (ret) {
 		printk(KERN_ERR "failed to allocate framebuffer (%d %d)\n",
 		       surface_width, surface_height);
@@ -149,7 +151,7 @@ int qxlfb_create(struct drm_device *dev,
 		goto out;
 	}
 	rbo = gobj->driver_private;
-#endif
+
 	mutex_lock(&qdev->ddev->struct_mutex);
 	fb = qxl_framebuffer_create(qdev->ddev, &mode_cmd, gobj);
 	if (fb == NULL) {
@@ -157,7 +159,7 @@ int qxlfb_create(struct drm_device *dev,
 		ret = -ENOMEM;
 		goto out_unref;
 	}
-#if 0
+
 	ret = qxl_bo_reserve(rbo, false);
 	if (unlikely(ret != 0))
 		goto out_unref;
@@ -172,13 +174,13 @@ int qxlfb_create(struct drm_device *dev,
 	if (ret) {
 		goto out_unref;
 	}
-#endif
+
 	list_add(&fb->filp_head, &qdev->ddev->mode_config.fb_kernel_list);
 
 	*fb_p = fb;
 	rfb = to_qxl_framebuffer(fb);
-	//	qdev->fbdev_rfb = rfb;
-	//	qdev->fbdev_rbo = rbo;
+	qdev->fbdev_rfb = rfb;
+	qdev->fbdev_rbo = rbo;
 
 	info = framebuffer_alloc(sizeof(struct qxl_fb_device), device);
 	if (info == NULL) {
@@ -186,7 +188,7 @@ int qxlfb_create(struct drm_device *dev,
 		goto out_unref;
 	}
 
-	//	qdev->fbdev_info = info;
+	qdev->fbdev_info = info;
 	rfbdev = info->par;
 	rfbdev->helper.funcs = &qxl_fb_helper_funcs;
 	rfbdev->helper.dev = dev;
@@ -205,7 +207,7 @@ int qxlfb_create(struct drm_device *dev,
 	info->flags = FBINFO_DEFAULT;
 	info->fbops = &qxlfb_ops;
 
-	//	tmp = fb_gpuaddr - qdev->mc.vram_location;
+//	tmp = fb_gpuaddr - qdev->mc.vram_location;
 	//	info->fix.smem_start = qdev->mc.aper_base + tmp;
 	info->fix.smem_len = size;
 	info->screen_base = fbptr;
@@ -215,7 +217,7 @@ int qxlfb_create(struct drm_device *dev,
 
 	/* setup aperture base/size for vesafb takeover */
 	info->aperture_base = qdev->ddev->mode_config.fb_base;
-	//	info->aperture_size = qdev->mc.real_vram_size;
+	info->aperture_size = qdev->vram_size;
 
 	info->fix.mmio_start = 0;
 	info->fix.mmio_len = 0;
@@ -242,7 +244,6 @@ int qxlfb_create(struct drm_device *dev,
 	return 0;
 
 out_unref:
-#if 0
 	if (rbo) {
 		ret = qxl_bo_reserve(rbo, false);
 		if (likely(ret == 0)) {
@@ -250,7 +251,6 @@ out_unref:
 			qxl_bo_unreserve(rbo);
 		}
 	}
-#endif
 	if (fb && ret) {
 		list_del(&fb->filp_head);
 		drm_gem_object_unreference(gobj);
@@ -284,6 +284,7 @@ int qxlfb_probe(struct drm_device *dev)
 	struct qxl_device *qdev = dev->dev_private;
 	int bpp_sel = 32;
 
+	DRM_ERROR("\n");
 	return drm_fb_helper_single_fb_probe(dev, bpp_sel, &qxlfb_create);
 }
 
@@ -302,15 +303,12 @@ int qxlfb_remove(struct drm_device *dev, struct drm_framebuffer *fb)
 		struct qxl_fb_device *rfbdev = info->par;
 		rbo = rfb->obj->driver_private;
 		unregister_framebuffer(info);
-#if 0
-
 		r = qxl_bo_reserve(rbo, false);
 		if (likely(r == 0)) {
 			qxl_bo_kunmap(rbo);
 			qxl_bo_unpin(rbo);
 			qxl_bo_unreserve(rbo);
 		}
-#endif
 		drm_fb_helper_free(&rfbdev->helper);
 		framebuffer_release(info);
 	}
