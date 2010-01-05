@@ -284,10 +284,6 @@ int qxlfb_probe(struct drm_device *dev)
 	struct qxl_device *qdev = dev->dev_private;
 	int bpp_sel = 32;
 
-	/* select 8 bpp console on RN50 or 16MB cards */
-	//	if (ASIC_IS_RN50(qdev) || qdev->mc.real_vram_size <= (32*1024*1024))
-	//		bpp_sel = 8;
-
 	return drm_fb_helper_single_fb_probe(dev, bpp_sel, &qxlfb_create);
 }
 

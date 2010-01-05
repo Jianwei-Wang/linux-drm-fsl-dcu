@@ -76,17 +76,6 @@ static void qxl_ttm_global_fini(struct qxl_device *qdev)
 }
 
 
-struct ttm_backend *qxl_ttm_backend_create(struct qxl_device *qdev);
-
-static struct ttm_backend*
-qxl_create_ttm_backend_entry(struct ttm_bo_device *bdev)
-{
-	struct qxl_device *qdev;
-
-	qdev = qxl_get_qdev(bdev);
-	return qxl_ttm_backend_create(qdev);
-}
-
 static int qxl_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
 {
 	return 0;
@@ -155,7 +144,7 @@ static int qxl_verify_access(struct ttm_buffer_object *bo, struct file *filp)
 
 
 static struct ttm_bo_driver qxl_bo_driver = {
-	.create_ttm_backend_entry = &qxl_create_ttm_backend_entry,
+//	.create_ttm_backend_entry = &qxl_create_ttm_backend_entry,
 	.invalidate_caches = &qxl_invalidate_caches,
 	.init_mem_type = &qxl_init_mem_type,
 	.evict_flags = &qxl_evict_flags,
@@ -223,25 +212,3 @@ static struct ttm_backend_func qxl_backend_func = {
 //	.destroy = &qxl_ttm_backend_destroy,
 };
 
-#if 0
-struct ttm_backend *qxl_ttm_backend_create(struct qxl_device *qdev)
-{
-	struct qxl_ttm_backend *gtt;
-
-	gtt = kzalloc(sizeof(struct qxl_ttm_backend), GFP_KERNEL);
-	if (gtt == NULL) {
-		return NULL;
-	}
-	gtt->backend.bdev = &qdev->mman.bdev;
-	gtt->backend.flags = 0;
-	gtt->backend.func = &qxl_backend_func;
-	gtt->qdev = qdev;
-	gtt->pages = NULL;
-	gtt->num_pages = 0;
-	gtt->dummy_read_page = NULL;
-	gtt->populated = false;
-	gtt->bound = false;
-	return &gtt->backend;
-}
-
-#endif

@@ -3,10 +3,11 @@
 
 #include "qxl_drv.h"
 
-extern int qxl_num_ioctls;
+extern int qxl_max_ioctls;
 static struct pci_device_id pciidlist[] = {
   { 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_VGA << 8,
     0xffff00, 0 },
+  { 0, 0, 0 },
 };
 
 MODULE_DEVICE_TABLE(pci, pciidlist);
@@ -61,7 +62,7 @@ static struct drm_driver *driver;
 static int __init qxl_init(void)
 {
 	driver = &qxl_driver;
-	driver->num_ioctls = qxl_num_ioctls;
+	driver->num_ioctls = qxl_max_ioctls;
 	return drm_init(driver);
 }
 

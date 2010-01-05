@@ -468,12 +468,9 @@ struct qxl_crtc {
 	struct drm_crtc base;
 };
 
-struct qxl_encoder {
-	struct drm_encoder base;
-};
-
-struct qxl_connector {
-	struct drm_encoder base;
+struct qxl_output {
+	struct drm_connector base;
+	struct drm_encoder enc;
 };
 
 struct qxl_framebuffer {
@@ -482,8 +479,7 @@ struct qxl_framebuffer {
 };
 
 #define to_qxl_crtc(x) container_of(x, struct qxl_crtc, base)
-#define to_qxl_connector(x) container_of(x, struct qxl_connector, base)
-#define to_qxl_encoder(x) container_of(x, struct qxl_encoder, base)
+#define to_qxl_output(x) container_of(x, struct qxl_output, base)
 #define to_qxl_framebuffer(x) container_of(x, struct qxl_framebuffer, base)
 
 struct qxl_mman {
@@ -494,6 +490,8 @@ struct qxl_mman {
 };
 
 struct qxl_mode_info {
+	int num_modes;
+	struct qxl_mode *modes;
 	bool mode_config_initialized;
 };
 
@@ -513,13 +511,15 @@ struct qxl_device {
 
 	struct qxl_gem		gem;
 	struct qxl_mode_info mode_info;
+
+	
 };
 
 int qxl_driver_load(struct drm_device *dev, unsigned long flags);
 int qxl_driver_unload(struct drm_device *dev);
 
 int qxl_modeset_init(struct qxl_device *qdev);
-int qxl_modeset_fini(struct qxl_device *qdev);
+void qxl_modeset_fini(struct qxl_device *qdev);
 
 /* qxl_fb.c */
 #define QXLFB_CONN_LIMIT 1
