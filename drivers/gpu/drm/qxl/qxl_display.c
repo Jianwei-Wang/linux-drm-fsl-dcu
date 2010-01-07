@@ -132,6 +132,7 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 
 	outb(0, qdev->io_base + QXL_IO_RESET);
 	outb(m->id, qdev->io_base + QXL_IO_SET_MODE);
+	qdev->mode_set = true;
 	return 0;
 }
 

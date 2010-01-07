@@ -7,6 +7,7 @@
 #include <drm/drm.h>
 #include <drm/qxl_drm.h>
 #include "qxl_drv.h"
+#include "qxl_object.h"
 
 #define DRM_FILE_PAGE_OFFSET (0x100000000ULL >> PAGE_SHIFT)
 
@@ -104,8 +105,19 @@ static int qxl_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		man->available_caching = TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC;
 		man->default_caching = TTM_PL_FLAG_WC;
 		man->io_addr = NULL;
-		man->io_offset = qdev->vram_base;
+		man->io_offset = qdev->vram_base + qdev->rom->draw_area_offset;
 		man->io_size = qdev->vram_size;
+		break;
+	case TTM_PL_PRIV0:
+		man->gpu_offset = 0;
+		man->flags = TTM_MEMTYPE_FLAG_FIXED |
+			TTM_MEMTYPE_FLAG_NEEDS_IOREMAP |
+			TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->available_caching = TTM_PL_FLAG_UNCACHED | TTM_PL_FLAG_WC;
+		man->default_caching = TTM_PL_FLAG_WC;
+		man->io_addr = NULL;
+		man->io_offset = qdev->vram_base + qdev->rom->pages_offset;
+		man->io_size = qdev->rom->num_io_pages * PAGE_SIZE;
 		break;
 	default:
 		DRM_ERROR("Unsupported memory type %u\n", (unsigned)type);
@@ -120,7 +132,6 @@ static void qxl_evict_flags(struct ttm_buffer_object *bo,
 	struct qxl_bo *rbo;
 	static u32 placements = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
 
-#if 0
 	if (!qxl_ttm_bo_is_qxl_bo(bo)) {
 		placement->fpfn = 0;
 		placement->lpfn = 0;
@@ -133,7 +144,6 @@ static void qxl_evict_flags(struct ttm_buffer_object *bo,
 	rbo = container_of(bo, struct qxl_bo, tbo);
 	qxl_ttm_placement_from_domain(rbo, QXL_GEM_DOMAIN_CPU);
 	*placement = rbo->placement;
-#endif
 
 }
 
@@ -142,6 +152,33 @@ static int qxl_verify_access(struct ttm_buffer_object *bo, struct file *filp)
 	return 0;
 }
 
+#if 0
+static int qxl_sync_obj_wait(void *sync_obj, void *sync_arg,
+				bool lazy, bool interruptible)
+{
+	return qxl_fence_wait((struct qxl_fence *)sync_obj, interruptible);
+}
+
+static int qxl_sync_obj_flush(void *sync_obj, void *sync_arg)
+{
+	return 0;
+}
+
+static void qxl_sync_obj_unref(void **sync_obj)
+{
+	qxl_fence_unref((struct qxl_fence **)sync_obj);
+}
+
+static void *qxl_sync_obj_ref(void *sync_obj)
+{
+	return qxl_fence_ref((struct qxl_fence *)sync_obj);
+}
+
+static bool qxl_sync_obj_signaled(void *sync_obj, void *sync_arg)
+{
+	return qxl_fence_signaled((struct qxl_fence *)sync_obj);
+}
+#endif
 
 static struct ttm_bo_driver qxl_bo_driver = {
 //	.create_ttm_backend_entry = &qxl_create_ttm_backend_entry,
@@ -151,6 +188,7 @@ static struct ttm_bo_driver qxl_bo_driver = {
 //	.move = &qxl_bo_move,
 	.verify_access = &qxl_verify_access,
 #if 0
+
 	.sync_obj_signaled = &qxl_sync_obj_signaled,
 	.sync_obj_wait = &qxl_sync_obj_wait,
 	.sync_obj_flush = &qxl_sync_obj_flush,
@@ -183,8 +221,16 @@ int qxl_ttm_init(struct qxl_device *qdev)
 		DRM_ERROR("Failed initializing VRAM heap.\n");
 		return r;
 	}
+	r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_PRIV0,
+			   qdev->rom->num_io_pages);
+	if (r) {
+		DRM_ERROR("Failed initializing IO space heap.\n");
+		return r;
+	}
 	DRM_INFO("qxl: %uM of VRAM memory ready\n",
 		 (unsigned)qdev->vram_size / (1024 * 1024));
+	DRM_INFO("qxl: %uM of IO pages memory ready\n",
+		 ((unsigned)qdev->rom->num_io_pages * PAGE_SIZE) / (1024 * 1024));
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL)) {
 		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
 	}
@@ -195,6 +241,7 @@ void qxl_ttm_fini(struct qxl_device *qdev)
 	int r;
 
 	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_VRAM);
+	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV0);
 	ttm_bo_device_release(&qdev->mman.bdev);
 	qxl_ttm_global_fini(qdev);
 	DRM_INFO("qxl: ttm finalized\n");

@@ -5,5 +5,6 @@
 
 #define QXL_GEM_DOMAIN_CPU 0
 #define QXL_GEM_DOMAIN_VRAM 1
+#define QXL_GEM_DOMAIN_IO   2
 
 #endif

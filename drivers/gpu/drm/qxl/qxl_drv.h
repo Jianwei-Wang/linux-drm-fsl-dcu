@@ -11,6 +11,8 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 
+#include "qxl_drm.h"
+
 #define DRIVER_AUTHOR		"Dave Airlie"
 
 #define DRIVER_NAME		"qxl"
@@ -459,6 +461,29 @@ struct qxl_bo {
 	struct drm_gem_object		*gobj;
 };
 
+struct qxl_fence_driver {
+	atomic_t seq;
+	uint32_t last_seq;
+	wait_queue_head_t queue;
+	rwlock_t lock;
+	struct list_head created;
+	struct list_head emited;
+	struct list_head signaled;
+};
+
+struct qxl_fence {
+	struct qxl_device *qdev;
+	struct kref kref;
+	struct list_head list;
+	uint32_t seq;
+	unsigned long timeout;
+	bool emited;
+	bool signaled;
+};
+
+int qxl_fence_driver_init(struct qxl_device *qdev);
+void qxl_fence_driver_fini(struct qxl_device *qdev);
+
 struct qxl_gem {
 	struct mutex		mutex;
 	struct list_head	objects;
@@ -507,17 +532,21 @@ struct qxl_device {
 	struct qxl_mode *modes;
 	int io_base;
 	void *ram;
-	struct qxl_mem *mem;
 	struct qxl_mman		mman;
-
+//	struct qxl_fence_driver         fence;
 	struct qxl_gem		gem;
 	struct qxl_mode_info mode_info;
 
 	struct fb_info			*fbdev_info;
 	struct qxl_bo		*fbdev_rbo;
 	struct qxl_framebuffer	*fbdev_rfb;
+	void *ram_physical;
 
-	
+	struct qxl_ring *release_ring;
+	struct qxl_ring *command_ring;
+
+	struct qxl_ram_header *ram_header;
+	bool mode_set;
 };
 
 int qxl_driver_load(struct drm_device *dev, unsigned long flags);
@@ -528,6 +557,25 @@ void qxl_modeset_fini(struct qxl_device *qdev);
 
 int qxl_bo_init(struct qxl_device *qdev);
 void qxl_bo_fini(struct qxl_device *qdev);
+
+struct qxl_ring *qxl_ring_create (struct qxl_ring_header *header,
+				  int element_size,
+				  int n_elements,
+				  int prod_notify);
+void qxl_ring_free(struct qxl_ring *ring);
+extern struct qxl_bo *qxl_allocnf(struct qxl_device *qdev, unsigned long size);
+
+static inline uint64_t
+qxl_physical_address (struct qxl_device *qdev, void *virtual)
+{
+	return (uint64_t) ((unsigned long)virtual + (unsigned long)qdev->ram_physical);
+}
+
+static inline void *
+qxl_virtual_address (struct qxl_device *qdev, void *physical)
+{
+	return (void *) ((unsigned long)physical - (unsigned long)qdev->ram_physical);
+}
 
 /* qxl_fb.c */
 #define QXLFB_CONN_LIMIT 1
@@ -555,4 +603,13 @@ void qxl_gem_object_unpin(struct drm_gem_object *obj);
 /* qxl ttm */
 int qxl_ttm_init(struct qxl_device *qdev);
 void qxl_ttm_fini(struct qxl_device *qdev);
+
+/* qxl image */
+
+struct qxl_image *qxl_image_create(struct qxl_device *qdev, const uint8_t *data,
+				   int x, int y, int width, int height,
+				   int stride);
+void qxl_image_destroy(struct qxl_device *qdev,
+		       struct qxl_image *image);
+void qxl_push_screen(struct qxl_device *qxl);
 #endif

@@ -56,12 +56,13 @@ int qxl_device_init(struct qxl_device *qdev,
 	qdev->flags = flags;
 
 	mutex_init(&qdev->gem.mutex);
+//	rwlock_init(&qdev->fence_drv.lock);
 	INIT_LIST_HEAD(&qdev->gem.objects);
 
 	qdev->rom_base = drm_get_resource_start(qdev->ddev, 2);
 	qdev->rom_size = drm_get_resource_len(qdev->ddev, 2);
 	qdev->vram_base = drm_get_resource_start(qdev->ddev, 0);
-
+	qdev->io_base = drm_get_resource_start(qdev->ddev, 3);
 
 	qdev->rom = ioremap(qdev->rom_base, qdev->rom_size);
 	if (!qdev->rom){
@@ -69,9 +70,25 @@ int qxl_device_init(struct qxl_device *qdev,
 		return -ENOMEM;
 	}
 
-	qdev->io_base = drm_get_resource_start(qdev->ddev, 3);
 	qxl_check_device(qdev);
 
+	qdev->ram_header = ioremap(qdev->vram_base + qdev->rom->ram_header_offset,
+				   drm_get_resource_len(qdev->ddev, 0) - qdev->rom->ram_header_offset);
+
+	qdev->command_ring = qxl_ring_create(&(qdev->ram_header->cmd_ring_hdr),
+					     sizeof(struct qxl_command),
+					     32, qdev->io_base + QXL_IO_NOTIFY_CMD);
+
+	qdev->release_ring = qxl_ring_create(&(qdev->ram_header->release_ring_hdr),
+					     sizeof(uint64_t),
+					     8, 0);
+#if 0
+	r = qxl_fence_driver_init(qdev);
+	if (r) {
+		DRM_ERROR("fence init failed %d\n", r);
+		return r;
+	}
+#endif
 	r = qxl_bo_init(qdev);
 	if (r) {
 		DRM_ERROR("bo init failed %d\n", r);
@@ -82,7 +99,11 @@ int qxl_device_init(struct qxl_device *qdev,
 
 void qxl_device_fini(struct qxl_device *qdev)
 {
+	qxl_ring_free(qdev->command_ring);
+	qxl_ring_free(qdev->release_ring);
+//	qxl_fence_driver_fini(qdev);
 	qxl_bo_fini(qdev);
+	iounmap(qdev->ram_header);
 	iounmap(qdev->rom);
 	qdev->rom = NULL;
 	qdev->mode_info.modes = NULL;

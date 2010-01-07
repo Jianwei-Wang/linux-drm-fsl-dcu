@@ -46,14 +46,38 @@ struct qxl_fb_device {
 	struct qxl_device		*qdev;
 };
 
+static void qxl_fb_fillrect(struct fb_info *info,
+			    const struct fb_fillrect *rect)
+{
+	struct qxl_fb_device *rfbdev = info->par;
+	cfb_fillrect(info, rect);
+	qxl_push_screen(rfbdev->qdev);
+}
+
+static void qxl_fb_copyarea(struct fb_info *info,
+			    const struct fb_copyarea *region)
+{
+	struct qxl_fb_device *rfbdev = info->par;
+	cfb_copyarea(info, region);
+	qxl_push_screen(rfbdev->qdev);
+}
+
+static void qxl_fb_imageblit(struct fb_info *info,
+			     const struct fb_image *image)
+{
+	struct qxl_fb_device *rfbdev = info->par;
+	cfb_imageblit(info, image);
+	qxl_push_screen(rfbdev->qdev);
+}
+
 static struct fb_ops qxlfb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = drm_fb_helper_check_var,
 	.fb_set_par = drm_fb_helper_set_par,
 	.fb_setcolreg = drm_fb_helper_setcolreg,
-	.fb_fillrect = cfb_fillrect,
-	.fb_copyarea = cfb_copyarea,
-	.fb_imageblit = cfb_imageblit,
+	.fb_fillrect = qxl_fb_fillrect,
+	.fb_copyarea = qxl_fb_copyarea,
+	.fb_imageblit = qxl_fb_imageblit,
 	.fb_pan_display = drm_fb_helper_pan_display,
 	.fb_blank = drm_fb_helper_blank,
 	.fb_setcmap = drm_fb_helper_setcmap,
@@ -130,8 +154,6 @@ int qxlfb_create(struct drm_device *dev,
 
 	mode_cmd.bpp = surface_bpp;
 	mode_cmd.pitch = ALIGN(mode_cmd.width * ((mode_cmd.bpp + 1) / 8), 64);
-	/* need to align pitch with crtc limits */
-	//	mode_cmd.pitch = qxl_align_pitch(qdev, mode_cmd.width, mode_cmd.bpp, fb_tiled) * ((mode_cmd.bpp + 1) / 8);
 	mode_cmd.depth = surface_depth;
 
 	size = mode_cmd.pitch * mode_cmd.height;
@@ -163,6 +185,7 @@ int qxlfb_create(struct drm_device *dev,
 	ret = qxl_bo_reserve(rbo, false);
 	if (unlikely(ret != 0))
 		goto out_unref;
+
 	ret = qxl_bo_pin(rbo, QXL_GEM_DOMAIN_VRAM, &fb_gpuaddr);
 	if (ret) {
 		qxl_bo_unreserve(rbo);
@@ -198,7 +221,7 @@ int qxlfb_create(struct drm_device *dev,
 	if (ret)
 		goto out_unref;
 
-	memset_io(fbptr, 0xff, aligned_size);
+	memset(fbptr, 0xff, aligned_size);
 
 	strcpy(info->fix.id, "qxldrmfb");
 
@@ -209,6 +232,7 @@ int qxlfb_create(struct drm_device *dev,
 
 //	tmp = fb_gpuaddr - qdev->mc.vram_location;
 	//	info->fix.smem_start = qdev->mc.aper_base + tmp;
+	info->fix.smem_start = fbptr;
 	info->fix.smem_len = size;
 	info->screen_base = fbptr;
 	info->screen_size = size;
@@ -248,6 +272,7 @@ out_unref:
 		ret = qxl_bo_reserve(rbo, false);
 		if (likely(ret == 0)) {
 			qxl_bo_kunmap(rbo);
+			qxl_bo_unpin(rbo);
 			qxl_bo_unreserve(rbo);
 		}
 	}

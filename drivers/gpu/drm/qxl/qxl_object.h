@@ -67,3 +67,5 @@ extern void qxl_bo_kunmap(struct qxl_bo *bo);
 extern void qxl_bo_unref(struct qxl_bo **bo);
 extern int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr);
 extern int qxl_bo_unpin(struct qxl_bo *bo);
+extern void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain);
+extern bool qxl_ttm_bo_is_qxl_bo(struct ttm_buffer_object *bo);

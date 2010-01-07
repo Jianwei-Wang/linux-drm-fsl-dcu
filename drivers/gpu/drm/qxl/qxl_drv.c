@@ -10,7 +10,7 @@ static struct pci_device_id pciidlist[] = {
   { 0, 0, 0 },
 };
 
-MODULE_DEVICE_TABLE(pci, pciidlist);
+//MODULE_DEVICE_TABLE(pci, pciidlist);
 
 static struct drm_driver qxl_driver;
 

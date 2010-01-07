@@ -159,5 +159,8 @@ config DRM_SAVAGE
 config DRM_QXL
 	tristate "QXL virtual GPU"
 	depends on DRM
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
 	help
 		QXL 4eva
