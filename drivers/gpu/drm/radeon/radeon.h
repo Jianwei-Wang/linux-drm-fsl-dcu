@@ -954,6 +954,8 @@ struct radeon_device {
 	int			audio_bits_per_sample;
 	uint8_t			audio_status_bits;
 	uint8_t			audio_category_code;
+
+	struct radeon_i2c_chan *mm_bus;
 };
 
 int radeon_device_init(struct radeon_device *rdev,

@@ -2229,3 +2229,22 @@ radeon_atombios_encoder_dpms_scratch_regs(struct drm_encoder *encoder, bool on)
 	else
 		WREG32(RADEON_BIOS_2_SCRATCH, bios_2_scratch);
 }
+
+
+void atombios_add_mm_i2c_bus(struct radeon_device *rdev)
+{
+	struct radeon_i2c_bus_rec mm_bus;
+
+	mm_bus = radeon_lookup_i2c_gpio(rdev, 0xa0);
+
+	if (mm_bus.valid) {
+		DRM_INFO("Found multimedia i2c bus\n");
+	} else {
+		DRM_INFO("failed to find multimedia i2c bus\n");
+		return;
+	}
+
+	rdev->mm_bus = radeon_i2c_create(rdev->ddev, &mm_bus, "MM");
+	if (rdev->mm_bus)
+		DRM_INFO("Created mm i2c bus\n");
+}

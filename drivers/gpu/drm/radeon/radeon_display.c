@@ -379,6 +379,10 @@ static bool radeon_setup_enc_conn(struct drm_device *dev)
 			radeon_ddc_dump(drm_connector);
 	}
 
+	if (rdev->is_atom_bios)
+		atombios_add_mm_i2c_bus(rdev);
+	else
+		radeon_combios_add_mm_i2c_bus(rdev);
 	return ret;
 }
 

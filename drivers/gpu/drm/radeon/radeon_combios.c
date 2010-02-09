@@ -3225,3 +3225,13 @@ radeon_combios_encoder_dpms_scratch_regs(struct drm_encoder *encoder, bool on)
 	}
 	WREG32(RADEON_BIOS_6_SCRATCH, bios_6_scratch);
 }
+
+void radeon_combios_add_mm_i2c_bus(struct radeon_device *rdev)
+{
+	struct radeon_i2c_bus_rec i2c_bus;
+	i2c_bus.valid = true;
+	i2c_bus.hw_capable = true;
+	i2c_bus.mm_i2c = true;
+	rdev->mm_bus = radeon_i2c_create(rdev->ddev, &i2c_bus, "MM");
+
+}
