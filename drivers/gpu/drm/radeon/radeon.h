@@ -70,6 +70,8 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 
+#include <media/v4l2-device.h>
+
 #include "radeon_family.h"
 #include "radeon_mode.h"
 #include "radeon_reg.h"
@@ -691,6 +693,30 @@ struct radeon_pm {
 	struct radeon_power_state *default_power_state;
 };
 
+/*
+ *
+ */
+enum radeon_tuner_type {
+	RADEON_TUNER_NONE,
+	RADEON_TUNER_FI1236,
+	RADEON_TUNER_FRONT_BACK_9885,
+};
+
+enum radeon_audio_type {
+	RADEON_AUDIO_NONE,
+	RADEON_AUDIO_TDA9850,
+	RADEON_AUDIO_MSP34XX,
+};
+	
+
+struct radeon_mm {
+	bool initialised;
+	struct radeon_i2c_chan *i2c_bus;
+	struct v4l2_device v4l2_dev;
+
+	enum radeon_tuner_type tuner_type;
+	enum radeon_audio_type audio_type;
+};
 
 /*
  * Benchmarking
@@ -926,6 +952,7 @@ struct radeon_device {
 	struct radeon_asic		*asic;
 	struct radeon_gem		gem;
 	struct radeon_pm		pm;
+	struct radeon_mm                mm;
 	uint32_t			bios_scratch[RADEON_BIOS_NUM_SCRATCH];
 	struct mutex			cs_mutex;
 	struct radeon_wb		wb;
@@ -954,8 +981,6 @@ struct radeon_device {
 	int			audio_bits_per_sample;
 	uint8_t			audio_status_bits;
 	uint8_t			audio_category_code;
-
-	struct radeon_i2c_chan *mm_bus;
 };
 
 int radeon_device_init(struct radeon_device *rdev,
@@ -1209,6 +1234,7 @@ extern int r100_cs_packet_parse(struct radeon_cs_parser *p,
 				unsigned idx);
 extern void r100_enable_bm(struct radeon_device *rdev);
 extern void r100_set_common_regs(struct radeon_device *rdev);
+extern int r100_rbbm_fifo_wait_for_entry(struct radeon_device *rdev, unsigned n);
 
 /* rv200,rv250,rv280 */
 extern void r200_set_safe_registers(struct radeon_device *rdev);

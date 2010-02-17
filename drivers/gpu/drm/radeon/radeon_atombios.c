@@ -1846,6 +1846,21 @@ void radeon_atom_set_memory_clock(struct radeon_device *rdev,
 	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
 }
 
+bool radeon_atom_get_multimedia(struct radeon_device *rdev)
+{
+	struct radeon_mode_info *mode_info = &rdev->mode_info;
+	int index = GetIndexIntoMasterTable(DATA, MultimediaConfigInfo);
+	uint8_t frev, crev;
+	uint16_t data_offset;
+	atom_parse_data_header(mode_info->atom_context, index, NULL, &frev, &crev, &data_offset);
+
+	if (!data_offset)
+		return false;
+
+	radeon_parse_multimedia_table(rdev, data_offset + 8);
+	return true;
+}
+	
 void radeon_atom_initialize_bios_scratch_regs(struct drm_device *dev)
 {
 	struct radeon_device *rdev = dev->dev_private;
@@ -2231,7 +2246,7 @@ radeon_atombios_encoder_dpms_scratch_regs(struct drm_encoder *encoder, bool on)
 }
 
 
-void atombios_add_mm_i2c_bus(struct radeon_device *rdev)
+bool atombios_add_mm_i2c_bus(struct radeon_device *rdev)
 {
 	struct radeon_i2c_bus_rec mm_bus;
 
@@ -2241,10 +2256,13 @@ void atombios_add_mm_i2c_bus(struct radeon_device *rdev)
 		DRM_INFO("Found multimedia i2c bus\n");
 	} else {
 		DRM_INFO("failed to find multimedia i2c bus\n");
-		return;
+		return false;
 	}
 
-	rdev->mm_bus = radeon_i2c_create(rdev->ddev, &mm_bus, "MM");
-	if (rdev->mm_bus)
+	rdev->mm.i2c_bus = radeon_i2c_create(rdev->ddev, &mm_bus, "MM");
+	if (rdev->mm.i2c_bus) {
 		DRM_INFO("Created mm i2c bus\n");
+		return true;
+	}
+	return false;
 }

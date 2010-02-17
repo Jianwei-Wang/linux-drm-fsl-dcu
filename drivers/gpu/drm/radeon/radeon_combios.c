@@ -613,6 +613,18 @@ static struct radeon_i2c_bus_rec combios_setup_i2c_bus(struct radeon_device *rde
 	return i2c;
 }
 
+bool radeon_combios_get_multimedia(struct radeon_device *rdev)
+{
+	uint16_t offset;
+
+	offset = combios_get_table_offset(rdev->ddev, COMBIOS_MULTIMEDIA_INFO_TABLE);
+	if (!offset)
+		return false;
+
+	radeon_parse_multimedia_table(rdev, offset);
+	return true;
+}
+
 bool radeon_combios_get_clock_info(struct drm_device *dev)
 {
 	struct radeon_device *rdev = dev->dev_private;
@@ -3226,12 +3238,14 @@ radeon_combios_encoder_dpms_scratch_regs(struct drm_encoder *encoder, bool on)
 	WREG32(RADEON_BIOS_6_SCRATCH, bios_6_scratch);
 }
 
-void radeon_combios_add_mm_i2c_bus(struct radeon_device *rdev)
+bool radeon_combios_add_mm_i2c_bus(struct radeon_device *rdev)
 {
 	struct radeon_i2c_bus_rec i2c_bus;
 	i2c_bus.valid = true;
 	i2c_bus.hw_capable = true;
 	i2c_bus.mm_i2c = true;
-	rdev->mm_bus = radeon_i2c_create(rdev->ddev, &i2c_bus, "MM");
-
+	rdev->mm.i2c_bus = radeon_i2c_create(rdev->ddev, &i2c_bus, "MM");
+	if (!rdev->mm.i2c_bus)
+		return false;
+	return true;
 }

@@ -59,6 +59,10 @@ config DRM_RADEON
 	select FW_LOADER
         select DRM_KMS_HELPER
         select DRM_TTM
+	select VIDEO_TUNER
+	select VIDEO_TVEEPROM
+	select VIDEO_MSP3400 if VIDEO_HELPER_CHIPS_AUTO
+	select VIDEO_TDA9887 if VIDEO_HELPER_CHIPS_AUTO
 	help
 	  Choose this option if you have an ATI Radeon graphics card.  There
 	  are both PCI and AGP versions.  You don't need to choose this to

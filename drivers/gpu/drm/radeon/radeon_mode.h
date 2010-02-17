@@ -575,6 +575,14 @@ void radeon_legacy_tv_adjust_pll2(struct drm_encoder *encoder,
 void radeon_legacy_tv_mode_set(struct drm_encoder *encoder,
 			       struct drm_display_mode *mode,
 			       struct drm_display_mode *adjusted_mode);
-void atombios_add_mm_i2c_bus(struct radeon_device *rdev);
-void radeon_combios_add_mm_i2c_bus(struct radeon_device *rdev);
+bool atombios_add_mm_i2c_bus(struct radeon_device *rdev);
+bool radeon_combios_add_mm_i2c_bus(struct radeon_device *rdev);
+
+/* vip / mm */
+bool radeon_multimedia_init(struct radeon_device *rdev);
+void radeon_multimedia_fini(struct radeon_device *rdev);
+bool radeon_atom_get_multimedia(struct radeon_device *rdev);
+bool radeon_combios_get_multimedia(struct radeon_device *rdev);
+void radeon_parse_multimedia_table(struct radeon_device *rdev,
+				   uint16_t offset);
 #endif

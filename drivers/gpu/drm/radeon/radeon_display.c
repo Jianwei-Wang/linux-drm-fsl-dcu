@@ -379,10 +379,6 @@ static bool radeon_setup_enc_conn(struct drm_device *dev)
 			radeon_ddc_dump(drm_connector);
 	}
 
-	if (rdev->is_atom_bios)
-		atombios_add_mm_i2c_bus(rdev);
-	else
-		radeon_combios_add_mm_i2c_bus(rdev);
 	return ret;
 }
 
@@ -917,12 +913,14 @@ int radeon_modeset_init(struct radeon_device *rdev)
 	}
 	/* initialize hpd */
 	radeon_hpd_init(rdev);
+	radeon_multimedia_init(rdev);
 	drm_helper_initial_config(rdev->ddev);
 	return 0;
 }
 
 void radeon_modeset_fini(struct radeon_device *rdev)
 {
+	radeon_multimedia_fini(rdev);
 	kfree(rdev->mode_info.bios_hardcoded_edid);
 
 	if (rdev->mode_info.mode_config_initialized) {
