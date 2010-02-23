@@ -709,6 +709,9 @@ enum radeon_audio_type {
 };
 	
 
+#define RT100_ATI_ID 0x4D541002
+#define RT200_ATI_ID 0x4d4a1002
+
 struct radeon_mm {
 	bool initialised;
 	struct radeon_i2c_chan *i2c_bus;
@@ -716,6 +719,11 @@ struct radeon_mm {
 
 	enum radeon_tuner_type tuner_type;
 	enum radeon_audio_type audio_type;
+	struct video_device *video_dev;
+
+	int theatre_num, theatre_id;
+	struct list_head devlist;
+	// struct video_device *vbi_dev; /* TODO */
 };
 
 /*

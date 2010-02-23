@@ -585,4 +585,6 @@ bool radeon_atom_get_multimedia(struct radeon_device *rdev);
 bool radeon_combios_get_multimedia(struct radeon_device *rdev);
 void radeon_parse_multimedia_table(struct radeon_device *rdev,
 				   uint16_t offset);
+bool radeon_vip_theatre_detect(struct radeon_device *rdev);
+void radeon_vip_init(struct radeon_device *rdev);
 #endif
