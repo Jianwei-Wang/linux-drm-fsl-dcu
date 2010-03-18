@@ -343,4 +343,18 @@ struct drm_mode_crtc_page_flip {
 	__u64 user_data;
 };
 
+/* render node create and remove functions
+   if crtc/encoders/connectors all == 0 then gpgpu node */
+struct drm_render_node_create {
+	__u32 node_minor_id;
+	__u32 num_crtc;
+	__u32 num_encoder;
+	__u32 num_connector;
+	__u64 id_list_ptr;
+};
+
+struct drm_render_node_remove {
+	__u32 node_minor_id;
+};
+
 #endif

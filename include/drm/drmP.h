@@ -1357,6 +1357,12 @@ extern int drm_get_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 		       struct drm_driver *driver);
 extern void drm_put_dev(struct drm_device *dev);
 extern int drm_put_minor(struct drm_minor **minor);
+
+extern int drm_render_node_create_ioctl(struct drm_device *dev, void *data,
+					struct drm_file *file_priv);
+extern int drm_render_node_remove_ioctl(struct drm_device *dev, void *data,
+					struct drm_file *file_priv);
+
 extern unsigned int drm_debug;
 
 extern struct class *drm_class;
