@@ -227,7 +227,7 @@ int drm_lastclose(struct drm_device * dev)
 	    !drm_core_check_feature(dev, DRIVER_MODESET))
 		drm_dma_takedown(dev);
 
-	dev->dev_mapping = NULL;
+	//	dev->dev_mapping = NULL;
 	mutex_unlock(&dev->struct_mutex);
 
 	DRM_DEBUG("lastclose completed\n");

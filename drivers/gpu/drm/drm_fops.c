@@ -38,8 +38,8 @@
 #include <linux/poll.h>
 #include <linux/smp_lock.h>
 
-static int drm_open_helper(struct inode *inode, struct file *filp,
-			   struct drm_device * dev);
+static int drm_open_helper(struct file *filp,
+			   struct drm_minor *minor);
 
 static int drm_setup(struct drm_device * dev)
 {
@@ -128,7 +128,7 @@ int drm_open(struct inode *inode, struct file *filp)
 	if (!(dev = minor->dev))
 		return -ENODEV;
 
-	retcode = drm_open_helper(inode, filp, dev);
+	retcode = drm_open_helper(filp, minor);
 	if (!retcode) {
 		atomic_inc(&dev->counts[_DRM_STAT_OPENS]);
 		spin_lock(&dev->count_lock);
@@ -141,11 +141,11 @@ int drm_open(struct inode *inode, struct file *filp)
 	}
 out:
 	mutex_lock(&dev->struct_mutex);
-	if (minor->type == DRM_MINOR_LEGACY) {
-		BUG_ON((dev->dev_mapping != NULL) &&
-			(dev->dev_mapping != inode->i_mapping));
-		if (dev->dev_mapping == NULL)
-			dev->dev_mapping = inode->i_mapping;
+	if (minor->type == DRM_MINOR_LEGACY || minor->type == DRM_MINOR_RENDER) {
+		BUG_ON((minor->dev_mapping != NULL) &&
+			(minor->dev_mapping != inode->i_mapping));
+		if (minor->dev_mapping == NULL)
+			minor->dev_mapping = inode->i_mapping;
 	}
 	mutex_unlock(&dev->struct_mutex);
 
@@ -226,10 +226,10 @@ static int drm_cpu_valid(void)
  * Creates and initializes a drm_file structure for the file private data in \p
  * filp and add it into the double linked list in \p dev.
  */
-static int drm_open_helper(struct inode *inode, struct file *filp,
-			   struct drm_device * dev)
+static int drm_open_helper(struct file *filp,
+			   struct drm_minor *minor)
 {
-	int minor_id = iminor(inode);
+	struct drm_device *dev = minor->dev;
 	struct drm_file *priv;
 	int ret;
 
@@ -238,7 +238,7 @@ static int drm_open_helper(struct inode *inode, struct file *filp,
 	if (!drm_cpu_valid())
 		return -EINVAL;
 
-	DRM_DEBUG("pid = %d, minor = %d\n", task_pid_nr(current), minor_id);
+	DRM_DEBUG("pid = %d, minor = %d\n", task_pid_nr(current), minor->index);
 
 	priv = kmalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -249,7 +249,7 @@ static int drm_open_helper(struct inode *inode, struct file *filp,
 	priv->filp = filp;
 	priv->uid = current_euid();
 	priv->pid = task_pid_nr(current);
-	priv->minor = idr_find(&drm_minors_idr, minor_id);
+	priv->minor = minor;
 	priv->ioctl_count = 0;
 	/* for compatibility root is always authenticated */
 	priv->authenticated = capable(CAP_SYS_ADMIN);
@@ -552,7 +552,8 @@ int drm_release(struct inode *inode, struct file *filp)
 	}
 
 	/* drop the reference held my the file priv */
-	drm_master_put(&file_priv->master);
+	if (file_priv->master)
+		drm_master_put(&file_priv->master);
 	file_priv->is_master = 0;
 	list_del(&file_priv->lhead);
 	mutex_unlock(&dev->struct_mutex);

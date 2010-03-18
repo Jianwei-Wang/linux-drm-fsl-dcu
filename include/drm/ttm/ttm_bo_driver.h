@@ -38,6 +38,7 @@
 #include "linux/fs.h"
 #include "linux/spinlock.h"
 
+struct drm_device;
 struct ttm_backend;
 
 struct ttm_backend_func {
@@ -464,7 +465,7 @@ struct ttm_bo_device {
 	 */
 
 	bool nice_mode;
-	struct address_space *dev_mapping;
+	struct drm_device *mapping_priv;
 
 	/*
 	 * Internal protection.

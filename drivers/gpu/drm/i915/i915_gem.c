@@ -1306,9 +1306,7 @@ i915_gem_release_mmap(struct drm_gem_object *obj)
 	struct drm_device *dev = obj->dev;
 	struct drm_i915_gem_object *obj_priv = obj->driver_private;
 
-	if (dev->dev_mapping)
-		unmap_mapping_range(dev->dev_mapping,
-				    obj_priv->mmap_offset, obj->size, 1);
+	drm_unmap_mapping(dev, obj_priv->mmap_offset, obj->size);
 }
 
 static void

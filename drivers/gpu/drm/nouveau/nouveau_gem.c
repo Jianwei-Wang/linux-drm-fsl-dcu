@@ -136,8 +136,8 @@ nouveau_gem_ioctl_new(struct drm_device *dev, void *data,
 
 	NOUVEAU_CHECK_INITIALISED_WITH_RETURN;
 
-	if (unlikely(dev_priv->ttm.bdev.dev_mapping == NULL))
-		dev_priv->ttm.bdev.dev_mapping = dev_priv->dev->dev_mapping;
+	if (unlikely(dev_priv->ttm.bdev.mapping_priv == NULL))
+		dev_priv->ttm.bdev.mapping_priv = (void *)dev;
 
 	if (req->channel_hint) {
 		NOUVEAU_GET_USER_CHANNEL_WITH_RETURN(req->channel_hint,

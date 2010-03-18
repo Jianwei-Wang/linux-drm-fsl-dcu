@@ -891,6 +891,10 @@ struct drm_minor {
 	struct drm_master *master; /* currently active master for this node */
 	struct list_head master_list;
 	struct drm_mode_group mode_group;
+
+	struct address_space *dev_mapping;
+
+	struct list_head render_node_list;
 };
 
 struct drm_pending_vblank_event {
@@ -1024,7 +1028,6 @@ struct drm_device {
 	int num_crtcs;                  /**< Number of CRTCs on this device */
 	void *dev_private;		/**< device private data */
 	void *mm_private;
-	struct address_space *dev_mapping;
 	struct drm_sigdata sigdata;	   /**< For block_all_signals */
 	sigset_t sigmask;
 
@@ -1033,7 +1036,7 @@ struct drm_device {
 	unsigned int agp_buffer_token;
 	struct drm_minor *control;		/**< Control node for card */
 	struct drm_minor *primary;		/**< render type primary screen head */
-
+	struct list_head render_minor_list;
 	/** \name Drawable information */
 	/*@{ */
 	spinlock_t drw_lock;

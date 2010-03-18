@@ -31,7 +31,7 @@
 #include "radeon_drm.h"
 
 #include <linux/vga_switcheroo.h>
-
+extern int drm_gpgpu;
 int radeon_driver_unload_kms(struct drm_device *dev)
 {
 	struct radeon_device *rdev = dev->dev_private;
@@ -43,6 +43,72 @@ int radeon_driver_unload_kms(struct drm_device *dev)
 	kfree(rdev);
 	dev->dev_private = NULL;
 	return 0;
+}
+
+static int radeon_init_render_nodes(struct drm_device *dev)
+{
+	struct drm_minor *minor;
+	struct drm_connector *connector;
+	struct drm_crtc *crtc;
+	struct drm_mode_group *group;
+	int i = 0, j = 0;
+	int ret = 0;
+
+	list_for_each_entry(minor, &dev->render_minor_list, render_node_list) {
+		struct drm_connector *this_connector;
+
+		group = &minor->mode_group;
+		if (i == 2)
+			break;
+		/* initialise a mode group */
+		ret = drm_mode_group_init(dev, &minor->mode_group);
+		if (ret)
+			goto out;	
+		j = 0;
+		this_connector = NULL;
+		list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+			/* TODO de-hardcode */
+			if ((i == 0 && j == 0) || (i == 1 && j == 2)) {
+				this_connector = connector;
+				printk("pick connector %d for minor num %d\n", connector->base.id, i);
+				break;
+			}
+			j++;
+		}
+
+		if (!this_connector) {
+			printk("connector skip for %d\n", i);
+			goto next_one;
+		}
+
+		j = 0;
+		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+			if (i == j) {
+				printk("pick crtc %d for minor num %d\n", crtc->base.id, i);
+				group->id_list[group->num_crtcs++] = crtc->base.id;
+				break;
+			}
+			j++;
+		}
+
+		for (j = 0; j < DRM_CONNECTOR_MAX_ENCODER; j++) {
+			if (this_connector->encoder_ids[j] != 0) 
+				group->id_list[group->num_crtcs + group->num_encoders++] = this_connector->encoder_ids[j];
+		}
+
+		group->id_list[group->num_crtcs + group->num_encoders + group->num_connectors++] = this_connector->base.id;
+
+	next_one:
+		printk("node %d %d %d %d", minor->index, group->num_crtcs, group->num_encoders, group->num_connectors);
+		for (j = 0; j < group->num_crtcs + group->num_encoders + group->num_connectors; j++)
+			printk("%d ", group->id_list[j]);
+		printk("\n");
+		i++;
+	}
+
+
+out:
+	return ret;
 }
 
 int radeon_driver_load_kms(struct drm_device *dev, unsigned long flags)
@@ -83,6 +149,11 @@ int radeon_driver_load_kms(struct drm_device *dev, unsigned long flags)
 	r = radeon_modeset_init(rdev);
 	if (r)
 		dev_err(&dev->pdev->dev, "Fatal error during modeset init\n");
+
+	/* assign group resources to the render minors */
+	if (drm_gpgpu) {
+		radeon_init_render_nodes(dev);
+	}
 out:
 	if (r)
 		radeon_driver_unload_kms(dev);
