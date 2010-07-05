@@ -141,6 +141,9 @@ int radeon_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	case RADEON_INFO_ACCEL_WORKING2:
 		value = rdev->accel_working;
 		break;
+	case RADEON_INFO_HAVE_IB_SETUP:
+		value = 1;
+		break;
 	default:
 		DRM_DEBUG("Invalid request %d\n", info->request);
 		return -EINVAL;

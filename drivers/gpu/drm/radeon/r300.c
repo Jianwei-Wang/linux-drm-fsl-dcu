@@ -182,6 +182,9 @@ void r300_fence_ring_emit(struct radeon_device *rdev,
 	/* Who ever call radeon_fence_emit should call ring_lock and ask
 	 * for enough space (today caller are ib schedule and buffer move) */
 	/* Write SC register so SC & US assert idle */
+	if (fence->dont_flush == true)
+		goto just_fence;
+
 	radeon_ring_write(rdev, PACKET0(R300_RE_SCISSORS_TL, 0));
 	radeon_ring_write(rdev, 0);
 	radeon_ring_write(rdev, PACKET0(R300_RE_SCISSORS_BR, 0));
@@ -201,6 +204,8 @@ void r300_fence_ring_emit(struct radeon_device *rdev,
 				RADEON_HDP_READ_BUFFER_INVALIDATE);
 	radeon_ring_write(rdev, PACKET0(RADEON_HOST_PATH_CNTL, 0));
 	radeon_ring_write(rdev, rdev->config.r300.hdp_cntl);
+
+just_fence:
 	/* Emit fence sequence & fire IRQ */
 	radeon_ring_write(rdev, PACKET0(rdev->fence_drv.scratch_reg, 0));
 	radeon_ring_write(rdev, fence->seq);

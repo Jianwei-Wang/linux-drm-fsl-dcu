@@ -101,6 +101,7 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	/* get chunks */
 	INIT_LIST_HEAD(&p->validated);
 	p->chunk_ib_idx = -1;
+	p->chunk_setup_idx = -1;
 	p->chunk_relocs_idx = -1;
 	p->chunks_array = kcalloc(cs->num_chunks, sizeof(uint64_t), GFP_KERNEL);
 	if (p->chunks_array == NULL) {
@@ -141,12 +142,15 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 			if (p->chunks[i].length_dw == 0)
 				return -EINVAL;
 		}
+		if (p->chunks[i].chunk_id == RADEON_CHUNK_ID_IB_SETUP)
+			if (p->chunks[i].length_dw > 0)
+				p->chunk_setup_idx = i;
 
 		p->chunks[i].length_dw = user_chunk.length_dw;
 		p->chunks[i].user_ptr = (void __user *)(unsigned long)user_chunk.chunk_data;
 
 		cdata = (uint32_t *)(unsigned long)user_chunk.chunk_data;
-		if (p->chunks[i].chunk_id != RADEON_CHUNK_ID_IB) {
+		if (p->chunks[i].chunk_id != RADEON_CHUNK_ID_IB && p->chunks[i].chunk_id != RADEON_CHUNK_ID_IB_SETUP) {
 			size = p->chunks[i].length_dw * sizeof(uint32_t);
 			p->chunks[i].kdata = kmalloc(size, GFP_KERNEL);
 			if (p->chunks[i].kdata == NULL) {
@@ -219,6 +223,10 @@ static int radeon_cs_parser_chunk(struct radeon_cs_parser *parser, int chunk_id)
 	struct radeon_device *rdev = parser->rdev;
 	struct radeon_cs_chunk *ib_chunk;
 	int r;
+	bool flush = true;
+
+	if (chunk_id != parser->chunk_ib_idx)
+		flush = false;
 
 	ib_chunk = &parser->chunks[chunk_id];
 	r = radeon_ib_get(parser->rdev, &ib_chunk->ib);
@@ -226,6 +234,8 @@ static int radeon_cs_parser_chunk(struct radeon_cs_parser *parser, int chunk_id)
 		DRM_ERROR("Failed to get ib !\n");
 		return r;
 	}
+	ib_chunk->ib->fence->dont_flush = !flush;
+
 	ib_chunk->ib->length_dw = ib_chunk->length_dw;
 	/* Copy the packet into the IB, the parser will read from the
 	 * input memory (cached) and write to the IB (which can be
@@ -276,6 +286,12 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	r = radeon_cs_create_tracker(&parser);
 	if (r)
 		goto out;
+
+	if (parser.chunk_setup_idx != -1) {
+		r = radeon_cs_parser_chunk(&parser, parser.chunk_setup_idx);
+		if (r)
+			goto out;
+	}
 
 	r = radeon_cs_parser_chunk(&parser, parser.chunk_ib_idx);
 	if (r)

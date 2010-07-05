@@ -874,6 +874,7 @@ struct drm_radeon_gem_pwrite {
 
 #define RADEON_CHUNK_ID_RELOCS	0x01
 #define RADEON_CHUNK_ID_IB	0x02
+#define RADEON_CHUNK_ID_IB_SETUP  0x03
 
 struct drm_radeon_cs_chunk {
 	uint32_t		chunk_id;
@@ -904,6 +905,7 @@ struct drm_radeon_cs {
 #define RADEON_INFO_ACCEL_WORKING	0x03
 #define RADEON_INFO_CRTC_FROM_ID	0x04
 #define RADEON_INFO_ACCEL_WORKING2	0x05
+#define RADEON_INFO_HAVE_IB_SETUP	0x06
 
 struct drm_radeon_info {
 	uint32_t		request;

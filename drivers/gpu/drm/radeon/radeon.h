@@ -204,6 +204,7 @@ struct radeon_fence {
 	uint32_t			seq;
 	bool				emited;
 	bool				signaled;
+	bool                            dont_flush;
 };
 
 int radeon_fence_driver_init(struct radeon_device *rdev);
@@ -524,6 +525,7 @@ struct radeon_cs_parser {
 	/* indices of various chunks */
 	int			chunk_ib_idx;
 	int			chunk_relocs_idx;
+	int			chunk_setup_idx;
 	void			*track;
 	unsigned		family;
 	int parser_error;
