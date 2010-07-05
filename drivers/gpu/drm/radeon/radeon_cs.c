@@ -100,7 +100,6 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 	}
 	/* get chunks */
 	INIT_LIST_HEAD(&p->validated);
-	p->idx = 0;
 	p->chunk_ib_idx = -1;
 	p->chunk_relocs_idx = -1;
 	p->chunks_array = kcalloc(cs->num_chunks, sizeof(uint64_t), GFP_KERNEL);
@@ -130,6 +129,8 @@ int radeon_cs_parser_init(struct radeon_cs_parser *p, void *data)
 		p->chunks[i].length_dw = user_chunk.length_dw;
 		p->chunks[i].kdata = NULL;
 		p->chunks[i].chunk_id = user_chunk.chunk_id;
+		p->chunks[i].idx = 0;
+		p->chunks[i].parser = p;
 
 		if (p->chunks[i].chunk_id == RADEON_CHUNK_ID_RELOCS) {
 			p->chunk_relocs_idx = i;
@@ -189,9 +190,9 @@ static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error)
 {
 	unsigned i;
 
-	if (!error && parser->ib) {
-		radeon_bo_list_fence(&parser->validated, parser->ib->fence);
-	}
+	if (!error && parser->chunks[parser->chunk_ib_idx].ib)
+		radeon_bo_list_fence(&parser->validated, parser->chunks[parser->chunk_ib_idx].ib->fence);
+
 	radeon_bo_list_unreserve(&parser->validated);
 	if (parser->relocs != NULL) {
 		for (i = 0; i < parser->nrelocs; i++) {
@@ -203,20 +204,53 @@ static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error)
 	kfree(parser->relocs);
 	kfree(parser->relocs_ptr);
 	for (i = 0; i < parser->nchunks; i++) {
+		radeon_ib_free(parser->rdev, &parser->chunks[i].ib);
 		kfree(parser->chunks[i].kdata);
 		kfree(parser->chunks[i].kpage[0]);
 		kfree(parser->chunks[i].kpage[1]);
 	}
 	kfree(parser->chunks);
 	kfree(parser->chunks_array);
-	radeon_ib_free(parser->rdev, &parser->ib);
+
+}
+
+static int radeon_cs_parser_chunk(struct radeon_cs_parser *parser, int chunk_id)
+{
+	struct radeon_device *rdev = parser->rdev;
+	struct radeon_cs_chunk *ib_chunk;
+	int r;
+
+	ib_chunk = &parser->chunks[chunk_id];
+	r = radeon_ib_get(parser->rdev, &ib_chunk->ib);
+	if (r) {
+		DRM_ERROR("Failed to get ib !\n");
+		return r;
+	}
+	ib_chunk->ib->length_dw = ib_chunk->length_dw;
+	/* Copy the packet into the IB, the parser will read from the
+	 * input memory (cached) and write to the IB (which can be
+	 * uncached). */
+	r = radeon_cs_parse(parser, ib_chunk);
+	if (r || parser->parser_error) {
+		DRM_ERROR("Invalid command stream !\n");
+		return r;
+	}
+	r = radeon_cs_finish_pages(ib_chunk);
+	if (r) {
+		DRM_ERROR("Invalid command stream !\n");
+		return r;
+	}
+	r = radeon_ib_schedule(rdev, ib_chunk->ib);
+	if (r) {
+		DRM_ERROR("Faild to schedule IB !\n");
+	}
+	return 0;
 }
 
 int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 {
 	struct radeon_device *rdev = dev->dev_private;
 	struct radeon_cs_parser parser;
-	struct radeon_cs_chunk *ib_chunk;
 	int r;
 
 	mutex_lock(&rdev->cs_mutex);
@@ -228,110 +262,88 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	r = radeon_cs_parser_init(&parser, data);
 	if (r) {
 		DRM_ERROR("Failed to initialize parser !\n");
-		radeon_cs_parser_fini(&parser, r);
-		mutex_unlock(&rdev->cs_mutex);
-		return r;
+		goto out;
 	}
-	r =  radeon_ib_get(rdev, &parser.ib);
-	if (r) {
-		DRM_ERROR("Failed to get ib !\n");
-		radeon_cs_parser_fini(&parser, r);
-		mutex_unlock(&rdev->cs_mutex);
-		return r;
-	}
+
 	r = radeon_cs_parser_relocs(&parser);
 	if (r) {
 		if (r != -ERESTARTSYS)
 			DRM_ERROR("Failed to parse relocation %d!\n", r);
-		radeon_cs_parser_fini(&parser, r);
-		mutex_unlock(&rdev->cs_mutex);
-		return r;
+		goto out;
 	}
-	/* Copy the packet into the IB, the parser will read from the
-	 * input memory (cached) and write to the IB (which can be
-	 * uncached). */
-	ib_chunk = &parser.chunks[parser.chunk_ib_idx];
-	parser.ib->length_dw = ib_chunk->length_dw;
-	r = radeon_cs_parse(&parser);
-	if (r || parser.parser_error) {
-		DRM_ERROR("Invalid command stream !\n");
-		radeon_cs_parser_fini(&parser, r);
-		mutex_unlock(&rdev->cs_mutex);
-		return r;
-	}
-	r = radeon_cs_finish_pages(&parser);
-	if (r) {
-		DRM_ERROR("Invalid command stream !\n");
-		radeon_cs_parser_fini(&parser, r);
-		mutex_unlock(&rdev->cs_mutex);
-		return r;
-	}
-	r = radeon_ib_schedule(rdev, parser.ib);
-	if (r) {
-		DRM_ERROR("Faild to schedule IB !\n");
-	}
+
+	/* setup trackers */
+	r = radeon_cs_create_tracker(&parser);
+	if (r)
+		goto out;
+
+	r = radeon_cs_parser_chunk(&parser, parser.chunk_ib_idx);
+	if (r)
+		goto out;
+
+	/* verify trackers */
+out:
 	radeon_cs_parser_fini(&parser, r);
 	mutex_unlock(&rdev->cs_mutex);
 	return r;
 }
 
-int radeon_cs_finish_pages(struct radeon_cs_parser *p)
+int radeon_cs_finish_pages(struct radeon_cs_chunk *chunk)
 {
-	struct radeon_cs_chunk *ibc = &p->chunks[p->chunk_ib_idx];
 	int i;
 	int size = PAGE_SIZE;
 
-	for (i = ibc->last_copied_page + 1; i <= ibc->last_page_index; i++) {
-		if (i == ibc->last_page_index) {
-			size = (ibc->length_dw * 4) % PAGE_SIZE;
+	for (i = chunk->last_copied_page + 1; i <= chunk->last_page_index; i++) {
+		if (i == chunk->last_page_index) {
+			size = (chunk->length_dw * 4) % PAGE_SIZE;
 			if (size == 0)
 				size = PAGE_SIZE;
 		}
 		
-		if (DRM_COPY_FROM_USER(p->ib->ptr + (i * (PAGE_SIZE/4)),
-				       ibc->user_ptr + (i * PAGE_SIZE),
+		if (DRM_COPY_FROM_USER(chunk->ib->ptr + (i * (PAGE_SIZE/4)),
+				       chunk->user_ptr + (i * PAGE_SIZE),
 				       size))
 			return -EFAULT;
 	}
 	return 0;
 }
 
-int radeon_cs_update_pages(struct radeon_cs_parser *p, int pg_idx)
+int radeon_cs_update_pages(struct radeon_cs_chunk *chunk,
+			   int pg_idx)
 {
 	int new_page;
-	struct radeon_cs_chunk *ibc = &p->chunks[p->chunk_ib_idx];
 	int i;
 	int size = PAGE_SIZE;
 
-	for (i = ibc->last_copied_page + 1; i < pg_idx; i++) {
-		if (DRM_COPY_FROM_USER(p->ib->ptr + (i * (PAGE_SIZE/4)),
-				       ibc->user_ptr + (i * PAGE_SIZE),
+	for (i = chunk->last_copied_page + 1; i < pg_idx; i++) {
+		if (DRM_COPY_FROM_USER(chunk->ib->ptr + (i * (PAGE_SIZE/4)),
+				       chunk->user_ptr + (i * PAGE_SIZE),
 				       PAGE_SIZE)) {
-			p->parser_error = -EFAULT;
+			chunk->parser->parser_error = -EFAULT;
 			return 0;
 		}
 	}
 
-	new_page = ibc->kpage_idx[0] < ibc->kpage_idx[1] ? 0 : 1;
+	new_page = chunk->kpage_idx[0] < chunk->kpage_idx[1] ? 0 : 1;
 
-	if (pg_idx == ibc->last_page_index) {
-		size = (ibc->length_dw * 4) % PAGE_SIZE;
+	if (pg_idx == chunk->last_page_index) {
+		size = (chunk->length_dw * 4) % PAGE_SIZE;
 			if (size == 0)
 				size = PAGE_SIZE;
 	}
 
-	if (DRM_COPY_FROM_USER(ibc->kpage[new_page],
-			       ibc->user_ptr + (pg_idx * PAGE_SIZE),
+	if (DRM_COPY_FROM_USER(chunk->kpage[new_page],
+			       chunk->user_ptr + (pg_idx * PAGE_SIZE),
 			       size)) {
-		p->parser_error = -EFAULT;
+		chunk->parser->parser_error = -EFAULT;
 		return 0;
 	}
 
 	/* copy to IB here */
-	memcpy((void *)(p->ib->ptr+(pg_idx*(PAGE_SIZE/4))), ibc->kpage[new_page], size);
+	memcpy((void *)(chunk->ib->ptr+(pg_idx*(PAGE_SIZE/4))), chunk->kpage[new_page], size);
 
-	ibc->last_copied_page = pg_idx;
-	ibc->kpage_idx[new_page] = pg_idx;
+	chunk->last_copied_page = pg_idx;
+	chunk->kpage_idx[new_page] = pg_idx;
 
 	return new_page;
 }

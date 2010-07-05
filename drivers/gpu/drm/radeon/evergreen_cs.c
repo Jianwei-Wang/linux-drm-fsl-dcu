@@ -30,7 +30,7 @@
 #include "evergreend.h"
 #include "evergreen_reg_safe.h"
 
-static int evergreen_cs_packet_next_reloc(struct radeon_cs_parser *p,
+static int evergreen_cs_packet_next_reloc(struct radeon_cs_chunk *chunk,
 					  struct radeon_cs_reloc **cs_reloc);
 
 struct evergreen_cs_track {
@@ -121,19 +121,19 @@ static void evergreen_cs_track_init(struct evergreen_cs_track *track)
 	track->db_s_write_bo = NULL;
 }
 
-static inline int evergreen_cs_track_validate_cb(struct radeon_cs_parser *p, int i)
+static inline int evergreen_cs_track_validate_cb(struct radeon_cs_chunk *chunk, int i)
 {
 	/* XXX fill in */
 	return 0;
 }
 
-static int evergreen_cs_track_check(struct radeon_cs_parser *p)
+static int evergreen_cs_track_check(struct radeon_cs_chunk *chunk)
 {
-	struct evergreen_cs_track *track = p->track;
+	struct evergreen_cs_track *track = chunk->parser->track;
 
 	/* we don't support stream out buffer yet */
 	if (track->vgt_strmout_config || track->vgt_strmout_buffer_config) {
-		dev_warn(p->dev, "this kernel doesn't support SMX output buffer\n");
+		dev_warn(chunk->parser->dev, "this kernel doesn't support SMX output buffer\n");
 		return -EINVAL;
 	}
 
@@ -149,19 +149,18 @@ static int evergreen_cs_track_check(struct radeon_cs_parser *p)
  * Assume that chunk_ib_index is properly set. Will return -EINVAL
  * if packet is bigger than remaining ib size. or if packets is unknown.
  **/
-int evergreen_cs_packet_parse(struct radeon_cs_parser *p,
+int evergreen_cs_packet_parse(struct radeon_cs_chunk *chunk,
 			      struct radeon_cs_packet *pkt,
 			      unsigned idx)
 {
-	struct radeon_cs_chunk *ib_chunk = &p->chunks[p->chunk_ib_idx];
 	uint32_t header;
 
-	if (idx >= ib_chunk->length_dw) {
+	if (idx >= chunk->length_dw) {
 		DRM_ERROR("Can not parse packet at %d after CS end %d !\n",
-			  idx, ib_chunk->length_dw);
+			  idx, chunk->length_dw);
 		return -EINVAL;
 	}
-	header = radeon_get_ib_value(p, idx);
+	header = radeon_get_ib_value(chunk, idx);
 	pkt->idx = idx;
 	pkt->type = CP_PACKET_GET_TYPE(header);
 	pkt->count = CP_PACKET_GET_COUNT(header);
@@ -180,9 +179,9 @@ int evergreen_cs_packet_parse(struct radeon_cs_parser *p,
 		DRM_ERROR("Unknown packet type %d at %d !\n", pkt->type, idx);
 		return -EINVAL;
 	}
-	if ((pkt->count + 1 + pkt->idx) >= ib_chunk->length_dw) {
+	if ((pkt->count + 1 + pkt->idx) >= chunk->length_dw) {
 		DRM_ERROR("Packet (%d:%d:%d) end after CS buffer (%d) !\n",
-			  pkt->idx, pkt->type, pkt->count, ib_chunk->length_dw);
+			  pkt->idx, pkt->type, pkt->count, chunk->length_dw);
 		return -EINVAL;
 	}
 	return 0;
@@ -199,7 +198,7 @@ int evergreen_cs_packet_parse(struct radeon_cs_parser *p,
  * Check next packet is relocation packet3, do bo validation and compute
  * GPU offset using the provided start.
  **/
-static int evergreen_cs_packet_next_reloc(struct radeon_cs_parser *p,
+static int evergreen_cs_packet_next_reloc(struct radeon_cs_chunk *chunk,
 					  struct radeon_cs_reloc **cs_reloc)
 {
 	struct radeon_cs_chunk *relocs_chunk;
@@ -207,30 +206,30 @@ static int evergreen_cs_packet_next_reloc(struct radeon_cs_parser *p,
 	unsigned idx;
 	int r;
 
-	if (p->chunk_relocs_idx == -1) {
+	if (chunk->parser->chunk_relocs_idx == -1) {
 		DRM_ERROR("No relocation chunk !\n");
 		return -EINVAL;
 	}
 	*cs_reloc = NULL;
-	relocs_chunk = &p->chunks[p->chunk_relocs_idx];
-	r = evergreen_cs_packet_parse(p, &p3reloc, p->idx);
+	relocs_chunk = &chunk->parser->chunks[chunk->parser->chunk_relocs_idx];
+	r = evergreen_cs_packet_parse(chunk, &p3reloc, chunk->idx);
 	if (r) {
 		return r;
 	}
-	p->idx += p3reloc.count + 2;
+	chunk->idx += p3reloc.count + 2;
 	if (p3reloc.type != PACKET_TYPE3 || p3reloc.opcode != PACKET3_NOP) {
 		DRM_ERROR("No packet3 for relocation for packet at %d.\n",
 			  p3reloc.idx);
 		return -EINVAL;
 	}
-	idx = radeon_get_ib_value(p, p3reloc.idx + 1);
+	idx = radeon_get_ib_value(chunk, p3reloc.idx + 1);
 	if (idx >= relocs_chunk->length_dw) {
 		DRM_ERROR("Relocs at %d after relocations chunk end %d !\n",
 			  idx, relocs_chunk->length_dw);
 		return -EINVAL;
 	}
 	/* FIXME: we assume reloc size is 4 dwords */
-	*cs_reloc = p->relocs_ptr[(idx / 4)];
+	*cs_reloc = chunk->parser->relocs_ptr[(idx / 4)];
 	return 0;
 }
 
@@ -241,12 +240,12 @@ static int evergreen_cs_packet_next_reloc(struct radeon_cs_parser *p,
  * Check next packet is relocation packet3, do bo validation and compute
  * GPU offset using the provided start.
  **/
-static inline int evergreen_cs_packet_next_is_pkt3_nop(struct radeon_cs_parser *p)
+static inline int evergreen_cs_packet_next_is_pkt3_nop(struct radeon_cs_chunk *chunk)
 {
 	struct radeon_cs_packet p3reloc;
 	int r;
 
-	r = evergreen_cs_packet_parse(p, &p3reloc, p->idx);
+	r = evergreen_cs_packet_parse(chunk, &p3reloc, chunk->idx);
 	if (r) {
 		return 0;
 	}
@@ -270,7 +269,7 @@ static inline int evergreen_cs_packet_next_is_pkt3_nop(struct radeon_cs_parser *
  * It also detects a switched off crtc and nulls out the
  * wait in that case.
  */
-static int evergreen_cs_packet_parse_vline(struct radeon_cs_parser *p)
+static int evergreen_cs_packet_parse_vline(struct radeon_cs_chunk *chunk)
 {
 	struct drm_mode_object *obj;
 	struct drm_crtc *crtc;
@@ -280,11 +279,12 @@ static int evergreen_cs_packet_parse_vline(struct radeon_cs_parser *p)
 	int r;
 	uint32_t header, h_idx, reg, wait_reg_mem_info;
 	volatile uint32_t *ib;
+	struct radeon_device *rdev = chunk->parser->rdev;
 
-	ib = p->ib->ptr;
+	ib = chunk->ib->ptr;
 
 	/* parse the WAIT_REG_MEM */
-	r = evergreen_cs_packet_parse(p, &wait_reg_mem, p->idx);
+	r = evergreen_cs_packet_parse(chunk, &wait_reg_mem, chunk->idx);
 	if (r)
 		return r;
 
@@ -296,7 +296,7 @@ static int evergreen_cs_packet_parse_vline(struct radeon_cs_parser *p)
 		return r;
 	}
 
-	wait_reg_mem_info = radeon_get_ib_value(p, wait_reg_mem.idx + 1);
+	wait_reg_mem_info = radeon_get_ib_value(chunk, wait_reg_mem.idx + 1);
 	/* bit 4 is reg (0) or mem (1) */
 	if (wait_reg_mem_info & 0x10) {
 		DRM_ERROR("vline WAIT_REG_MEM waiting on MEM rather than REG\n");
@@ -309,32 +309,32 @@ static int evergreen_cs_packet_parse_vline(struct radeon_cs_parser *p)
 		r = -EINVAL;
 		return r;
 	}
-	if ((radeon_get_ib_value(p, wait_reg_mem.idx + 2) << 2) != EVERGREEN_VLINE_STATUS) {
+	if ((radeon_get_ib_value(chunk, wait_reg_mem.idx + 2) << 2) != EVERGREEN_VLINE_STATUS) {
 		DRM_ERROR("vline WAIT_REG_MEM bad reg\n");
 		r = -EINVAL;
 		return r;
 	}
 
-	if (radeon_get_ib_value(p, wait_reg_mem.idx + 5) != EVERGREEN_VLINE_STAT) {
+	if (radeon_get_ib_value(chunk, wait_reg_mem.idx + 5) != EVERGREEN_VLINE_STAT) {
 		DRM_ERROR("vline WAIT_REG_MEM bad bit mask\n");
 		r = -EINVAL;
 		return r;
 	}
 
 	/* jump over the NOP */
-	r = evergreen_cs_packet_parse(p, &p3reloc, p->idx + wait_reg_mem.count + 2);
+	r = evergreen_cs_packet_parse(chunk, &p3reloc, chunk->idx + wait_reg_mem.count + 2);
 	if (r)
 		return r;
 
-	h_idx = p->idx - 2;
-	p->idx += wait_reg_mem.count + 2;
-	p->idx += p3reloc.count + 2;
+	h_idx = chunk->idx - 2;
+	chunk->idx += wait_reg_mem.count + 2;
+	chunk->idx += p3reloc.count + 2;
 
-	header = radeon_get_ib_value(p, h_idx);
-	crtc_id = radeon_get_ib_value(p, h_idx + 2 + 7 + 1);
+	header = radeon_get_ib_value(chunk, h_idx);
+	crtc_id = radeon_get_ib_value(chunk, h_idx + 2 + 7 + 1);
 	reg = CP_PACKET0_GET_REG(header);
-	mutex_lock(&p->rdev->ddev->mode_config.mutex);
-	obj = drm_mode_object_find(p->rdev->ddev, crtc_id, DRM_MODE_OBJECT_CRTC);
+	mutex_lock(&rdev->ddev->mode_config.mutex);
+	obj = drm_mode_object_find(rdev->ddev, crtc_id, DRM_MODE_OBJECT_CRTC);
 	if (!obj) {
 		DRM_ERROR("cannot find crtc %d\n", crtc_id);
 		r = -EINVAL;
@@ -368,11 +368,11 @@ static int evergreen_cs_packet_parse_vline(struct radeon_cs_parser *p)
 		}
 	}
 out:
-	mutex_unlock(&p->rdev->ddev->mode_config.mutex);
+	mutex_unlock(&rdev->ddev->mode_config.mutex);
 	return r;
 }
 
-static int evergreen_packet0_check(struct radeon_cs_parser *p,
+static int evergreen_packet0_check(struct radeon_cs_chunk *chunk,
 				   struct radeon_cs_packet *pkt,
 				   unsigned idx, unsigned reg)
 {
@@ -380,7 +380,7 @@ static int evergreen_packet0_check(struct radeon_cs_parser *p,
 
 	switch (reg) {
 	case EVERGREEN_VLINE_START_END:
-		r = evergreen_cs_packet_parse_vline(p);
+		r = evergreen_cs_packet_parse_vline(chunk);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 					idx, reg);
@@ -395,7 +395,7 @@ static int evergreen_packet0_check(struct radeon_cs_parser *p,
 	return 0;
 }
 
-static int evergreen_cs_parse_packet0(struct radeon_cs_parser *p,
+static int evergreen_cs_parse_packet0(struct radeon_cs_chunk *chunk,
 				      struct radeon_cs_packet *pkt)
 {
 	unsigned reg, i;
@@ -405,7 +405,7 @@ static int evergreen_cs_parse_packet0(struct radeon_cs_parser *p,
 	idx = pkt->idx + 1;
 	reg = pkt->reg;
 	for (i = 0; i <= pkt->count; i++, idx++, reg += 4) {
-		r = evergreen_packet0_check(p, pkt, idx, reg);
+		r = evergreen_packet0_check(chunk, pkt, idx, reg);
 		if (r) {
 			return r;
 		}
@@ -423,9 +423,10 @@ static int evergreen_cs_parse_packet0(struct radeon_cs_parser *p,
  * if register is safe. If register is not flag as safe this function
  * will test it against a list of register needind special handling.
  */
-static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u32 idx)
+static inline int evergreen_cs_check_reg(struct radeon_cs_chunk *chunk,
+					 u32 reg, u32 idx)
 {
-	struct evergreen_cs_track *track = (struct evergreen_cs_track *)p->track;
+	struct evergreen_cs_track *track = (struct evergreen_cs_track *)chunk->parser->track;
 	struct radeon_cs_reloc *reloc;
 	u32 last_reg = ARRAY_SIZE(evergreen_reg_safe_bm);
 	u32 m, i, tmp, *ib;
@@ -433,13 +434,13 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 
 	i = (reg >> 7);
 	if (i > last_reg) {
-		dev_warn(p->dev, "forbidden register 0x%08x at %d\n", reg, idx);
+		dev_warn(chunk->parser->dev, "forbidden register 0x%08x at %d\n", reg, idx);
 		return -EINVAL;
 	}
 	m = 1 << ((reg >> 2) & 31);
 	if (!(evergreen_reg_safe_bm[i] & m))
 		return 0;
-	ib = p->ib->ptr;
+	ib = chunk->ib->ptr;
 	switch (reg) {
 	/* force following reg to 0 in an attemp to disable out buffer
 	 * which will need us to better understand how it works to perform
@@ -470,20 +471,20 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case SQ_VSTMP_RING_ITEMSIZE:
 	case VGT_TF_RING_SIZE:
 		/* get value to populate the IB don't remove */
-		tmp =radeon_get_ib_value(p, idx);
+		tmp =radeon_get_ib_value(chunk, idx);
 		ib[idx] = 0;
 		break;
 	case DB_DEPTH_CONTROL:
-		track->db_depth_control = radeon_get_ib_value(p, idx);
+		track->db_depth_control = radeon_get_ib_value(chunk, idx);
 		break;
 	case DB_Z_INFO:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
-		track->db_z_info = radeon_get_ib_value(p, idx);
+		track->db_z_info = radeon_get_ib_value(chunk, idx);
 		ib[idx] &= ~Z_ARRAY_MODE(0xf);
 		track->db_z_info &= ~Z_ARRAY_MODE(0xf);
 		if (reloc->lobj.tiling_flags & RADEON_TILING_MACRO) {
@@ -495,73 +496,73 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 		}
 		break;
 	case DB_STENCIL_INFO:
-		track->db_s_info = radeon_get_ib_value(p, idx);
+		track->db_s_info = radeon_get_ib_value(chunk, idx);
 		break;
 	case DB_DEPTH_VIEW:
-		track->db_depth_view = radeon_get_ib_value(p, idx);
+		track->db_depth_view = radeon_get_ib_value(chunk, idx);
 		break;
 	case DB_DEPTH_SIZE:
-		track->db_depth_size = radeon_get_ib_value(p, idx);
+		track->db_depth_size = radeon_get_ib_value(chunk, idx);
 		track->db_depth_size_idx = idx;
 		break;
 	case DB_Z_READ_BASE:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
-		track->db_z_read_offset = radeon_get_ib_value(p, idx);
+		track->db_z_read_offset = radeon_get_ib_value(chunk, idx);
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		track->db_z_read_bo = reloc->robj;
 		break;
 	case DB_Z_WRITE_BASE:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
-		track->db_z_write_offset = radeon_get_ib_value(p, idx);
+		track->db_z_write_offset = radeon_get_ib_value(chunk, idx);
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		track->db_z_write_bo = reloc->robj;
 		break;
 	case DB_STENCIL_READ_BASE:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
-		track->db_s_read_offset = radeon_get_ib_value(p, idx);
+		track->db_s_read_offset = radeon_get_ib_value(chunk, idx);
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		track->db_s_read_bo = reloc->robj;
 		break;
 	case DB_STENCIL_WRITE_BASE:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
-		track->db_s_write_offset = radeon_get_ib_value(p, idx);
+		track->db_s_write_offset = radeon_get_ib_value(chunk, idx);
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		track->db_s_write_bo = reloc->robj;
 		break;
 	case VGT_STRMOUT_CONFIG:
-		track->vgt_strmout_config = radeon_get_ib_value(p, idx);
+		track->vgt_strmout_config = radeon_get_ib_value(chunk, idx);
 		break;
 	case VGT_STRMOUT_BUFFER_CONFIG:
-		track->vgt_strmout_buffer_config = radeon_get_ib_value(p, idx);
+		track->vgt_strmout_buffer_config = radeon_get_ib_value(chunk, idx);
 		break;
 	case CB_TARGET_MASK:
-		track->cb_target_mask = radeon_get_ib_value(p, idx);
+		track->cb_target_mask = radeon_get_ib_value(chunk, idx);
 		break;
 	case CB_SHADER_MASK:
-		track->cb_shader_mask = radeon_get_ib_value(p, idx);
+		track->cb_shader_mask = radeon_get_ib_value(chunk, idx);
 		break;
 	case PA_SC_AA_CONFIG:
-		tmp = radeon_get_ib_value(p, idx) & MSAA_NUM_SAMPLES_MASK;
+		tmp = radeon_get_ib_value(chunk, idx) & MSAA_NUM_SAMPLES_MASK;
 		track->nsamples = 1 << tmp;
 		break;
 	case CB_COLOR0_VIEW:
@@ -573,14 +574,14 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_VIEW:
 	case CB_COLOR7_VIEW:
 		tmp = (reg - CB_COLOR0_VIEW) / 0x3c;
-		track->cb_color_view[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_view[tmp] = radeon_get_ib_value(chunk, idx);
 		break;
 	case CB_COLOR8_VIEW:
 	case CB_COLOR9_VIEW:
 	case CB_COLOR10_VIEW:
 	case CB_COLOR11_VIEW:
 		tmp = ((reg - CB_COLOR8_VIEW) / 0x1c) + 8;
-		track->cb_color_view[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_view[tmp] = radeon_get_ib_value(chunk, idx);
 		break;
 	case CB_COLOR0_INFO:
 	case CB_COLOR1_INFO:
@@ -590,14 +591,14 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR5_INFO:
 	case CB_COLOR6_INFO:
 	case CB_COLOR7_INFO:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
 		tmp = (reg - CB_COLOR0_INFO) / 0x3c;
-		track->cb_color_info[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_info[tmp] = radeon_get_ib_value(chunk, idx);
 		if (reloc->lobj.tiling_flags & RADEON_TILING_MACRO) {
 			ib[idx] |= CB_ARRAY_MODE(ARRAY_2D_TILED_THIN1);
 			track->cb_color_info[tmp] |= CB_ARRAY_MODE(ARRAY_2D_TILED_THIN1);
@@ -610,14 +611,14 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR9_INFO:
 	case CB_COLOR10_INFO:
 	case CB_COLOR11_INFO:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
 		tmp = ((reg - CB_COLOR8_INFO) / 0x1c) + 8;
-		track->cb_color_info[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_info[tmp] = radeon_get_ib_value(chunk, idx);
 		if (reloc->lobj.tiling_flags & RADEON_TILING_MACRO) {
 			ib[idx] |= CB_ARRAY_MODE(ARRAY_2D_TILED_THIN1);
 			track->cb_color_info[tmp] |= CB_ARRAY_MODE(ARRAY_2D_TILED_THIN1);
@@ -635,7 +636,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_PITCH:
 	case CB_COLOR7_PITCH:
 		tmp = (reg - CB_COLOR0_PITCH) / 0x3c;
-		track->cb_color_pitch[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_pitch[tmp] = radeon_get_ib_value(chunk, idx);
 		track->cb_color_pitch_idx[tmp] = idx;
 		break;
 	case CB_COLOR8_PITCH:
@@ -643,7 +644,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR10_PITCH:
 	case CB_COLOR11_PITCH:
 		tmp = ((reg - CB_COLOR8_PITCH) / 0x1c) + 8;
-		track->cb_color_pitch[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_pitch[tmp] = radeon_get_ib_value(chunk, idx);
 		track->cb_color_pitch_idx[tmp] = idx;
 		break;
 	case CB_COLOR0_SLICE:
@@ -655,7 +656,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_SLICE:
 	case CB_COLOR7_SLICE:
 		tmp = (reg - CB_COLOR0_SLICE) / 0x3c;
-		track->cb_color_slice[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_slice[tmp] = radeon_get_ib_value(chunk, idx);
 		track->cb_color_slice_idx[tmp] = idx;
 		break;
 	case CB_COLOR8_SLICE:
@@ -663,7 +664,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR10_SLICE:
 	case CB_COLOR11_SLICE:
 		tmp = ((reg - CB_COLOR8_SLICE) / 0x1c) + 8;
-		track->cb_color_slice[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_slice[tmp] = radeon_get_ib_value(chunk, idx);
 		track->cb_color_slice_idx[tmp] = idx;
 		break;
 	case CB_COLOR0_ATTRIB:
@@ -688,7 +689,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_DIM:
 	case CB_COLOR7_DIM:
 		tmp = (reg - CB_COLOR0_DIM) / 0x3c;
-		track->cb_color_dim[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_dim[tmp] = radeon_get_ib_value(chunk, idx);
 		track->cb_color_dim_idx[tmp] = idx;
 		break;
 	case CB_COLOR8_DIM:
@@ -696,7 +697,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR10_DIM:
 	case CB_COLOR11_DIM:
 		tmp = ((reg - CB_COLOR8_DIM) / 0x1c) + 8;
-		track->cb_color_dim[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_dim[tmp] = radeon_get_ib_value(chunk, idx);
 		track->cb_color_dim_idx[tmp] = idx;
 		break;
 	case CB_COLOR0_FMASK:
@@ -708,9 +709,9 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_FMASK:
 	case CB_COLOR7_FMASK:
 		tmp = (reg - CB_COLOR0_FMASK) / 0x3c;
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_err(p->dev, "bad SET_CONTEXT_REG 0x%04X\n", reg);
+			dev_err(chunk->parser->dev, "bad SET_CONTEXT_REG 0x%04X\n", reg);
 			return -EINVAL;
 		}
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
@@ -725,9 +726,9 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_CMASK:
 	case CB_COLOR7_CMASK:
 		tmp = (reg - CB_COLOR0_CMASK) / 0x3c;
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_err(p->dev, "bad SET_CONTEXT_REG 0x%04X\n", reg);
+			dev_err(chunk->parser->dev, "bad SET_CONTEXT_REG 0x%04X\n", reg);
 			return -EINVAL;
 		}
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
@@ -742,7 +743,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_FMASK_SLICE:
 	case CB_COLOR7_FMASK_SLICE:
 		tmp = (reg - CB_COLOR0_FMASK_SLICE) / 0x3c;
-		track->cb_color_fmask_slice[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_fmask_slice[tmp] = radeon_get_ib_value(chunk, idx);
 		break;
 	case CB_COLOR0_CMASK_SLICE:
 	case CB_COLOR1_CMASK_SLICE:
@@ -753,7 +754,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR6_CMASK_SLICE:
 	case CB_COLOR7_CMASK_SLICE:
 		tmp = (reg - CB_COLOR0_CMASK_SLICE) / 0x3c;
-		track->cb_color_cmask_slice[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_cmask_slice[tmp] = radeon_get_ib_value(chunk, idx);
 		break;
 	case CB_COLOR0_BASE:
 	case CB_COLOR1_BASE:
@@ -763,14 +764,14 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR5_BASE:
 	case CB_COLOR6_BASE:
 	case CB_COLOR7_BASE:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
 		tmp = (reg - CB_COLOR0_BASE) / 0x3c;
-		track->cb_color_bo_offset[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_bo_offset[tmp] = radeon_get_ib_value(chunk, idx);
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		track->cb_color_base_last[tmp] = ib[idx];
 		track->cb_color_bo[tmp] = reloc->robj;
@@ -779,14 +780,14 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case CB_COLOR9_BASE:
 	case CB_COLOR10_BASE:
 	case CB_COLOR11_BASE:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
 		tmp = ((reg - CB_COLOR8_BASE) / 0x1c) + 8;
-		track->cb_color_bo_offset[tmp] = radeon_get_ib_value(p, idx);
+		track->cb_color_bo_offset[tmp] = radeon_get_ib_value(chunk, idx);
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		track->cb_color_base_last[tmp] = ib[idx];
 		track->cb_color_bo[tmp] = reloc->robj;
@@ -893,16 +894,16 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
 	case SQ_ALU_CONST_CACHE_LS_13:
 	case SQ_ALU_CONST_CACHE_LS_14:
 	case SQ_ALU_CONST_CACHE_LS_15:
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
-			dev_warn(p->dev, "bad SET_CONTEXT_REG "
+			dev_warn(chunk->parser->dev, "bad SET_CONTEXT_REG "
 					"0x%04X\n", reg);
 			return -EINVAL;
 		}
 		ib[idx] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 		break;
 	default:
-		dev_warn(p->dev, "forbidden register 0x%08x at %d\n", reg, idx);
+		dev_warn(chunk->parser->dev, "forbidden register 0x%08x at %d\n", reg, idx);
 		return -EINVAL;
 	}
 	return 0;
@@ -918,7 +919,7 @@ static inline int evergreen_cs_check_reg(struct radeon_cs_parser *p, u32 reg, u3
  * This function will check that the resource has valid field and that
  * the texture and mipmap bo object are big enough to cover this resource.
  */
-static inline int evergreen_check_texture_resource(struct radeon_cs_parser *p,  u32 idx,
+static inline int evergreen_check_texture_resource(struct radeon_cs_chunk *chunk,  u32 idx,
 						   struct radeon_bo *texture,
 						   struct radeon_bo *mipmap)
 {
@@ -926,7 +927,7 @@ static inline int evergreen_check_texture_resource(struct radeon_cs_parser *p,  
 	return 0;
 }
 
-static int evergreen_packet3_check(struct radeon_cs_parser *p,
+static int evergreen_packet3_check(struct radeon_cs_chunk *chunk,
 				   struct radeon_cs_packet *pkt)
 {
 	struct radeon_cs_reloc *reloc;
@@ -938,10 +939,10 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 	int r;
 	u32 idx_value;
 
-	track = (struct evergreen_cs_track *)p->track;
-	ib = p->ib->ptr;
+	track = (struct evergreen_cs_track *)chunk->parser->track;
+	ib = chunk->ib->ptr;
 	idx = pkt->idx + 1;
-	idx_value = radeon_get_ib_value(p, idx);
+	idx_value = radeon_get_ib_value(chunk, idx);
 
 	switch (pkt->opcode) {
 	case PACKET3_CONTEXT_CONTROL:
@@ -963,16 +964,16 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad INDEX_BASE\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("bad INDEX_BASE\n");
 			return -EINVAL;
 		}
 		ib[idx+0] = idx_value + (u32)(reloc->lobj.gpu_offset & 0xffffffff);
 		ib[idx+1] += upper_32_bits(reloc->lobj.gpu_offset) & 0xff;
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
 			return r;
 		}
 		break;
@@ -981,16 +982,16 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("bad DRAW_INDEX\n");
 			return -EINVAL;
 		}
 		ib[idx+0] = idx_value + (u32)(reloc->lobj.gpu_offset & 0xffffffff);
 		ib[idx+1] += upper_32_bits(reloc->lobj.gpu_offset) & 0xff;
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
 			return r;
 		}
 		break;
@@ -999,16 +1000,16 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX_2\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("bad DRAW_INDEX_2\n");
 			return -EINVAL;
 		}
 		ib[idx+1] = idx_value + (u32)(reloc->lobj.gpu_offset & 0xffffffff);
 		ib[idx+2] += upper_32_bits(reloc->lobj.gpu_offset) & 0xff;
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
 			return r;
 		}
 		break;
@@ -1017,9 +1018,9 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX_AUTO\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream %d\n", __func__, __LINE__, idx);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream %d\n", __func__, __LINE__, idx);
 			return r;
 		}
 		break;
@@ -1028,9 +1029,9 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX_MULTI_AUTO\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream %d\n", __func__, __LINE__, idx);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream %d\n", __func__, __LINE__, idx);
 			return r;
 		}
 		break;
@@ -1039,9 +1040,9 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX_IMMD\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
 			return r;
 		}
 		break;
@@ -1050,9 +1051,9 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX_OFFSET\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
 			return r;
 		}
 		break;
@@ -1061,9 +1062,9 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad DRAW_INDEX_OFFSET_2\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_track_check(p);
+		r = evergreen_cs_track_check(chunk);
 		if (r) {
-			dev_warn(p->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
+			dev_warn(chunk->parser->dev, "%s:%d invalid cmd stream\n", __func__, __LINE__);
 			return r;
 		}
 		break;
@@ -1074,7 +1075,7 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 		}
 		/* bit 4 is reg (0) or mem (1) */
 		if (idx_value & 0x10) {
-			r = evergreen_cs_packet_next_reloc(p, &reloc);
+			r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 			if (r) {
 				DRM_ERROR("bad WAIT_REG_MEM\n");
 				return -EINVAL;
@@ -1089,9 +1090,9 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			return -EINVAL;
 		}
 		/* 0xffffffff/0x0 is flush all cache flag */
-		if (radeon_get_ib_value(p, idx + 1) != 0xffffffff ||
-		    radeon_get_ib_value(p, idx + 2) != 0) {
-			r = evergreen_cs_packet_next_reloc(p, &reloc);
+		if (radeon_get_ib_value(chunk, idx + 1) != 0xffffffff ||
+		    radeon_get_ib_value(chunk, idx + 2) != 0) {
+			r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 			if (r) {
 				DRM_ERROR("bad SURFACE_SYNC\n");
 				return -EINVAL;
@@ -1105,7 +1106,7 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			return -EINVAL;
 		}
 		if (pkt->count) {
-			r = evergreen_cs_packet_next_reloc(p, &reloc);
+			r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 			if (r) {
 				DRM_ERROR("bad EVENT_WRITE\n");
 				return -EINVAL;
@@ -1119,7 +1120,7 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad EVENT_WRITE_EOP\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("bad EVENT_WRITE_EOP\n");
 			return -EINVAL;
@@ -1132,7 +1133,7 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			DRM_ERROR("bad EVENT_WRITE_EOS\n");
 			return -EINVAL;
 		}
-		r = evergreen_cs_packet_next_reloc(p, &reloc);
+		r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("bad EVENT_WRITE_EOS\n");
 			return -EINVAL;
@@ -1151,7 +1152,7 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 		}
 		for (i = 0; i < pkt->count; i++) {
 			reg = start_reg + (4 * i);
-			r = evergreen_cs_check_reg(p, reg, idx+1+i);
+			r = evergreen_cs_check_reg(chunk, reg, idx+1+i);
 			if (r)
 				return r;
 		}
@@ -1167,7 +1168,7 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 		}
 		for (i = 0; i < pkt->count; i++) {
 			reg = start_reg + (4 * i);
-			r = evergreen_cs_check_reg(p, reg, idx+1+i);
+			r = evergreen_cs_check_reg(chunk, reg, idx+1+i);
 			if (r)
 				return r;
 		}
@@ -1189,10 +1190,10 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 			struct radeon_bo *texture, *mipmap;
 			u32 size, offset;
 
-			switch (G__SQ_CONSTANT_TYPE(radeon_get_ib_value(p, idx+1+(i*8)+7))) {
+			switch (G__SQ_CONSTANT_TYPE(radeon_get_ib_value(chunk, idx+1+(i*8)+7))) {
 			case SQ_TEX_VTX_VALID_TEXTURE:
 				/* tex base */
-				r = evergreen_cs_packet_next_reloc(p, &reloc);
+				r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 				if (r) {
 					DRM_ERROR("bad SET_RESOURCE (tex)\n");
 					return -EINVAL;
@@ -1204,30 +1205,30 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 					ib[idx+1+(i*8)+1] |= TEX_ARRAY_MODE(ARRAY_1D_TILED_THIN1);
 				texture = reloc->robj;
 				/* tex mip base */
-				r = evergreen_cs_packet_next_reloc(p, &reloc);
+				r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 				if (r) {
 					DRM_ERROR("bad SET_RESOURCE (tex)\n");
 					return -EINVAL;
 				}
 				ib[idx+1+(i*8)+3] += (u32)((reloc->lobj.gpu_offset >> 8) & 0xffffffff);
 				mipmap = reloc->robj;
-				r = evergreen_check_texture_resource(p,  idx+1+(i*8),
+				r = evergreen_check_texture_resource(chunk,  idx+1+(i*8),
 						texture, mipmap);
 				if (r)
 					return r;
 				break;
 			case SQ_TEX_VTX_VALID_BUFFER:
 				/* vtx base */
-				r = evergreen_cs_packet_next_reloc(p, &reloc);
+				r = evergreen_cs_packet_next_reloc(chunk, &reloc);
 				if (r) {
 					DRM_ERROR("bad SET_RESOURCE (vtx)\n");
 					return -EINVAL;
 				}
-				offset = radeon_get_ib_value(p, idx+1+(i*8)+0);
-				size = radeon_get_ib_value(p, idx+1+(i*8)+1);
-				if (p->rdev && (size + offset) > radeon_bo_size(reloc->robj)) {
+				offset = radeon_get_ib_value(chunk, idx+1+(i*8)+0);
+				size = radeon_get_ib_value(chunk, idx+1+(i*8)+1);
+				if (chunk->parser->rdev && (size + offset) > radeon_bo_size(reloc->robj)) {
 					/* force size to size of the buffer */
-					dev_warn(p->dev, "vbo resource seems too big for the bo\n");
+					dev_warn(chunk->parser->dev, "vbo resource seems too big for the bo\n");
 					ib[idx+1+(i*8)+1] = radeon_bo_size(reloc->robj);
 				}
 				ib[idx+1+(i*8)+0] += (u32)((reloc->lobj.gpu_offset) & 0xffffffff);
@@ -1297,39 +1298,46 @@ static int evergreen_packet3_check(struct radeon_cs_parser *p,
 	return 0;
 }
 
-int evergreen_cs_parse(struct radeon_cs_parser *p)
+int evergreen_cs_create_tracker(struct radeon_cs_parser *p)
+{
+	struct evergreen_cs_track *track;
+
+	if (p->track)
+		return 0;
+
+	/* initialize tracker, we are in kms */
+	track = kzalloc(sizeof(*track), GFP_KERNEL);
+	if (track == NULL)
+		return -ENOMEM;
+	evergreen_cs_track_init(track);
+	track->npipes = p->rdev->config.evergreen.tiling_npipes;
+	track->nbanks = p->rdev->config.evergreen.tiling_nbanks;
+	track->group_size = p->rdev->config.evergreen.tiling_group_size;
+	p->track = track;
+	return 0;
+}
+
+int evergreen_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk)
 {
 	struct radeon_cs_packet pkt;
-	struct evergreen_cs_track *track;
 	int r;
 
-	if (p->track == NULL) {
-		/* initialize tracker, we are in kms */
-		track = kzalloc(sizeof(*track), GFP_KERNEL);
-		if (track == NULL)
-			return -ENOMEM;
-		evergreen_cs_track_init(track);
-		track->npipes = p->rdev->config.evergreen.tiling_npipes;
-		track->nbanks = p->rdev->config.evergreen.tiling_nbanks;
-		track->group_size = p->rdev->config.evergreen.tiling_group_size;
-		p->track = track;
-	}
 	do {
-		r = evergreen_cs_packet_parse(p, &pkt, p->idx);
+		r = evergreen_cs_packet_parse(chunk, &pkt, chunk->idx);
 		if (r) {
 			kfree(p->track);
 			p->track = NULL;
 			return r;
 		}
-		p->idx += pkt.count + 2;
+		chunk->idx += pkt.count + 2;
 		switch (pkt.type) {
 		case PACKET_TYPE0:
-			r = evergreen_cs_parse_packet0(p, &pkt);
+		  r = evergreen_cs_parse_packet0(chunk, &pkt);
 			break;
 		case PACKET_TYPE2:
 			break;
 		case PACKET_TYPE3:
-			r = evergreen_packet3_check(p, &pkt);
+			r = evergreen_packet3_check(chunk, &pkt);
 			break;
 		default:
 			DRM_ERROR("Unknown packet type %d !\n", pkt.type);
@@ -1342,7 +1350,7 @@ int evergreen_cs_parse(struct radeon_cs_parser *p)
 			p->track = NULL;
 			return r;
 		}
-	} while (p->idx < p->chunks[p->chunk_ib_idx].length_dw);
+	} while (chunk->idx < chunk->length_dw);
 #if 0
 	for (r = 0; r < p->ib->length_dw; r++) {
 		printk(KERN_INFO "%05d  0x%08X\n", r, p->ib->ptr[r]);

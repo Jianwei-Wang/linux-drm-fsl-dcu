@@ -502,6 +502,10 @@ struct radeon_cs_chunk {
 	void __user *user_ptr;
 	int last_copied_page;
 	int last_page_index;
+	/* IB */
+	unsigned		idx;
+	struct radeon_ib	*ib;
+	struct radeon_cs_parser *parser;
 };
 
 struct radeon_cs_parser {
@@ -512,8 +516,6 @@ struct radeon_cs_parser {
 	unsigned		nchunks;
 	struct radeon_cs_chunk	*chunks;
 	uint64_t		*chunks_array;
-	/* IB */
-	unsigned		idx;
 	/* relocations */
 	unsigned		nrelocs;
 	struct radeon_cs_reloc	*relocs;
@@ -522,19 +524,18 @@ struct radeon_cs_parser {
 	/* indices of various chunks */
 	int			chunk_ib_idx;
 	int			chunk_relocs_idx;
-	struct radeon_ib	*ib;
 	void			*track;
 	unsigned		family;
 	int parser_error;
 };
 
-extern int radeon_cs_update_pages(struct radeon_cs_parser *p, int pg_idx);
-extern int radeon_cs_finish_pages(struct radeon_cs_parser *p);
+extern int radeon_cs_update_pages(struct radeon_cs_chunk *chunk, int pg_idx);
+extern int radeon_cs_finish_pages(struct radeon_cs_chunk *chunk);
 
 
-static inline u32 radeon_get_ib_value(struct radeon_cs_parser *p, int idx)
+static inline u32 radeon_get_ib_value(struct radeon_cs_chunk *chunk,
+				      int idx)
 {
-	struct radeon_cs_chunk *ibc = &p->chunks[p->chunk_ib_idx];
 	u32 pg_idx, pg_offset;
 	u32 idx_value = 0;
 	int new_page;
@@ -542,18 +543,18 @@ static inline u32 radeon_get_ib_value(struct radeon_cs_parser *p, int idx)
 	pg_idx = (idx * 4) / PAGE_SIZE;
 	pg_offset = (idx * 4) % PAGE_SIZE;
 
-	if (ibc->kpage_idx[0] == pg_idx)
-		return ibc->kpage[0][pg_offset/4];
-	if (ibc->kpage_idx[1] == pg_idx)
-		return ibc->kpage[1][pg_offset/4];
+	if (chunk->kpage_idx[0] == pg_idx)
+		return chunk->kpage[0][pg_offset/4];
+	if (chunk->kpage_idx[1] == pg_idx)
+		return chunk->kpage[1][pg_offset/4];
 
-	new_page = radeon_cs_update_pages(p, pg_idx);
+	new_page = radeon_cs_update_pages(chunk, pg_idx);
 	if (new_page < 0) {
-		p->parser_error = new_page;
+		chunk->parser->parser_error = new_page;
 		return 0;
 	}
 
-	idx_value = ibc->kpage[new_page][pg_offset/4];
+	idx_value = chunk->kpage[new_page][pg_offset/4];
 	return idx_value;
 }
 
@@ -566,10 +567,10 @@ struct radeon_cs_packet {
 	unsigned	one_reg_wr;
 };
 
-typedef int (*radeon_packet0_check_t)(struct radeon_cs_parser *p,
+typedef int (*radeon_packet0_check_t)(struct radeon_cs_chunk *chunk,
 				      struct radeon_cs_packet *pkt,
 				      unsigned idx, unsigned reg);
-typedef int (*radeon_packet3_check_t)(struct radeon_cs_parser *p,
+typedef int (*radeon_packet3_check_t)(struct radeon_cs_chunk *chunk,
 				      struct radeon_cs_packet *pkt);
 
 
@@ -813,7 +814,9 @@ struct radeon_asic {
 	int (*irq_process)(struct radeon_device *rdev);
 	u32 (*get_vblank_counter)(struct radeon_device *rdev, int crtc);
 	void (*fence_ring_emit)(struct radeon_device *rdev, struct radeon_fence *fence);
-	int (*cs_parse)(struct radeon_cs_parser *p);
+	int (*cs_parse)(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk);
+	int (*cs_create_tracker)(struct radeon_cs_parser *p);
+	int (*cs_check_tracker)(struct radeon_cs_parser *p);
 	int (*copy_blit)(struct radeon_device *rdev,
 			 uint64_t src_offset,
 			 uint64_t dst_offset,
@@ -1236,7 +1239,9 @@ static inline void radeon_ring_write(struct radeon_device *rdev, uint32_t v)
 #define radeon_fini(rdev) (rdev)->asic->fini((rdev))
 #define radeon_resume(rdev) (rdev)->asic->resume((rdev))
 #define radeon_suspend(rdev) (rdev)->asic->suspend((rdev))
-#define radeon_cs_parse(p) rdev->asic->cs_parse((p))
+#define radeon_cs_parse(p, c) rdev->asic->cs_parse((p), (c))
+#define radeon_cs_create_tracker(p) rdev->asic->cs_create_tracker((p))
+#define radeon_cs_check_tracker(p) rdev->asic->cs_check_tracker((p))
 #define radeon_vga_set_state(rdev, state) (rdev)->asic->vga_set_state((rdev), (state))
 #define radeon_gpu_is_lockup(rdev) (rdev)->asic->gpu_is_lockup((rdev))
 #define radeon_asic_reset(rdev) (rdev)->asic->asic_reset((rdev))

@@ -618,9 +618,9 @@ static int rv370_debugfs_pcie_gart_info_init(struct radeon_device *rdev)
 #endif
 }
 
-static int r300_packet0_check(struct radeon_cs_parser *p,
-		struct radeon_cs_packet *pkt,
-		unsigned idx, unsigned reg)
+static int r300_packet0_check(struct radeon_cs_chunk *chunk,
+			      struct radeon_cs_packet *pkt,
+			      unsigned idx, unsigned reg)
 {
 	struct radeon_cs_reloc *reloc;
 	struct r100_cs_track *track;
@@ -630,24 +630,24 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 	int r;
 	u32 idx_value;
 
-	ib = p->ib->ptr;
-	track = (struct r100_cs_track *)p->track;
-	idx_value = radeon_get_ib_value(p, idx);
+	ib = chunk->ib->ptr;
+	track = (struct r100_cs_track *)chunk->parser->track;
+	idx_value = radeon_get_ib_value(chunk, idx);
 
 	switch(reg) {
 	case AVIVO_D1MODE_VLINE_START_END:
 	case RADEON_CRTC_GUI_TRIG_VLINE:
-		r = r100_cs_packet_parse_vline(p);
+		r = r100_cs_packet_parse_vline(chunk);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 					idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		break;
 	case RADEON_DST_PITCH_OFFSET:
 	case RADEON_SRC_PITCH_OFFSET:
-		r = r100_reloc_pitch_offset(p, pkt, idx, reg);
+		r = r100_reloc_pitch_offset(chunk, pkt, idx, reg);
 		if (r)
 			return r;
 		break;
@@ -656,11 +656,11 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 	case R300_RB3D_COLOROFFSET2:
 	case R300_RB3D_COLOROFFSET3:
 		i = (reg - R300_RB3D_COLOROFFSET0) >> 2;
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 					idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		track->cb[i].robj = reloc->robj;
@@ -668,11 +668,11 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		ib[idx] = idx_value + ((u32)reloc->lobj.gpu_offset);
 		break;
 	case R300_ZB_DEPTHOFFSET:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 					idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		track->zb.robj = reloc->robj;
@@ -696,11 +696,11 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 	case R300_TX_OFFSET_0+56:
 	case R300_TX_OFFSET_0+60:
 		i = (reg - R300_TX_OFFSET_0) >> 2;
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 					idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 
@@ -731,14 +731,14 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		break;
 	case 0x2088:
 		/* VAP_ALT_NUM_VERTICES - only valid on r500 */
-		if (p->rdev->family < CHIP_RV515)
+		if (chunk->parser->rdev->family < CHIP_RV515)
 			goto fail;
 		track->vap_alt_nverts = idx_value & 0xFFFFFF;
 		break;
 	case 0x43E4:
 		/* SC_SCISSOR1 */
 		track->maxy = ((idx_value >> 13) & 0x1FFF) + 1;
-		if (p->rdev->family < CHIP_RV515) {
+		if (chunk->parser->rdev->family < CHIP_RV515) {
 			track->maxy -= 1440;
 		}
 		break;
@@ -754,11 +754,11 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		/* RB3D_COLORPITCH1 */
 		/* RB3D_COLORPITCH2 */
 		/* RB3D_COLORPITCH3 */
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 
@@ -827,11 +827,11 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		break;
 	case 0x4F24:
 		/* ZB_DEPTHPITCH */
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 
@@ -921,7 +921,7 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 			track->textures[i].compress_format = R100_TRACK_COMP_DXT1;
 			break;
 		case R300_TX_FORMAT_ATI2N:
-			if (p->rdev->family < CHIP_R420) {
+			if (chunk->parser->rdev->family < CHIP_R420) {
 				DRM_ERROR("Invalid texture format %u\n",
 					  (idx_value & 0x1F));
 				return -EINVAL;
@@ -987,7 +987,7 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		i = (reg - 0x4500) >> 2;
 		tmp = idx_value & 0x3FFF;
 		track->textures[i].pitch = tmp + 1;
-		if (p->rdev->family >= CHIP_RV515) {
+		if (chunk->parser->rdev->family >= CHIP_RV515) {
 			tmp = ((idx_value >> 15) & 1) << 11;
 			track->textures[i].width_11 = tmp;
 			tmp = ((idx_value >> 16) & 1) << 11;
@@ -1034,11 +1034,11 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		track->textures[i].txdepth = tmp;
 		break;
 	case R300_ZB_ZPASS_ADDR:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 					idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		ib[idx] = idx_value + ((u32)reloc->lobj.gpu_offset);
@@ -1057,7 +1057,7 @@ static int r300_packet0_check(struct radeon_cs_parser *p,
 		break;
 	case 0x4be8:
 		/* valid register only on RV530 */
-		if (p->rdev->family == CHIP_RV530)
+		if (chunk->parser->rdev->family == CHIP_RV530)
 			break;
 		/* fallthrough do not move */
 	default:
@@ -1070,7 +1070,7 @@ fail:
 	return -EINVAL;
 }
 
-static int r300_packet3_check(struct radeon_cs_parser *p,
+static int r300_packet3_check(struct radeon_cs_chunk *chunk,
 			      struct radeon_cs_packet *pkt)
 {
 	struct radeon_cs_reloc *reloc;
@@ -1079,24 +1079,24 @@ static int r300_packet3_check(struct radeon_cs_parser *p,
 	unsigned idx;
 	int r;
 
-	ib = p->ib->ptr;
+	ib = chunk->ib->ptr;
 	idx = pkt->idx + 1;
-	track = (struct r100_cs_track *)p->track;
+	track = (struct r100_cs_track *)chunk->parser->track;
 	switch(pkt->opcode) {
 	case PACKET3_3D_LOAD_VBPNTR:
-		r = r100_packet3_load_vbpntr(p, pkt, idx);
+		r = r100_packet3_load_vbpntr(chunk, pkt, idx);
 		if (r)
 			return r;
 		break;
 	case PACKET3_INDX_BUFFER:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for packet3 %d\n", pkt->opcode);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
-		ib[idx+1] = radeon_get_ib_value(p, idx + 1) + ((u32)reloc->lobj.gpu_offset);
-		r = r100_cs_track_check_pkt3_indx_buffer(p, pkt, reloc->robj);
+		ib[idx+1] = radeon_get_ib_value(chunk, idx + 1) + ((u32)reloc->lobj.gpu_offset);
+		r = r100_cs_track_check_pkt3_indx_buffer(chunk, pkt, reloc->robj);
 		if (r) {
 			return r;
 		}
@@ -1106,13 +1106,13 @@ static int r300_packet3_check(struct radeon_cs_parser *p,
 		/* Number of dwords is vtx_size * (num_vertices - 1)
 		 * PRIM_WALK must be equal to 3 vertex data in embedded
 		 * in cmd stream */
-		if (((radeon_get_ib_value(p, idx + 1) >> 4) & 0x3) != 3) {
+		if (((radeon_get_ib_value(chunk, idx + 1) >> 4) & 0x3) != 3) {
 			DRM_ERROR("PRIM_WALK must be 3 for IMMD draw\n");
 			return -EINVAL;
 		}
-		track->vap_vf_cntl = radeon_get_ib_value(p, idx + 1);
+		track->vap_vf_cntl = radeon_get_ib_value(chunk, idx + 1);
 		track->immd_dwords = pkt->count - 1;
-		r = r100_cs_track_check(p->rdev, track);
+		r = r100_cs_track_check(chunk->parser->rdev, track);
 		if (r) {
 			return r;
 		}
@@ -1121,41 +1121,41 @@ static int r300_packet3_check(struct radeon_cs_parser *p,
 		/* Number of dwords is vtx_size * (num_vertices - 1)
 		 * PRIM_WALK must be equal to 3 vertex data in embedded
 		 * in cmd stream */
-		if (((radeon_get_ib_value(p, idx) >> 4) & 0x3) != 3) {
+		if (((radeon_get_ib_value(chunk, idx) >> 4) & 0x3) != 3) {
 			DRM_ERROR("PRIM_WALK must be 3 for IMMD draw\n");
 			return -EINVAL;
 		}
-		track->vap_vf_cntl = radeon_get_ib_value(p, idx);
+		track->vap_vf_cntl = radeon_get_ib_value(chunk, idx);
 		track->immd_dwords = pkt->count;
-		r = r100_cs_track_check(p->rdev, track);
+		r = r100_cs_track_check(chunk->parser->rdev, track);
 		if (r) {
 			return r;
 		}
 		break;
 	case PACKET3_3D_DRAW_VBUF:
-		track->vap_vf_cntl = radeon_get_ib_value(p, idx + 1);
-		r = r100_cs_track_check(p->rdev, track);
+		track->vap_vf_cntl = radeon_get_ib_value(chunk, idx + 1);
+		r = r100_cs_track_check(chunk->parser->rdev, track);
 		if (r) {
 			return r;
 		}
 		break;
 	case PACKET3_3D_DRAW_VBUF_2:
-		track->vap_vf_cntl = radeon_get_ib_value(p, idx);
-		r = r100_cs_track_check(p->rdev, track);
+		track->vap_vf_cntl = radeon_get_ib_value(chunk, idx);
+		r = r100_cs_track_check(chunk->parser->rdev, track);
 		if (r) {
 			return r;
 		}
 		break;
 	case PACKET3_3D_DRAW_INDX:
-		track->vap_vf_cntl = radeon_get_ib_value(p, idx + 1);
-		r = r100_cs_track_check(p->rdev, track);
+		track->vap_vf_cntl = radeon_get_ib_value(chunk, idx + 1);
+		r = r100_cs_track_check(chunk->parser->rdev, track);
 		if (r) {
 			return r;
 		}
 		break;
 	case PACKET3_3D_DRAW_INDX_2:
-		track->vap_vf_cntl = radeon_get_ib_value(p, idx);
-		r = r100_cs_track_check(p->rdev, track);
+		track->vap_vf_cntl = radeon_get_ib_value(chunk, idx);
+		r = r100_cs_track_check(chunk->parser->rdev, track);
 		if (r) {
 			return r;
 		}
@@ -1169,24 +1169,20 @@ static int r300_packet3_check(struct radeon_cs_parser *p,
 	return 0;
 }
 
-int r300_cs_parse(struct radeon_cs_parser *p)
+int r300_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk)
 {
 	struct radeon_cs_packet pkt;
-	struct r100_cs_track *track;
 	int r;
 
-	track = kzalloc(sizeof(*track), GFP_KERNEL);
-	r100_cs_track_clear(p->rdev, track);
-	p->track = track;
 	do {
-		r = r100_cs_packet_parse(p, &pkt, p->idx);
+		r = r100_cs_packet_parse(chunk, &pkt, chunk->idx);
 		if (r) {
 			return r;
 		}
-		p->idx += pkt.count + 2;
+		chunk->idx += pkt.count + 2;
 		switch (pkt.type) {
 		case PACKET_TYPE0:
-			r = r100_cs_parse_packet0(p, &pkt,
+			r = r100_cs_parse_packet0(chunk, &pkt,
 						  p->rdev->config.r300.reg_safe_bm,
 						  p->rdev->config.r300.reg_safe_bm_size,
 						  &r300_packet0_check);
@@ -1194,7 +1190,7 @@ int r300_cs_parse(struct radeon_cs_parser *p)
 		case PACKET_TYPE2:
 			break;
 		case PACKET_TYPE3:
-			r = r300_packet3_check(p, &pkt);
+			r = r300_packet3_check(chunk, &pkt);
 			break;
 		default:
 			DRM_ERROR("Unknown packet type %d !\n", pkt.type);
@@ -1203,7 +1199,7 @@ int r300_cs_parse(struct radeon_cs_parser *p)
 		if (r) {
 			return r;
 		}
-	} while (p->idx < p->chunks[p->chunk_ib_idx].length_dw);
+	} while (chunk->idx < chunk->length_dw);
 	return 0;
 }
 

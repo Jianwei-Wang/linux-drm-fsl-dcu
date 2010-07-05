@@ -139,7 +139,7 @@ static int r200_get_vtx_size_1(uint32_t vtx_fmt_1)
 	return vtx_size;
 }
 
-int r200_packet0_check(struct radeon_cs_parser *p,
+int r200_packet0_check(struct radeon_cs_chunk *chunk,
 		       struct radeon_cs_packet *pkt,
 		       unsigned idx, unsigned reg)
 {
@@ -153,16 +153,16 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 	u32 tile_flags = 0;
 	u32 idx_value;
 
-	ib = p->ib->ptr;
-	track = (struct r100_cs_track *)p->track;
-	idx_value = radeon_get_ib_value(p, idx);
+	ib = chunk->ib->ptr;
+	track = (struct r100_cs_track *)chunk->parser->track;
+	idx_value = radeon_get_ib_value(chunk, idx);
 	switch (reg) {
 	case RADEON_CRTC_GUI_TRIG_VLINE:
-		r = r100_cs_packet_parse_vline(p);
+		r = r100_cs_packet_parse_vline(chunk);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		break;
@@ -170,16 +170,16 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 		 * range access */
 	case RADEON_DST_PITCH_OFFSET:
 	case RADEON_SRC_PITCH_OFFSET:
-		r = r100_reloc_pitch_offset(p, pkt, idx, reg);
+		r = r100_reloc_pitch_offset(chunk, pkt, idx, reg);
 		if (r)
 			return r;
 		break;
 	case RADEON_RB3D_DEPTHOFFSET:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		track->zb.robj = reloc->robj;
@@ -187,11 +187,11 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 		ib[idx] = idx_value + ((u32)reloc->lobj.gpu_offset);
 		break;
 	case RADEON_RB3D_COLOROFFSET:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		track->cb[0].robj = reloc->robj;
@@ -205,11 +205,11 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 	case R200_PP_TXOFFSET_4:
 	case R200_PP_TXOFFSET_5:
 		i = (reg - R200_PP_TXOFFSET_0) / 24;
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		ib[idx] = idx_value + ((u32)reloc->lobj.gpu_offset);
@@ -247,11 +247,11 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 	case R200_PP_CUBIC_OFFSET_F5_5:
 		i = (reg - R200_PP_TXOFFSET_0) / 24;
 		face = (reg - ((i * 24) + R200_PP_TXOFFSET_0)) / 4;
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		track->textures[i].cube_info[face - 1].offset = idx_value;
@@ -262,11 +262,11 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 		track->maxy = ((idx_value >> 16) & 0x7FF);
 		break;
 	case RADEON_RB3D_COLORPITCH:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 
@@ -331,11 +331,11 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 		}
 		break;
 	case RADEON_RB3D_ZPASS_ADDR:
-		r = r100_cs_packet_next_reloc(p, &reloc);
+		r = r100_cs_packet_next_reloc(chunk, &reloc);
 		if (r) {
 			DRM_ERROR("No reloc for ib[%d]=0x%04X\n",
 				  idx, reg);
-			r100_cs_dump_packet(p, pkt);
+			r100_cs_dump_packet(chunk, pkt);
 			return r;
 		}
 		ib[idx] = idx_value + ((u32)reloc->lobj.gpu_offset);

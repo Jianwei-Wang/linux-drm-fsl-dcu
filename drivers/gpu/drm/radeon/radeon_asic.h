@@ -71,7 +71,8 @@ int r100_irq_set(struct radeon_device *rdev);
 int r100_irq_process(struct radeon_device *rdev);
 void r100_fence_ring_emit(struct radeon_device *rdev,
 			  struct radeon_fence *fence);
-int r100_cs_parse(struct radeon_cs_parser *p);
+int r100_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk);
+int r100_cs_create_tracker(struct radeon_cs_parser *p);
 void r100_pll_wreg(struct radeon_device *rdev, uint32_t reg, uint32_t v);
 uint32_t r100_pll_rreg(struct radeon_device *rdev, uint32_t reg);
 int r100_copy_blit(struct radeon_device *rdev,
@@ -113,14 +114,14 @@ void r100_wb_fini(struct radeon_device *rdev);
 int r100_wb_init(struct radeon_device *rdev);
 int r100_cp_reset(struct radeon_device *rdev);
 void r100_vga_render_disable(struct radeon_device *rdev);
-int r100_cs_track_check_pkt3_indx_buffer(struct radeon_cs_parser *p,
+int r100_cs_track_check_pkt3_indx_buffer(struct radeon_cs_chunk *chunk,
 					 struct radeon_cs_packet *pkt,
 					 struct radeon_bo *robj);
-int r100_cs_parse_packet0(struct radeon_cs_parser *p,
+int r100_cs_parse_packet0(struct radeon_cs_chunk *chunk,
 			  struct radeon_cs_packet *pkt,
 			  const unsigned *auth, unsigned n,
 			  radeon_packet0_check_t check);
-int r100_cs_packet_parse(struct radeon_cs_parser *p,
+int r100_cs_packet_parse(struct radeon_cs_chunk *chunk,
 			 struct radeon_cs_packet *pkt,
 			 unsigned idx);
 void r100_enable_bm(struct radeon_device *rdev);
@@ -154,7 +155,7 @@ extern int r300_asic_reset(struct radeon_device *rdev);
 extern void r300_ring_start(struct radeon_device *rdev);
 extern void r300_fence_ring_emit(struct radeon_device *rdev,
 				struct radeon_fence *fence);
-extern int r300_cs_parse(struct radeon_cs_parser *p);
+extern int r300_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk);
 extern void rv370_pcie_gart_tlb_flush(struct radeon_device *rdev);
 extern int rv370_pcie_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr);
 extern uint32_t rv370_pcie_rreg(struct radeon_device *rdev, uint32_t reg);
@@ -253,7 +254,8 @@ void r600_cp_commit(struct radeon_device *rdev);
 void r600_pcie_gart_tlb_flush(struct radeon_device *rdev);
 uint32_t r600_pciep_rreg(struct radeon_device *rdev, uint32_t reg);
 void r600_pciep_wreg(struct radeon_device *rdev, uint32_t reg, uint32_t v);
-int r600_cs_parse(struct radeon_cs_parser *p);
+int r600_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk);
+int r600_cs_create_tracker(struct radeon_cs_parser *p);
 void r600_fence_ring_emit(struct radeon_device *rdev,
 			  struct radeon_fence *fence);
 int r600_copy_dma(struct radeon_device *rdev,
@@ -314,7 +316,8 @@ void evergreen_hpd_set_polarity(struct radeon_device *rdev,
 u32 evergreen_get_vblank_counter(struct radeon_device *rdev, int crtc);
 int evergreen_irq_set(struct radeon_device *rdev);
 int evergreen_irq_process(struct radeon_device *rdev);
-extern int evergreen_cs_parse(struct radeon_cs_parser *p);
+extern int evergreen_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk);
+extern int evergreen_cs_create_tracker(struct radeon_cs_parser *p);
 extern void evergreen_pm_misc(struct radeon_device *rdev);
 extern void evergreen_pm_prepare(struct radeon_device *rdev);
 extern void evergreen_pm_finish(struct radeon_device *rdev);
