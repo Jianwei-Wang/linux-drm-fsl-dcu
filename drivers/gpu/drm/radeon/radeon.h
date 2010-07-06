@@ -523,9 +523,10 @@ struct radeon_cs_parser {
 	struct radeon_cs_reloc	**relocs_ptr;
 	struct list_head	validated;
 	/* indices of various chunks */
-	int			chunk_ib_idx;
 	int			chunk_relocs_idx;
-	int			chunk_setup_idx;
+	int			chunk_final_ib_idx;
+	int			chunk_ib_idx[4];
+	int                     num_ib_chunks;
 	void			*track;
 	unsigned		family;
 	int parser_error;
@@ -1084,7 +1085,6 @@ struct radeon_device {
 	bool powered_down;
 	struct notifier_block acpi_nb;
 
-	struct drm_file *last_cs_filp;
 	void *current_track;
 };
 

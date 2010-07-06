@@ -874,7 +874,6 @@ struct drm_radeon_gem_pwrite {
 
 #define RADEON_CHUNK_ID_RELOCS	0x01
 #define RADEON_CHUNK_ID_IB	0x02
-#define RADEON_CHUNK_ID_IB_SETUP  0x03
 
 struct drm_radeon_cs_chunk {
 	uint32_t		chunk_id;

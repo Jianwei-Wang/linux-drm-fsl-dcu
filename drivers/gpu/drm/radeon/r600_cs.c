@@ -1498,7 +1498,7 @@ int r600_cs_legacy(struct drm_device *dev, void *data, struct drm_file *filp,
 	/* Copy the packet into the IB, the parser will read from the
 	 * input memory (cached) and write to the IB (which can be
 	 * uncached). */
-	ib_chunk = &parser.chunks[parser.chunk_ib_idx];
+	ib_chunk = &parser.chunks[parser.chunk_final_ib_idx];
 	ib_chunk->ib = &fake_ib;
 	ib_chunk->ib->length_dw = ib_chunk->length_dw;
 	*l = ib_chunk->length_dw;

@@ -148,6 +148,7 @@ int radeon_fence_create(struct radeon_device *rdev, struct radeon_fence **fence)
 	(*fence)->emited = false;
 	(*fence)->signaled = false;
 	(*fence)->seq = 0;
+	(*fence)->flush = true;
 	INIT_LIST_HEAD(&(*fence)->list);
 
 	write_lock_irqsave(&rdev->fence_drv.lock, irq_flags);
