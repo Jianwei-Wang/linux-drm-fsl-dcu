@@ -1810,17 +1810,23 @@ static int r100_packet3_check(struct radeon_cs_chunk *chunk,
 	return 0;
 }
 
-int r100_cs_create_tracker(struct radeon_cs_parser *p)
+void *r100_cs_create_tracker(struct radeon_device *rdev)
 {
 	struct r100_cs_track *track;
+
 	track = kzalloc(sizeof(*track), GFP_KERNEL);
 	if (!track)
-		return -ENOMEM;
+		return NULL;
 
-	r100_cs_track_clear(p->rdev, track);
-	p->track = track;
-	return 0;
+	r100_cs_track_clear(rdev, track);
+	return (void *)track;
 }
+
+void r100_cs_clear_tracker(struct radeon_device *rdev, void *tracker)
+{
+	r100_cs_track_clear(rdev, tracker);
+}
+
 int r100_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk)
 {
 	struct radeon_cs_packet pkt;

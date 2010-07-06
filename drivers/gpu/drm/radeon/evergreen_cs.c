@@ -1298,23 +1298,24 @@ static int evergreen_packet3_check(struct radeon_cs_chunk *chunk,
 	return 0;
 }
 
-int evergreen_cs_create_tracker(struct radeon_cs_parser *p)
+void *evergreen_cs_create_tracker(struct radeon_device *rdev)
 {
 	struct evergreen_cs_track *track;
-
-	if (p->track)
-		return 0;
 
 	/* initialize tracker, we are in kms */
 	track = kzalloc(sizeof(*track), GFP_KERNEL);
 	if (track == NULL)
-		return -ENOMEM;
+		return NULL;
 	evergreen_cs_track_init(track);
-	track->npipes = p->rdev->config.evergreen.tiling_npipes;
-	track->nbanks = p->rdev->config.evergreen.tiling_nbanks;
-	track->group_size = p->rdev->config.evergreen.tiling_group_size;
-	p->track = track;
-	return 0;
+	track->npipes = rdev->config.evergreen.tiling_npipes;
+	track->nbanks = rdev->config.evergreen.tiling_nbanks;
+	track->group_size = rdev->config.evergreen.tiling_group_size;
+	return (void *)track;
+}
+
+void evergreen_cs_clear_tracker(struct radeon_device *rdev, void *tracker)
+{
+	evergreen_cs_track_init(tracker);
 }
 
 int evergreen_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk)

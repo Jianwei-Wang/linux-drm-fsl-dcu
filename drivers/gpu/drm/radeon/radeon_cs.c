@@ -204,7 +204,6 @@ static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error)
 				drm_gem_object_unreference_unlocked(parser->relocs[i].gobj);
 		}
 	}
-	kfree(parser->track);
 	kfree(parser->relocs);
 	kfree(parser->relocs_ptr);
 	for (i = 0; i < parser->nchunks; i++) {
@@ -215,18 +214,13 @@ static void radeon_cs_parser_fini(struct radeon_cs_parser *parser, int error)
 	}
 	kfree(parser->chunks);
 	kfree(parser->chunks_array);
-
 }
 
-static int radeon_cs_parser_chunk(struct radeon_cs_parser *parser, int chunk_id)
+static int radeon_cs_parser_chunk(struct radeon_cs_parser *parser, int chunk_id, bool flush)
 {
 	struct radeon_device *rdev = parser->rdev;
 	struct radeon_cs_chunk *ib_chunk;
 	int r;
-	bool flush = true;
-
-	if (chunk_id != parser->chunk_ib_idx)
-		flush = false;
 
 	ib_chunk = &parser->chunks[chunk_id];
 	r = radeon_ib_get(parser->rdev, &ib_chunk->ib);
@@ -234,7 +228,7 @@ static int radeon_cs_parser_chunk(struct radeon_cs_parser *parser, int chunk_id)
 		DRM_ERROR("Failed to get ib !\n");
 		return r;
 	}
-	ib_chunk->ib->fence->dont_flush = !flush;
+	ib_chunk->ib->fence->flush = flush;
 
 	ib_chunk->ib->length_dw = ib_chunk->length_dw;
 	/* Copy the packet into the IB, the parser will read from the
@@ -264,11 +258,17 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	int r;
 
 	mutex_lock(&rdev->cs_mutex);
+
+	if (!rdev->current_track) {
+		rdev->current_track = radeon_cs_create_tracker(rdev);
+	}
+	  
 	/* initialize parser */
 	memset(&parser, 0, sizeof(struct radeon_cs_parser));
 	parser.filp = filp;
 	parser.rdev = rdev;
 	parser.dev = rdev->dev;
+	parser.track = rdev->current_track;
 	r = radeon_cs_parser_init(&parser, data);
 	if (r) {
 		DRM_ERROR("Failed to initialize parser !\n");
@@ -282,23 +282,23 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		goto out;
 	}
 
-	/* setup trackers */
-	r = radeon_cs_create_tracker(&parser);
-	if (r)
-		goto out;
-
 	if (parser.chunk_setup_idx != -1) {
-		r = radeon_cs_parser_chunk(&parser, parser.chunk_setup_idx);
-		if (r)
-			goto out;
-	}
+		if (rdev->last_cs_filp != filp) {
+			radeon_cs_clear_tracker(rdev, parser.track);
+			r = radeon_cs_parser_chunk(&parser, parser.chunk_setup_idx, false);
+			if (r)
+				goto out;
+		}
+	} else
+		radeon_cs_clear_tracker(rdev, parser.track);
 
-	r = radeon_cs_parser_chunk(&parser, parser.chunk_ib_idx);
+	r = radeon_cs_parser_chunk(&parser, parser.chunk_ib_idx, true);
 	if (r)
 		goto out;
 
 	/* verify trackers */
 out:
+	rdev->last_cs_filp = filp;
 	radeon_cs_parser_fini(&parser, r);
 	mutex_unlock(&rdev->cs_mutex);
 	return r;

@@ -1355,29 +1355,30 @@ static int r600_packet3_check(struct radeon_cs_chunk *chunk,
 	return 0;
 }
 
-int r600_cs_create_tracker(struct radeon_cs_parser *p)
+void *r600_cs_create_tracker(struct radeon_device *rdev)
 {
 	struct r600_cs_track *track;
-
-	if (p->track)
-		return 0;
 
 	/* initialize tracker, we are in kms */
 	track = kzalloc(sizeof(*track), GFP_KERNEL);
 	if (track == NULL)
-		return -ENOMEM;
+		return NULL;
 	r600_cs_track_init(track);
-	if (p->rdev->family < CHIP_RV770) {
-		track->npipes = p->rdev->config.r600.tiling_npipes;
-		track->nbanks = p->rdev->config.r600.tiling_nbanks;
-		track->group_size = p->rdev->config.r600.tiling_group_size;
-	} else if (p->rdev->family <= CHIP_RV740) {
-		track->npipes = p->rdev->config.rv770.tiling_npipes;
-		track->nbanks = p->rdev->config.rv770.tiling_nbanks;
-		track->group_size = p->rdev->config.rv770.tiling_group_size;
+	if (rdev->family < CHIP_RV770) {
+		track->npipes = rdev->config.r600.tiling_npipes;
+		track->nbanks = rdev->config.r600.tiling_nbanks;
+		track->group_size = rdev->config.r600.tiling_group_size;
+	} else if (rdev->family <= CHIP_RV740) {
+		track->npipes = rdev->config.rv770.tiling_npipes;
+		track->nbanks = rdev->config.rv770.tiling_nbanks;
+		track->group_size = rdev->config.rv770.tiling_group_size;
 	}
-	p->track = track;
-	return 0;
+	return track;
+}
+
+void r600_cs_clear_tracker(struct radeon_device *rdev, void *tracker)
+{
+	r600_cs_track_init(tracker);
 }
 
 int r600_cs_parse(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk)

@@ -204,7 +204,7 @@ struct radeon_fence {
 	uint32_t			seq;
 	bool				emited;
 	bool				signaled;
-	bool                            dont_flush;
+	bool                            flush;
 };
 
 int radeon_fence_driver_init(struct radeon_device *rdev);
@@ -817,7 +817,8 @@ struct radeon_asic {
 	u32 (*get_vblank_counter)(struct radeon_device *rdev, int crtc);
 	void (*fence_ring_emit)(struct radeon_device *rdev, struct radeon_fence *fence);
 	int (*cs_parse)(struct radeon_cs_parser *p, struct radeon_cs_chunk *chunk);
-	int (*cs_create_tracker)(struct radeon_cs_parser *p);
+	void *(*cs_create_tracker)(struct radeon_device *rdev);
+	void (*cs_clear_tracker)(struct radeon_device *rdev, void *tracker);
 	int (*cs_check_tracker)(struct radeon_cs_parser *p);
 	int (*copy_blit)(struct radeon_device *rdev,
 			 uint64_t src_offset,
@@ -1082,6 +1083,9 @@ struct radeon_device {
 
 	bool powered_down;
 	struct notifier_block acpi_nb;
+
+	struct drm_file *last_cs_filp;
+	void *current_track;
 };
 
 int radeon_device_init(struct radeon_device *rdev,
@@ -1242,8 +1246,9 @@ static inline void radeon_ring_write(struct radeon_device *rdev, uint32_t v)
 #define radeon_resume(rdev) (rdev)->asic->resume((rdev))
 #define radeon_suspend(rdev) (rdev)->asic->suspend((rdev))
 #define radeon_cs_parse(p, c) rdev->asic->cs_parse((p), (c))
-#define radeon_cs_create_tracker(p) rdev->asic->cs_create_tracker((p))
+#define radeon_cs_create_tracker(rdev) (rdev)->asic->cs_create_tracker((rdev))
 #define radeon_cs_check_tracker(p) rdev->asic->cs_check_tracker((p))
+#define radeon_cs_clear_tracker(rdev, track) (rdev)->asic->cs_clear_tracker((rdev), (track))
 #define radeon_vga_set_state(rdev, state) (rdev)->asic->vga_set_state((rdev), (state))
 #define radeon_gpu_is_lockup(rdev) (rdev)->asic->gpu_is_lockup((rdev))
 #define radeon_asic_reset(rdev) (rdev)->asic->asic_reset((rdev))

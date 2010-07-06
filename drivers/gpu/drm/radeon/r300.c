@@ -182,7 +182,7 @@ void r300_fence_ring_emit(struct radeon_device *rdev,
 	/* Who ever call radeon_fence_emit should call ring_lock and ask
 	 * for enough space (today caller are ib schedule and buffer move) */
 	/* Write SC register so SC & US assert idle */
-	if (fence->dont_flush == true)
+	if (fence->flush == false)
 		goto just_fence;
 
 	radeon_ring_write(rdev, PACKET0(R300_RE_SCISSORS_TL, 0));
