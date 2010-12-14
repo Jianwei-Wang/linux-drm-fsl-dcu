@@ -165,3 +165,11 @@ source "drivers/gpu/drm/vmwgfx/Kconfig"
 
 source "drivers/gpu/drm/gma500/Kconfig"
 
+config DRM_UDL
+	tristate "DisplayLink"
+	depends on DRM && USB
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+	help
+	  UDL
