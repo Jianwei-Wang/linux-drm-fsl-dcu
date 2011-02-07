@@ -23,10 +23,24 @@ static void udl_usb_disconnect(struct usb_interface *interface)
 	drm_put_dev(dev);
 }
 
+static struct vm_operations_struct udl_gem_vm_ops = {
+	.open = drm_gem_vm_open,
+	.close = drm_gem_vm_close,
+};
+
 static struct drm_driver driver = {
-	.driver_features = DRIVER_MODESET,
+	.driver_features = DRIVER_MODESET | DRIVER_GEM,
 	.load = udl_driver_load,
 	.unload = udl_driver_unload,
+
+	/* gem hooks */
+	.gem_init_object = udl_gem_init_object,
+	.gem_free_object = udl_gem_free_object,
+	.gem_vm_ops = &udl_gem_vm_ops,
+
+	.dumb_create = udl_dumb_create,
+	.dumb_map_offset = udl_mmap_gtt,
+	.dumb_destroy = udl_dumb_destroy,
 	.fops = {
 		.owner = THIS_MODULE,
 		.open = drm_open,
