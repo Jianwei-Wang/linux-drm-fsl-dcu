@@ -35,17 +35,86 @@
 
 #include "drm_fb_helper.h"
 
+#define DL_DEFIO_WRITE_DELAY    5 /* fb_deferred_io.delay in jiffies */
+
+static int fb_defio = 1;  /* Optionally enable experimental fb_defio mmap support */
+
+module_param(fb_defio, bool, S_IWUSR | S_IRUSR | S_IWGRP | S_IRGRP);
+
 struct udl_fbdev {
 	struct drm_fb_helper helper;
 	struct drm_framebuffer fb;
 	struct list_head fbdev_list;
 	void *vmalloc;
+	int fb_count;
 };
 
 #define BPP                     2
 #define DL_ALIGN_UP(x, a) ALIGN(x, a)
 #define DL_ALIGN_DOWN(x, a) ALIGN(x-(a-1), a)
 
+/*
+ * NOTE: fb_defio.c is holding info->fbdefio.mutex
+ *   Touching ANY framebuffer memory that triggers a page fault
+ *   in fb_defio will cause a deadlock, when it also tries to
+ *   grab the same mutex.
+ */
+static void udlfb_dpy_deferred_io(struct fb_info *info,
+				  struct list_head *pagelist)
+{
+	struct page *cur;
+	struct fb_deferred_io *fbdefio = info->fbdefio;
+	struct udl_fbdev *ufbdev = info->par;
+	struct drm_device *dev = ufbdev->fb.dev;
+	struct udl_device *udl = dev->dev_private;
+	struct urb *urb;
+	char *cmd;
+	cycles_t start_cycles, end_cycles;
+	int bytes_sent = 0;
+	int bytes_identical = 0;
+	int bytes_rendered = 0;
+
+	if (!fb_defio)
+		return;
+
+	//	if (!atomic_read(&dev->usb_active))
+	//		return;
+
+	start_cycles = get_cycles();
+
+	urb = udl_get_urb(dev);
+	if (!urb)
+		return;
+
+	cmd = urb->transfer_buffer;
+
+	/* walk the written page list and render each to device */
+	list_for_each_entry(cur, &fbdefio->pagelist, lru) {
+
+		if (udl_render_hline(dev, &urb, (char *) info->fix.smem_start,
+				  &cmd, cur->index << PAGE_SHIFT,
+				  PAGE_SIZE, &bytes_identical, &bytes_sent))
+			goto error;
+		bytes_rendered += PAGE_SIZE;
+	}
+
+	if (cmd > (char *) urb->transfer_buffer) {
+		/* Send partial buffer remaining before exiting */
+		int len = cmd - (char *) urb->transfer_buffer;
+		udl_submit_urb(dev, urb, len);
+		bytes_sent += len;
+	} else
+		udl_urb_completion(urb);
+
+error:
+	atomic_add(bytes_sent, &udl->bytes_sent);
+	atomic_add(bytes_identical, &udl->bytes_identical);
+	atomic_add(bytes_rendered, &udl->bytes_rendered);
+	end_cycles = get_cycles();
+	atomic_add(((unsigned int) ((end_cycles - start_cycles)
+		    >> 10)), /* Kcycles */
+		   &udl->cpu_kcycles_used);
+}
 
 int udl_handle_damage(struct udl_fbdev *ufbdev, int x, int y,
 	       int width, int height, char *data)
@@ -111,6 +180,37 @@ error:
 	return 0;
 }
 
+static int udl_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+{
+	unsigned long start = vma->vm_start;
+	unsigned long size = vma->vm_end - vma->vm_start;
+	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+	unsigned long page, pos;
+
+	if (offset + size > info->fix.smem_len)
+		return -EINVAL;
+
+	pos = (unsigned long)info->fix.smem_start + offset;
+
+	pr_notice("mmap() framebuffer addr:%lu size:%lu\n",
+		  pos, size);
+
+	while (size > 0) {
+		page = vmalloc_to_pfn((void *)pos);
+		if (remap_pfn_range(vma, start, page, PAGE_SIZE, PAGE_SHARED))
+			return -EAGAIN;
+
+		start += PAGE_SIZE;
+		pos += PAGE_SIZE;
+		if (size > PAGE_SIZE)
+			size -= PAGE_SIZE;
+		else
+			size = 0;
+	}
+
+	vma->vm_flags |= VM_RESERVED;	/* avoid to swap out this VMA */
+	return 0;
+}
 
 static void udl_fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 {
@@ -142,6 +242,76 @@ static void udl_fb_imageblit(struct fb_info *info, const struct fb_image *image)
 			  image->height, info->screen_base);
 }
 
+/*
+ * It's common for several clients to have framebuffer open simultaneously.
+ * e.g. both fbcon and X. Makes things interesting.
+ * Assumes caller is holding info->lock (for open and release at least)
+ */
+static int udl_fb_open(struct fb_info *info, int user)
+{
+	struct udl_fbdev *ufbdev = info->par;
+	struct drm_device *dev = ufbdev->fb.dev;
+	struct udl_device *udl = dev->dev_private;
+
+	/*
+	 * fbcon aggressively connects to first framebuffer it finds,
+	 * preventing other clients (X) from working properly. Usually
+	 * not what the user wants. Fail by default with option to enable.
+	 */
+	//	if ((user == 0) & (!console))
+	//		return -EBUSY;
+
+	/* If the USB device is gone, we don't accept new opens */
+	if (udl->virtualized)
+		return -ENODEV;
+
+	ufbdev->fb_count++;
+
+	if (fb_defio && (info->fbdefio == NULL)) {
+		/* enable defio at last moment if not disabled by client */
+
+		struct fb_deferred_io *fbdefio;
+
+		fbdefio = kmalloc(sizeof(struct fb_deferred_io), GFP_KERNEL);
+
+		if (fbdefio) {
+			fbdefio->delay = DL_DEFIO_WRITE_DELAY;
+			fbdefio->deferred_io = udlfb_dpy_deferred_io;
+		}
+
+		info->fbdefio = fbdefio;
+		fb_deferred_io_init(info);
+	}
+
+	pr_notice("open /dev/fb%d user=%d fb_info=%p count=%d\n",
+		  info->node, user, info, ufbdev->fb_count);
+
+	return 0;
+}
+
+
+/*
+ * Assumes caller is holding info->lock mutex (for open and release at least)
+ */
+static int udl_fb_release(struct fb_info *info, int user)
+{
+	struct udl_fbdev *ufbdev = info->par;
+
+	ufbdev->fb_count--;
+
+	if ((ufbdev->fb_count == 0) && (info->fbdefio)) {
+		fb_deferred_io_cleanup(info);
+		kfree(info->fbdefio);
+		info->fbdefio = NULL;
+		info->fbops->fb_mmap = udl_fb_mmap;
+	}
+
+	pr_warn("released /dev/fb%d user=%d count=%d\n",
+		info->node, user, ufbdev->fb_count);
+
+	return 0;
+}
+
 static struct fb_ops udlfb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = drm_fb_helper_check_var,
@@ -154,6 +324,9 @@ static struct fb_ops udlfb_ops = {
 	.fb_setcmap = drm_fb_helper_setcmap,
 	.fb_debug_enter = drm_fb_helper_debug_enter,
 	.fb_debug_leave = drm_fb_helper_debug_leave,
+	.fb_mmap = udl_fb_mmap,
+	.fb_open = udl_fb_open,
+	.fb_release = udl_fb_release,
 };
 
 void udl_crtc_fb_gamma_set(struct drm_crtc *crtc, u16 red, u16 green,

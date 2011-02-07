@@ -38,6 +38,7 @@ struct udl_device {
 
 	struct urb_list urbs;
 	atomic_t lost_pixels; /* 1 = a render op failed. Need screen refresh */
+	bool virtualized;
 
 	struct udl_fbdev *fbdev;
 	char mode_buf[1024];
