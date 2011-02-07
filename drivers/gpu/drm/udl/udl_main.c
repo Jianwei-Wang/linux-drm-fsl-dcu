@@ -262,7 +262,7 @@ int udl_submit_urb(struct drm_device *dev, struct urb *urb, size_t len)
 	BUG_ON(len > udl->urbs.size);
 
 	urb->transfer_buffer_length = len; /* set to actual payload len */
-	ret = usb_submit_urb(urb, GFP_KERNEL);
+	ret = usb_submit_urb(urb, GFP_ATOMIC);
 	if (ret) {
 		udl_urb_completion(urb); /* because no one else will */
 		atomic_set(&udl->lost_pixels, 1);
