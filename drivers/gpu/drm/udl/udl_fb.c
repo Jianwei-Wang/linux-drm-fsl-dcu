@@ -347,6 +347,26 @@ void udl_crtc_fb_gamma_get(struct drm_crtc *crtc, u16 *red, u16 *green,
 	*blue = 0;
 }
 
+static int udl_user_framebuffer_dirty(struct drm_framebuffer *fb,
+				      struct drm_file *file,
+				      unsigned flags, unsigned color,
+				      struct drm_clip_rect *clips,
+				      unsigned num_clips)
+{
+	struct udl_framebuffer *ufb = to_udl_fb(fb);
+	int i;
+
+	if (!ufb->active_16)
+		return 0;
+
+	for (i = 0; i < num_clips; i++) {
+		udl_handle_damage(ufb, clips[i].x1, clips[i].y1,
+				  clips[i].x2 - clips[i].x1,
+				  clips[i].y2 - clips[i].y1);
+	}
+	return 0;
+}
+
 static void udl_user_framebuffer_destroy(struct drm_framebuffer *fb)
 {
 	struct udl_framebuffer *ufb = to_udl_fb(fb);
@@ -360,6 +380,7 @@ static void udl_user_framebuffer_destroy(struct drm_framebuffer *fb)
 
 static const struct drm_framebuffer_funcs udlfb_funcs = {
 	.destroy = udl_user_framebuffer_destroy,
+	.dirty = udl_user_framebuffer_dirty,
 	.create_handle = NULL,
 };
 
