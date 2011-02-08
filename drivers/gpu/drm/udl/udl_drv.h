@@ -52,6 +52,8 @@ struct udl_device {
 
 struct udl_gem_object {
 	struct drm_gem_object base;
+	struct page **pages;
+	void *vmapping;
 };
 
 #define to_udl_bo(x) container_of(x, struct udl_gem_object, base)  
@@ -92,3 +94,8 @@ int udl_dumb_destroy(struct drm_file *file_priv, struct drm_device *dev,
 
 int udl_gem_init_object(struct drm_gem_object *obj);
 void udl_gem_free_object(struct drm_gem_object *gem_obj);
+struct udl_gem_object *udl_gem_alloc_object(struct drm_device *dev,
+					    size_t size);
+
+int udl_gem_vmap(struct udl_gem_object *obj);
+void udl_gem_vunmap(struct udl_gem_object *obj);

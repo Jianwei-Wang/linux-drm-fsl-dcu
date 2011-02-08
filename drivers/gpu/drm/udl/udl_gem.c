@@ -151,7 +151,87 @@ int udl_gem_init_object(struct drm_gem_object *obj)
 	return 0;
 }
 
+static int udl_gem_get_pages(struct udl_gem_object *obj, gfp_t gfpmask)
+{
+	int page_count, i;
+	struct page *page;
+	struct inode *inode;
+	struct address_space *mapping;
+
+	page_count = obj->base.size / PAGE_SIZE;
+	BUG_ON(obj->pages != NULL);
+	obj->pages = drm_malloc_ab(page_count, sizeof(struct page *));
+	if (obj->pages == NULL)
+		return -ENOMEM;
+
+	inode = obj->base.filp->f_path.dentry->d_inode;
+	mapping = inode->i_mapping;
+	for (i = 0; i < page_count; i++) {
+		page = read_cache_page_gfp(mapping, i,
+					   GFP_HIGHUSER |
+					   __GFP_COLD |
+					   __GFP_RECLAIMABLE |
+					   gfpmask);
+		if (IS_ERR(page))
+			goto err_pages;
+		obj->pages[i] = page;
+	}
+
+	return 0;
+err_pages:
+	while (i--)
+		page_cache_release(obj->pages[i]);
+	drm_free_large(obj->pages);
+	obj->pages = NULL;
+	return PTR_ERR(page);
+}
+
+static void udl_gem_put_pages(struct udl_gem_object *obj)
+{
+	int page_count = obj->base.size / PAGE_SIZE;
+	int i;
+
+	for (i = 0; i < page_count; i++) {
+		page_cache_release(obj->pages[i]);
+	}
+
+	drm_free_large(obj->pages);
+	obj->pages = NULL;
+}
+
+int udl_gem_vmap(struct udl_gem_object *obj)
+{
+	int page_count = obj->base.size / PAGE_SIZE;
+	int ret;
+
+	if (!obj->pages) {
+		ret = udl_gem_get_pages(obj, GFP_KERNEL);
+		if (ret)
+			return ret;
+	}
+
+	obj->vmapping = vmap(obj->pages, page_count, 0, PAGE_KERNEL);
+	if (!obj->vmapping)
+		return -ENOMEM;
+	return 0;
+}
+
+void udl_gem_vunmap(struct udl_gem_object *obj)
+{
+	if (obj->vmapping)
+		vunmap(obj->vmapping);
+
+	udl_gem_put_pages(obj);
+}
+
 void udl_gem_free_object(struct drm_gem_object *gem_obj)
 {
+	struct udl_gem_object *obj = to_udl_bo(gem_obj);
+
+	if (obj->vmapping)
+		udl_gem_vunmap(obj);
+
+	if (obj->pages)
+		udl_gem_put_pages(obj);
 }
 

@@ -45,8 +45,8 @@ struct udl_fbdev {
 	struct drm_fb_helper helper;
 	struct drm_framebuffer fb;
 	struct list_head fbdev_list;
-	void *vmalloc;
 	int fb_count;
+	struct udl_gem_object *gobj;
 };
 
 #define BPP                     2
@@ -376,13 +376,17 @@ static int udlfb_create(struct udl_fbdev *ufbdev,
 	size = mode_cmd.pitch * mode_cmd.height;
 	size = ALIGN(size, PAGE_SIZE);
 
-	ufbdev->vmalloc = vmalloc(size);
-	if (!ufbdev->vmalloc)
+	ufbdev->gobj = udl_gem_alloc_object(dev, size);
+	if (!ufbdev->gobj)
 		goto out;
 
+	
+	ret = udl_gem_vmap(ufbdev->gobj);
+	if (ret)
+		goto out_gfree;
 	ret = drm_framebuffer_init(dev, &ufbdev->fb, &udlfb_funcs);
 	if (ret)
-		goto out_vfree;
+		goto out_gfree;
 
 	drm_helper_mode_fill_fb_struct(&ufbdev->fb, &mode_cmd);
 
@@ -391,7 +395,7 @@ static int udlfb_create(struct udl_fbdev *ufbdev,
 	info = framebuffer_alloc(0, device);
 	if (!info) {
 		ret = -ENOMEM;
-		goto out_vfree;
+		goto out_gfree;
 	}
 
 	info->par = ufbdev;
@@ -400,9 +404,9 @@ static int udlfb_create(struct udl_fbdev *ufbdev,
 
 	strcpy(info->fix.id, "udldrmfb");
 
-	info->screen_base = ufbdev->vmalloc;
+	info->screen_base = ufbdev->gobj->vmapping;
 	info->fix.smem_len = size;
-	info->fix.smem_start = (unsigned long)ufbdev->vmalloc;
+	info->fix.smem_start = (unsigned long)ufbdev->gobj->vmapping;
 
 	info->flags = FBINFO_DEFAULT | FBINFO_CAN_FORCE_OUTPUT;
 	info->fbops = &udlfb_ops;
@@ -412,17 +416,17 @@ static int udlfb_create(struct udl_fbdev *ufbdev,
 	ret = fb_alloc_cmap(&info->cmap, 256, 0);
 	if (ret) {
 		ret = -ENOMEM;
-		goto out_vfree;
+		goto out_gfree;
 	}
 
 
 	DRM_DEBUG_KMS("allocated %dx%d vmal %p\n",
 		      fb->width, fb->height,
-		      ufbdev->vmalloc);;
+		      ufbdev->gobj->vmapping);
 
 	return ret;
-out_vfree:
-	vfree(ufbdev->vmalloc);
+out_gfree:
+	drm_gem_object_unreference(&ufbdev->gobj->base);
 out:
 	return ret;
 }
@@ -463,7 +467,7 @@ static void udl_fbdev_destroy(struct drm_device *dev,
 	}
 	drm_fb_helper_fini(&ufbdev->helper);
 	drm_framebuffer_cleanup(&ufbdev->fb);
-	vfree(ufbdev->vmalloc);
+	drm_gem_object_unreference(&ufbdev->gobj->base);
 }
 
 int udl_fbdev_init(struct drm_device *dev)
