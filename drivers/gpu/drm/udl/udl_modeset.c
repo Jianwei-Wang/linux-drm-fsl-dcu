@@ -378,6 +378,8 @@ int udl_modeset_init(struct drm_device *dev)
 
 	dev->mode_config.funcs = (void *)&udl_mode_funcs;
 
+	drm_mode_create_dirty_info_property(dev);
+
 	udl_crtc_init(dev);
 	
 	encoder = udl_encoder_init(dev);
