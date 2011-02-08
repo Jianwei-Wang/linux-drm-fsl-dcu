@@ -57,7 +57,13 @@ struct udl_gem_object {
 };
 
 #define to_udl_bo(x) container_of(x, struct udl_gem_object, base)  
-    
+
+struct udl_framebuffer {
+	struct drm_framebuffer base;
+	struct udl_gem_object *obj;
+};
+
+#define to_udl_fb(x) container_of(x, struct udl_framebuffer, base)
 
 /* modeset */
 int udl_modeset_init(struct drm_device *dev);
@@ -77,6 +83,10 @@ int udl_driver_unload(struct drm_device *dev);
 
 int udl_fbdev_init(struct drm_device *dev);
 void udl_fbdev_cleanup(struct drm_device *dev);
+struct drm_framebuffer *
+udl_fb_user_fb_create(struct drm_device *dev,
+		   struct drm_file *file,
+		   struct drm_mode_fb_cmd *mode_cmd);
 
 int udl_render_hline(struct drm_device *dev, struct urb **urb_ptr,
 		     const char *front, char **urb_buf_ptr,
