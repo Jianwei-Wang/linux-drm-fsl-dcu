@@ -128,6 +128,13 @@ int udl_handle_damage(struct udl_framebuffer *fb, int x, int y,
 	struct urb *urb;
 	int aligned_x;
 
+	if (!fb->active_16)
+		return 0;
+
+	if (!fb->obj->vmapping) {
+		udl_gem_vmap(fb->obj);
+	}
+
 	start_cycles = get_cycles();
 
 	aligned_x = DL_ALIGN_DOWN(x, sizeof(unsigned long));

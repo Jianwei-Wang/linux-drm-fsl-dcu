@@ -61,6 +61,7 @@ struct udl_gem_object {
 struct udl_framebuffer {
 	struct drm_framebuffer base;
 	struct udl_gem_object *obj;
+	bool active_16; /* active on the 16-bit channel */
 };
 
 #define to_udl_fb(x) container_of(x, struct udl_framebuffer, base)
@@ -109,3 +110,6 @@ struct udl_gem_object *udl_gem_alloc_object(struct drm_device *dev,
 
 int udl_gem_vmap(struct udl_gem_object *obj);
 void udl_gem_vunmap(struct udl_gem_object *obj);
+
+int udl_handle_damage(struct udl_framebuffer *fb, int x, int y,
+		      int width, int height);
