@@ -69,8 +69,9 @@ udl_gem_create_mmap_offset(struct udl_gem_object *obj)
 	struct drm_gem_mm *mm = dev->mm_private;
 	struct drm_map_list *list;
 	struct drm_local_map *map;
-	int ret;
+	int ret = 0;
 
+	/* Set the object up for mmap'ing */
 	list = &obj->base.map_list;
 	list->map = kzalloc(sizeof(struct drm_map_list), GFP_KERNEL);
 	if (!list->map)
@@ -81,14 +82,17 @@ udl_gem_create_mmap_offset(struct udl_gem_object *obj)
 	map->size = obj->base.size;
 	map->handle = obj;
 
-
+	/* Get a DRM GEM mmap offset allocated... */
 	list->file_offset_node = drm_mm_search_free(&mm->offset_manager,
 						    obj->base.size / PAGE_SIZE,
 						    0, 0);
 	if (!list->file_offset_node) {
+		DRM_ERROR("failed to allocate offset for bo %d\n",
+			  obj->base.name);
 		ret = -ENOSPC;
 		goto out_free_list;
 	}
+
 	list->file_offset_node = drm_mm_get_block(list->file_offset_node,
 						  obj->base.size / PAGE_SIZE,
 						  0);
@@ -98,12 +102,12 @@ udl_gem_create_mmap_offset(struct udl_gem_object *obj)
 	}
 
 	list->hash.key = list->file_offset_node->start;
-
 	ret = drm_ht_insert_item(&mm->offset_hash, &list->hash);
 	if (ret) {
-		DRM_ERROR("Failed to add map hash\n");
+		DRM_ERROR("failed to add to map hash\n");
 		goto out_free_mm;
 	}
+
 	return 0;
 
 out_free_mm:
@@ -111,37 +115,37 @@ out_free_mm:
 out_free_list:
 	kfree(list->map);
 	list->map = NULL;
+
 	return ret;
 }
 
-int udl_mmap_gtt(struct drm_file *file, struct drm_device *dev,
-		 uint32_t handle, uint64_t *offset)
 
+int udl_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-	struct udl_gem_object *obj;
-	int ret;
+	struct udl_gem_object *obj = to_udl_bo(vma->vm_private_data);
+	struct page *page;
+	unsigned int page_offset;
+	int ret = 0;
 
-	mutex_lock(&dev->struct_mutex);
+	page_offset = ((unsigned long)vmf->virtual_address - vma->vm_start) >>
+		PAGE_SHIFT;
 
-	obj = to_udl_bo(drm_gem_object_lookup(dev, file, handle));
-	if (obj == NULL) {
-		ret = -ENOENT;
-		goto unlock;
+	if (!obj->pages)
+		return VM_FAULT_SIGBUS;
 
+	page = obj->pages[page_offset];
+	ret = vm_insert_page(vma, (unsigned long)vmf->virtual_address, page);
+	switch (ret) {
+	case -EAGAIN:
+		set_need_resched();
+	case 0:
+	case -ERESTARTSYS:
+		return VM_FAULT_NOPAGE;
+	case -ENOMEM:
+		return VM_FAULT_OOM;
+	default:
+		return VM_FAULT_SIGBUS;
 	}
-
-	if (!obj->base.map_list.map) {
-		ret = udl_gem_create_mmap_offset(obj);
-		if (ret)
-			goto out;
-	}
-
-	*offset = (u64)obj->base.map_list.hash.key << PAGE_SHIFT;
-out:
-	drm_gem_object_unreference(&obj->base);
-unlock:
-	mutex_unlock(&dev->struct_mutex);
-	return ret;
 }
 
 int udl_gem_init_object(struct drm_gem_object *obj)
@@ -157,6 +161,9 @@ static int udl_gem_get_pages(struct udl_gem_object *obj, gfp_t gfpmask)
 	struct page *page;
 	struct inode *inode;
 	struct address_space *mapping;
+
+	if (obj->pages)
+		return 0;
 
 	page_count = obj->base.size / PAGE_SIZE;
 	BUG_ON(obj->pages != NULL);
@@ -204,11 +211,9 @@ int udl_gem_vmap(struct udl_gem_object *obj)
 	int page_count = obj->base.size / PAGE_SIZE;
 	int ret;
 
-	if (!obj->pages) {
-		ret = udl_gem_get_pages(obj, GFP_KERNEL);
-		if (ret)
-			return ret;
-	}
+	ret = udl_gem_get_pages(obj, GFP_KERNEL);
+	if (ret)
+		return ret;
 
 	obj->vmapping = vmap(obj->pages, page_count, 0, PAGE_KERNEL);
 	if (!obj->vmapping)
@@ -235,3 +240,37 @@ void udl_gem_free_object(struct drm_gem_object *gem_obj)
 		udl_gem_put_pages(obj);
 }
 
+/* the dumb interface doesn't work with the GEM straight MMAP
+   interface, it expects to do MMAP on the drm fd, like normal */
+int udl_gem_mmap(struct drm_file *file, struct drm_device *dev,
+		 uint32_t handle, uint64_t *offset)
+{
+	struct udl_gem_object *gobj;
+	struct drm_gem_object *obj;
+	int ret = 0;
+
+	mutex_lock(&dev->struct_mutex);
+	obj = drm_gem_object_lookup(dev, file, handle);
+	if (obj == NULL) {
+		ret = -ENOENT;
+		goto unlock;
+	}
+	gobj = to_udl_bo(obj);
+
+	ret = udl_gem_get_pages(gobj, GFP_KERNEL);
+	if (ret)
+		return ret;
+	if (!gobj->base.map_list.map) {
+		ret = udl_gem_create_mmap_offset(gobj);
+		if (ret)
+			goto out;
+	}
+
+	*offset = (u64)gobj->base.map_list.hash.key << PAGE_SHIFT;
+
+out:
+	drm_gem_object_unreference(&gobj->base);
+unlock:
+	mutex_unlock(&dev->struct_mutex);
+	return ret;
+}

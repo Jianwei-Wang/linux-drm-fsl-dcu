@@ -97,8 +97,8 @@ int udl_render_hline(struct drm_device *dev, struct urb **urb_ptr,
 int udl_dumb_create(struct drm_file *file_priv,
 			 struct drm_device *dev,
 			 struct drm_mode_create_dumb *args);
-int udl_mmap_gtt(struct drm_file *file_priv, struct drm_device *dev,
-		      uint32_t handle, uint64_t *offset);
+int udl_gem_mmap(struct drm_file *file_priv, struct drm_device *dev,
+		 uint32_t handle, uint64_t *offset);
 int udl_dumb_destroy(struct drm_file *file_priv, struct drm_device *dev,
 			  uint32_t handle);			  
 
@@ -110,6 +110,7 @@ struct udl_gem_object *udl_gem_alloc_object(struct drm_device *dev,
 
 int udl_gem_vmap(struct udl_gem_object *obj);
 void udl_gem_vunmap(struct udl_gem_object *obj);
+int udl_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf);
 
 int udl_handle_damage(struct udl_framebuffer *fb, int x, int y,
 		      int width, int height);

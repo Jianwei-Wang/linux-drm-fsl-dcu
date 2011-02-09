@@ -24,6 +24,7 @@ static void udl_usb_disconnect(struct usb_interface *interface)
 }
 
 static struct vm_operations_struct udl_gem_vm_ops = {
+	.fault = udl_gem_fault,
 	.open = drm_gem_vm_open,
 	.close = drm_gem_vm_close,
 };
@@ -39,7 +40,7 @@ static struct drm_driver driver = {
 	.gem_vm_ops = &udl_gem_vm_ops,
 
 	.dumb_create = udl_dumb_create,
-	.dumb_map_offset = udl_mmap_gtt,
+	.dumb_map_offset = udl_gem_mmap,
 	.dumb_destroy = udl_dumb_destroy,
 	.fops = {
 		.owner = THIS_MODULE,
@@ -50,6 +51,7 @@ static struct drm_driver driver = {
 		.fasync = drm_fasync,
 		.read = drm_read,
 		.llseek = noop_llseek,
+		.mmap = drm_gem_mmap,
 	},
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
