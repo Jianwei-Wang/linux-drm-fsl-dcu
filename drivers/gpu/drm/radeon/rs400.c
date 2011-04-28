@@ -206,7 +206,7 @@ void rs400_gart_fini(struct radeon_device *rdev)
 #define RS400_PTE_WRITEABLE (1 << 2)
 #define RS400_PTE_READABLE  (1 << 3)
 
-int rs400_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr)
+int rs400_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr, bool snooped)
 {
 	uint32_t entry;
 

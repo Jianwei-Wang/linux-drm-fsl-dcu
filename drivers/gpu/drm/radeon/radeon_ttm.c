@@ -703,6 +703,10 @@ static int radeon_ttm_backend_bind(struct ttm_backend *backend,
 {
 	struct radeon_ttm_backend *gtt;
 	int r;
+	bool snooped = true;
+
+	if ((bo_mem->placement & TTM_PL_FLAG_WC) || (bo_mem->placement & TTM_PL_FLAG_UNCACHED))
+		snooped = false;
 
 	gtt = container_of(backend, struct radeon_ttm_backend, backend);
 	gtt->offset = bo_mem->start << PAGE_SHIFT;
@@ -711,7 +715,7 @@ static int radeon_ttm_backend_bind(struct ttm_backend *backend,
 		     gtt->num_pages, bo_mem, backend);
 	}
 	r = radeon_gart_bind(gtt->rdev, gtt->offset,
-			     gtt->num_pages, gtt->pages, gtt->dma_addrs);
+			     gtt->num_pages, gtt->pages, gtt->dma_addrs, snooped);
 	if (r) {
 		DRM_ERROR("failed to bind %lu pages at 0x%08X\n",
 			  gtt->num_pages, gtt->offset);

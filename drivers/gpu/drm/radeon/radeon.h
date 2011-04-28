@@ -343,7 +343,7 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 			int pages);
 int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 		     int pages, struct page **pagelist,
-		     dma_addr_t *dma_addr);
+		     dma_addr_t *dma_addr, bool bind_snooped);
 
 
 /*
@@ -896,7 +896,7 @@ struct radeon_asic {
 	bool (*gpu_is_lockup)(struct radeon_device *rdev);
 	int (*asic_reset)(struct radeon_device *rdev);
 	void (*gart_tlb_flush)(struct radeon_device *rdev);
-	int (*gart_set_page)(struct radeon_device *rdev, int i, uint64_t addr);
+	int (*gart_set_page)(struct radeon_device *rdev, int i, uint64_t addr, bool snooped);
 	int (*cp_init)(struct radeon_device *rdev, unsigned ring_size);
 	void (*cp_fini)(struct radeon_device *rdev);
 	void (*cp_disable)(struct radeon_device *rdev);
@@ -1433,7 +1433,7 @@ static inline void radeon_ring_write(struct radeon_device *rdev, uint32_t v)
 #define radeon_gpu_is_lockup(rdev) (rdev)->asic->gpu_is_lockup((rdev))
 #define radeon_asic_reset(rdev) (rdev)->asic->asic_reset((rdev))
 #define radeon_gart_tlb_flush(rdev) (rdev)->asic->gart_tlb_flush((rdev))
-#define radeon_gart_set_page(rdev, i, p) (rdev)->asic->gart_set_page((rdev), (i), (p))
+#define radeon_gart_set_page(rdev, i, p, s) (rdev)->asic->gart_set_page((rdev), (i), (p), (s))
 #define radeon_cp_commit(rdev) (rdev)->asic->cp_commit((rdev))
 #define radeon_ring_start(rdev) (rdev)->asic->ring_start((rdev))
 #define radeon_ring_test(rdev) (rdev)->asic->ring_test((rdev))

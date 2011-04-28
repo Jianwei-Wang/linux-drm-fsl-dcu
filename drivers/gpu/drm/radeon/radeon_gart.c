@@ -156,7 +156,7 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 			rdev->gart.pages_addr[p] = rdev->dummy_page.addr;
 			page_base = rdev->gart.pages_addr[p];
 			for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
-				radeon_gart_set_page(rdev, t, page_base);
+				radeon_gart_set_page(rdev, t, page_base, true);
 				page_base += RADEON_GPU_PAGE_SIZE;
 			}
 		}
@@ -166,7 +166,8 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 }
 
 int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
-		     int pages, struct page **pagelist, dma_addr_t *dma_addr)
+		     int pages, struct page **pagelist, dma_addr_t *dma_addr,
+		     bool bind_snooped)
 {
 	unsigned t;
 	unsigned p;
@@ -201,7 +202,7 @@ int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 		rdev->gart.pages[p] = pagelist[i];
 		page_base = rdev->gart.pages_addr[p];
 		for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
-			radeon_gart_set_page(rdev, t, page_base);
+			radeon_gart_set_page(rdev, t, page_base, bind_snooped);
 			page_base += RADEON_GPU_PAGE_SIZE;
 		}
 	}
@@ -218,7 +219,7 @@ void radeon_gart_restore(struct radeon_device *rdev)
 	for (i = 0, t = 0; i < rdev->gart.num_cpu_pages; i++) {
 		page_base = rdev->gart.pages_addr[i];
 		for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
-			radeon_gart_set_page(rdev, t, page_base);
+			radeon_gart_set_page(rdev, t, page_base, false);
 			page_base += RADEON_GPU_PAGE_SIZE;
 		}
 	}

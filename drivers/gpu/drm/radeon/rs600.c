@@ -520,7 +520,7 @@ void rs600_gart_fini(struct radeon_device *rdev)
 #define R600_PTE_READABLE  (1 << 5)
 #define R600_PTE_WRITEABLE (1 << 6)
 
-int rs600_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr)
+int rs600_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr, bool snooped)
 {
 	void __iomem *ptr = (void *)rdev->gart.table.vram.ptr;
 
@@ -528,7 +528,9 @@ int rs600_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr)
 		return -EINVAL;
 	}
 	addr = addr & 0xFFFFFFFFFFFFF000ULL;
-	addr |= R600_PTE_VALID | R600_PTE_SYSTEM | R600_PTE_SNOOPED;
+	addr |= R600_PTE_VALID | R600_PTE_SYSTEM;
+	if (snooped)
+		addr |= R600_PTE_SNOOPED;
 	addr |= R600_PTE_READABLE | R600_PTE_WRITEABLE;
 	writeq(addr, ((void __iomem *)ptr) + (i * 8));
 	return 0;

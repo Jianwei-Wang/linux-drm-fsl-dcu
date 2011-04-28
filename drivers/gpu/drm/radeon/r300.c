@@ -72,7 +72,8 @@ void rv370_pcie_gart_tlb_flush(struct radeon_device *rdev)
 #define R300_PTE_WRITEABLE (1 << 2)
 #define R300_PTE_READABLE  (1 << 3)
 
-int rv370_pcie_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr)
+int rv370_pcie_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr,
+			     bool snooped)
 {
 	void __iomem *ptr = (void *)rdev->gart.table.vram.ptr;
 

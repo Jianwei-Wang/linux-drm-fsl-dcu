@@ -528,11 +528,12 @@ void r100_pci_gart_disable(struct radeon_device *rdev)
 	WREG32(RADEON_AIC_HI_ADDR, 0);
 }
 
-int r100_pci_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr)
+int r100_pci_gart_set_page(struct radeon_device *rdev, int i, uint64_t addr, bool snooped)
 {
 	if (i < 0 || i > rdev->gart.num_gpu_pages) {
 		return -EINVAL;
 	}
+	/* ignore snooped on plain PCI gart */
 	rdev->gart.table.ram.ptr[i] = cpu_to_le32(lower_32_bits(addr));
 	return 0;
 }
