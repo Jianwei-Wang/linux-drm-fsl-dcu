@@ -154,8 +154,13 @@ static int radeon_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	case TTM_PL_TT:
 		man->func = &ttm_bo_manager_func;
 		man->gpu_offset = rdev->mc.gtt_start;
-		man->available_caching = TTM_PL_MASK_CACHING;
-		man->default_caching = TTM_PL_FLAG_CACHED;
+		if (radeon_gtt_cached) {
+			man->available_caching = TTM_PL_MASK_CACHING;
+			man->default_caching = TTM_PL_FLAG_CACHED;
+		} else {
+			man->available_caching = TTM_PL_FLAG_WC | TTM_PL_FLAG_UNCACHED;
+			man->default_caching = TTM_PL_FLAG_WC;
+		}
 		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE | TTM_MEMTYPE_FLAG_CMA;
 #if __OS_HAS_AGP
 		if (rdev->flags & RADEON_IS_AGP) {

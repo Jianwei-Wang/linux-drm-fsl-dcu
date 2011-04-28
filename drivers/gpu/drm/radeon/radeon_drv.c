@@ -116,6 +116,7 @@ int radeon_audio = 1;
 int radeon_disp_priority = 0;
 int radeon_hw_i2c = 0;
 int radeon_pcie_gen2 = 0;
+int radeon_gtt_cached = 1;
 
 MODULE_PARM_DESC(no_wb, "Disable AGP writeback for scratch registers");
 module_param_named(no_wb, radeon_no_wb, int, 0444);
@@ -161,6 +162,9 @@ module_param_named(hw_i2c, radeon_hw_i2c, int, 0444);
 
 MODULE_PARM_DESC(pcie_gen2, "PCIE Gen2 mode (1 = enable)");
 module_param_named(pcie_gen2, radeon_pcie_gen2, int, 0444);
+
+MODULE_PARM_DESC(cached, "Use cached/snooped pages by default");
+module_param_named(cached, radeon_gtt_cached, int, 0444);
 
 static int radeon_suspend(struct drm_device *dev, pm_message_t state)
 {
