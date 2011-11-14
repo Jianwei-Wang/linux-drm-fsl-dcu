@@ -305,6 +305,7 @@ int drm_framebuffer_init(struct drm_device *dev, struct drm_framebuffer *fb,
 	fb->funcs = funcs;
 	dev->mode_config.num_fb++;
 	list_add(&fb->head, &dev->mode_config.fb_list);
+	INIT_LIST_HEAD(&fb->filp_head);
 
 	return 0;
 }
@@ -340,8 +341,9 @@ void drm_framebuffer_cleanup(struct drm_framebuffer *fb)
 		}
 	}
 
-	drm_mode_object_put(dev, &fb->base);
 	list_del(&fb->head);
+	list_del_init(&fb->filp_head);
+	drm_mode_object_put(dev, &fb->base);
 	dev->mode_config.num_fb--;
 }
 EXPORT_SYMBOL(drm_framebuffer_cleanup);
@@ -1775,7 +1777,7 @@ int drm_mode_rmfb(struct drm_device *dev,
 	/* TODO release all crtc connected to the framebuffer */
 	/* TODO unhock the destructor from the buffer object */
 
-	list_del(&fb->filp_head);
+	list_del_init(&fb->filp_head);
 	fb->funcs->destroy(fb);
 
 out:
@@ -1928,7 +1930,7 @@ void drm_fb_release(struct drm_file *priv)
 
 	mutex_lock(&dev->mode_config.mutex);
 	list_for_each_entry_safe(fb, tfb, &priv->fbs, filp_head) {
-		list_del(&fb->filp_head);
+		list_del_init(&fb->filp_head);
 		fb->funcs->destroy(fb);
 	}
 	mutex_unlock(&dev->mode_config.mutex);
