@@ -31,18 +31,24 @@ static struct vm_operations_struct udl_gem_vm_ops = {
 };
 
 static struct drm_driver driver = {
-	.driver_features = DRIVER_MODESET | DRIVER_GEM,
+	.driver_features = DRIVER_MODESET | DRIVER_GEM | DRIVER_PRIME,
 	.load = udl_driver_load,
 	.unload = udl_driver_unload,
+	.open = udl_driver_open,
+	.preclose = udl_driver_preclose,
+	.postclose = udl_driver_postclose,
 
 	/* gem hooks */
 	.gem_init_object = udl_gem_init_object,
 	.gem_free_object = udl_gem_free_object,
+	.gem_close_object = udl_gem_close_object,
 	.gem_vm_ops = &udl_gem_vm_ops,
 
 	.dumb_create = udl_dumb_create,
 	.dumb_map_offset = udl_gem_mmap,
 	.dumb_destroy = udl_dumb_destroy,
+
+	.prime_fd_to_handle = udl_gem_prime_fd_to_handle,
 	.fops = {
 		.owner = THIS_MODULE,
 		.open = drm_open,
