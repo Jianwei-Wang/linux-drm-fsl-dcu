@@ -128,12 +128,16 @@ struct ttm_mem_reg {
  *
  * @ttm_bo_type_kernel: These buffers are like ttm_bo_type_device buffers,
  * but they cannot be accessed from user-space. For kernel-only use.
+ *
+ * @ttm_bo_type_sg: Buffer made from dmabuf sg table shared with another
+ * driver.
  */
 
 enum ttm_bo_type {
 	ttm_bo_type_device,
 	ttm_bo_type_user,
-	ttm_bo_type_kernel
+	ttm_bo_type_kernel,
+	ttm_bo_type_sg,
 };
 
 struct ttm_tt;
@@ -276,6 +280,8 @@ struct ttm_buffer_object {
 
 	unsigned long offset;
 	uint32_t cur_placement;
+
+	struct sg_table *sg;
 };
 
 /**
@@ -492,6 +498,7 @@ extern int ttm_bo_init(struct ttm_bo_device *bdev,
 			bool interrubtible,
 			struct file *persistent_swap_storage,
 			size_t acc_size,
+		        struct sg_table *sg,
 			void (*destroy) (struct ttm_buffer_object *));
 /**
  * ttm_bo_synccpu_object_init

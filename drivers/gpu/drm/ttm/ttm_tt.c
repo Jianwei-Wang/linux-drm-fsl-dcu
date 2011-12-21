@@ -43,6 +43,7 @@
 #include "ttm/ttm_placement.h"
 #include "ttm/ttm_page_alloc.h"
 
+#include <linux/scatterlist.h>
 static int ttm_tt_swapin(struct ttm_tt *ttm);
 
 /**
@@ -328,7 +329,7 @@ void ttm_tt_destroy(struct ttm_tt *ttm)
 	if (likely(ttm->pages != NULL)) {
 		if (ttm->page_flags & TTM_PAGE_FLAG_USER)
 			ttm_tt_free_user_pages(ttm);
-		else
+		else if (!(ttm->page_flags & TTM_PAGE_FLAG_SLAVE))
 			ttm_tt_free_alloced_pages(ttm);
 
 		ttm_tt_free_page_directory(ttm);
@@ -339,6 +340,24 @@ void ttm_tt_destroy(struct ttm_tt *ttm)
 		fput(ttm->swap_storage);
 
 	kfree(ttm);
+}
+
+int ttm_tt_set_sg_pages(struct ttm_tt *ttm,
+			struct sg_table *sg)
+{
+	int i;
+	struct scatterlist *sl;
+
+	BUG_ON(sg->nents != ttm->num_pages);
+	BUG_ON((ttm->page_flags & TTM_PAGE_FLAG_SLAVE) == 0);
+	
+	for_each_sg(sg->sgl, sl, sg->nents, i)
+		ttm->pages[i] = sg_page(sl);
+	ttm->be->func->populate(ttm->be, ttm->num_pages, ttm->pages,
+				ttm->dummy_read_page, ttm->dma_address);
+
+	ttm->state = tt_unbound;
+	return 0;
 }
 
 int ttm_tt_set_user(struct ttm_tt *ttm,
