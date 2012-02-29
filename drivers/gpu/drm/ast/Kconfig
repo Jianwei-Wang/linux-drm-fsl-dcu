@@ -1,0 +1,11 @@
+config DRM_AST
+	tristate "AST server chips"
+	depends on DRM && PCI && X86 && EXPERIMENTAL
+	select DRM_TTM
+	select FB_SYS_COPYAREA
+        select FB_SYS_FILLRECT
+        select FB_SYS_IMAGEBLIT
+        select DRM_KMS_HELPER
+	help
+	 Say yes for experimental AST driver
+
