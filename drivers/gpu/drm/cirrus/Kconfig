@@ -1,0 +1,7 @@
+config DRM_CIRRUS
+	tristate "Cirrus driver"
+	depends on DRM && PCI
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select DRM_KMS_HELPER
