@@ -617,6 +617,13 @@ struct drm_gem_mm {
 	struct drm_open_hash offset_hash; /**< User token hash table for maps */
 };
 
+struct drm_gem_name {
+	struct drm_gem_object *obj;
+	drm_magic_t magic;
+	struct list_head list;
+	u32 name;
+};
+
 /**
  * This structure defines the drm_mm memory object, which will be used by the
  * DRM for its buffer objects.
@@ -644,10 +651,11 @@ struct drm_gem_object {
 	size_t size;
 
 	/**
-	 * Global name for this object, starts at 1. 0 means unnamed.
-	 * Access is covered by the object_name_lock in the related drm_device
+	 * Global names for this object, starts at 1. Empty list means
+	 * unnamed.  Access is covered by the object_name_lock in the
+	 * related drm_device
 	 */
-	int name;
+	struct list_head name_list;
 
 	/**
 	 * Memory domains. These monitor which caches contain read/write data
@@ -1710,6 +1718,8 @@ int drm_gem_flink_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 int drm_gem_open_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv);
+int drm_gem_flink_to_ioctl(struct drm_device *dev, void *data,
+			   struct drm_file *file_priv);
 void drm_gem_open(struct drm_device *dev, struct drm_file *file_private);
 void drm_gem_release(struct drm_device *dev, struct drm_file *file_private);
 

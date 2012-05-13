@@ -133,8 +133,6 @@ describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 		   cache_level_str(obj->cache_level),
 		   obj->dirty ? " dirty" : "",
 		   obj->madv == I915_MADV_DONTNEED ? " purgeable" : "");
-	if (obj->base.name)
-		seq_printf(m, " (name: %d)", obj->base.name);
 	if (obj->fence_reg != I915_FENCE_REG_NONE)
 		seq_printf(m, " (fence: %d)", obj->fence_reg);
 	if (obj->gtt_space != NULL)

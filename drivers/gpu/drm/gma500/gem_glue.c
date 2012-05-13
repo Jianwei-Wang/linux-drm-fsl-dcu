@@ -62,8 +62,8 @@ int gem_create_mmap_offset(struct drm_gem_object *obj)
 	list->file_offset_node = drm_mm_search_free(&mm->offset_manager,
 					obj->size / PAGE_SIZE, 0, 0);
 	if (!list->file_offset_node) {
-		dev_err(dev->dev, "failed to allocate offset for bo %d\n",
-								obj->name);
+		dev_err(dev->dev, "failed to allocate offset for bo %p\n",
+								obj);
 		ret = -ENOSPC;
 		goto free_it;
 	}

@@ -879,7 +879,7 @@ static void capture_bo(struct drm_i915_error_buffer *err,
 		       struct drm_i915_gem_object *obj)
 {
 	err->size = obj->base.size;
-	err->name = obj->base.name;
+	err->name = 0;
 	err->seqno = obj->last_rendering_seqno;
 	err->gtt_offset = obj->gtt_offset;
 	err->read_domains = obj->base.read_domains;

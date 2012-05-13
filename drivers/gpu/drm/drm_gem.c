@@ -146,6 +146,7 @@ int drm_gem_object_init(struct drm_device *dev,
 	kref_init(&obj->refcount);
 	atomic_set(&obj->handle_count, 0);
 	obj->size = size;
+	INIT_LIST_HEAD(&obj->name_list);
 
 	return 0;
 }
@@ -346,7 +347,7 @@ drm_gem_create_mmap_offset(struct drm_gem_object *obj)
 			obj->size / PAGE_SIZE, 0, 0);
 
 	if (!list->file_offset_node) {
-		DRM_ERROR("failed to allocate offset for bo %d\n", obj->name);
+		DRM_ERROR("failed to allocate offset for bo %p\n", obj);
 		ret = -ENOSPC;
 		goto out_free_list;
 	}
@@ -419,26 +420,33 @@ drm_gem_close_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
-/**
- * Create a global name for an object, returning the name.
- *
- * Note that the name does not hold a reference; when the object
- * is freed, the name goes away.
- */
 int
-drm_gem_flink_ioctl(struct drm_device *dev, void *data,
-		    struct drm_file *file_priv)
+drm_gem_flink_to_ioctl(struct drm_device *dev, void *data,
+		       struct drm_file *file_priv)
 {
-	struct drm_gem_flink *args = data;
+	struct drm_gem_flink_to *args = data;
+	struct drm_gem_name *name, *n;
 	struct drm_gem_object *obj;
 	int ret;
 
 	if (!(dev->driver->driver_features & DRIVER_GEM))
 		return -ENODEV;
 
+	if (args->magic == 0)
+		return -EINVAL;
+
 	obj = drm_gem_object_lookup(dev, file_priv, args->handle);
 	if (obj == NULL)
 		return -ENOENT;
+
+	name = kmalloc(sizeof(*name), GFP_KERNEL);
+	if (name == NULL) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	name->obj = obj;
+	name->magic = args->magic;
 
 again:
 	if (idr_pre_get(&dev->object_name_idr, GFP_KERNEL) == 0) {
@@ -447,25 +455,42 @@ again:
 	}
 
 	spin_lock(&dev->object_name_lock);
-	if (!obj->name) {
-		ret = idr_get_new_above(&dev->object_name_idr, obj, 1,
-					&obj->name);
-		args->name = (uint64_t) obj->name;
-		spin_unlock(&dev->object_name_lock);
-
-		if (ret == -EAGAIN)
-			goto again;
-		else if (ret)
-			goto err;
-
-		/* Allocate a reference for the name table.  */
-		drm_gem_object_reference(obj);
-	} else {
-		args->name = (uint64_t) obj->name;
-		spin_unlock(&dev->object_name_lock);
-		ret = 0;
+	/*
+	 * Find out if there already is a name for the given magic for
+	 * this object.  If magic is 0, then we're done and will
+	 * return that name, but if magic is not 0, it's a bug and we
+	 * return -EBUSY.  Otherwise fall through and allocate a new
+	 * name in the idr.
+	 */
+	list_for_each_entry(n, &obj->name_list, list) {
+		if (n->magic == 0 && args->magic == 0) {
+			args->name = n->name;
+			ret = 0;
+			goto err_lock;
+		} else if (n->magic == args->magic) {
+			ret = -EBUSY;
+			goto err_lock;
+		}
 	}
 
+	ret = idr_get_new_above(&dev->object_name_idr, obj, 1,
+				&name->name);
+	args->name = name->name;
+	if (ret == 0)
+		list_add_tail(&name->list, &obj->name_list);
+	spin_unlock(&dev->object_name_lock);
+
+	if (ret == -EAGAIN)
+		goto again;
+
+	if (ret != 0)
+		goto err;
+
+	/* Keep the reference for the name object.  */
+
+	return 0;
+err_lock:
+	spin_unlock(&dev->object_name_lock);
 err:
 	drm_gem_object_unreference_unlocked(obj);
 	return ret;
@@ -482,7 +507,7 @@ drm_gem_open_ioctl(struct drm_device *dev, void *data,
 		   struct drm_file *file_priv)
 {
 	struct drm_gem_open *args = data;
-	struct drm_gem_object *obj;
+	struct drm_gem_name *name;
 	int ret;
 	u32 handle;
 
@@ -490,22 +515,61 @@ drm_gem_open_ioctl(struct drm_device *dev, void *data,
 		return -ENODEV;
 
 	spin_lock(&dev->object_name_lock);
-	obj = idr_find(&dev->object_name_idr, (int) args->name);
-	if (obj)
-		drm_gem_object_reference(obj);
+	name = idr_find(&dev->object_name_idr, (int) args->name);
+	if (name && file_priv->magic == name->magic) {
+		idr_remove(&dev->object_name_idr, name->name);
+		list_del(&name->list);
+	} else if (name && name->magic != 0) {
+		name = NULL;
+	}
 	spin_unlock(&dev->object_name_lock);
-	if (!obj)
+	if (!name)
 		return -ENOENT;
 
-	ret = drm_gem_handle_create(file_priv, obj, &handle);
-	drm_gem_object_unreference_unlocked(obj);
-	if (ret)
-		return ret;
+	/*
+	 * We now have a name object for either the global (magic 0)
+	 * name which stays around as long as the bo, or an name
+	 * object that we just took out of the list and will free
+	 * below.  In other words, we know we can acess it outside the
+	 * object_name_lock.
+	 */
 
-	args->handle = handle;
-	args->size = obj->size;
+	ret = drm_gem_handle_create(file_priv, name->obj, &handle);
+	if (ret == 0) {
+		args->handle = handle;
+		args->size = name->obj->size;
+	}
 
-	return 0;
+	if (name->magic != 0) {
+		drm_gem_object_unreference_unlocked(name->obj);
+		kfree(name);
+	}
+	return ret;
+}
+
+/**
+ * Create a global name for an object, returning the name.
+ *
+ * Note that the name does not hold a reference; when the object
+ * is freed, the name goes away.
+ */
+int
+drm_gem_flink_ioctl(struct drm_device *dev, void *data,
+		    struct drm_file *file_priv)
+{
+	struct drm_gem_flink *args = data;
+	struct drm_gem_flink_to flink_to;
+	int ret;
+
+	flink_to.handle = args->handle;
+	flink_to.magic = 0;
+
+	ret = drm_gem_flink_to_ioctl(dev, &flink_to, file_priv);
+
+	if (ret == 0)
+		args->name = flink_to.name;
+
+	return ret;
 }
 
 /**
@@ -599,23 +663,17 @@ static void drm_gem_object_ref_bug(struct kref *list_kref)
 void drm_gem_object_handle_free(struct drm_gem_object *obj)
 {
 	struct drm_device *dev = obj->dev;
+	struct drm_gem_name *n, *tmp;
 
-	/* Remove any name for this object */
+	/* Remove all names for this object */
 	spin_lock(&dev->object_name_lock);
-	if (obj->name) {
-		idr_remove(&dev->object_name_idr, obj->name);
-		obj->name = 0;
-		spin_unlock(&dev->object_name_lock);
-		/*
-		 * The object name held a reference to this object, drop
-		 * that now.
-		*
-		* This cannot be the last reference, since the handle holds one too.
-		 */
+	list_for_each_entry_safe(n, tmp, &obj->name_list, list) {
+		idr_remove(&dev->object_name_idr, n->name);
 		kref_put(&obj->refcount, drm_gem_object_ref_bug);
-	} else
-		spin_unlock(&dev->object_name_lock);
-
+		list_del(&n->list);
+		kfree(n);
+	}
+	spin_unlock(&dev->object_name_lock);
 }
 EXPORT_SYMBOL(drm_gem_object_handle_free);
 

@@ -628,6 +628,19 @@ struct drm_prime_handle {
 	__s32 fd;
 };
 
+struct drm_gem_flink_to {
+	/** Handle for the object being named */
+	__u32 handle;
+
+	/** Magic for destination file_priv */
+	__u32 magic;
+
+	/** Returned name for the object */
+	__u32 name;
+
+	__u32 pad;
+};
+
 #include "drm_mode.h"
 
 #define DRM_IOCTL_BASE			'd'
@@ -649,6 +662,7 @@ struct drm_prime_handle {
 #define DRM_IOCTL_GEM_FLINK		DRM_IOWR(0x0a, struct drm_gem_flink)
 #define DRM_IOCTL_GEM_OPEN		DRM_IOWR(0x0b, struct drm_gem_open)
 #define DRM_IOCTL_GET_CAP		DRM_IOWR(0x0c, struct drm_get_cap)
+#define DRM_IOCTL_GEM_FLINK_TO		DRM_IOWR(0x0d, struct drm_gem_flink_to)
 
 #define DRM_IOCTL_SET_UNIQUE		DRM_IOW( 0x10, struct drm_unique)
 #define DRM_IOCTL_AUTH_MAGIC		DRM_IOW( 0x11, struct drm_auth)
