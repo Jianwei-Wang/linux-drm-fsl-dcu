@@ -144,6 +144,11 @@ static void i915_gem_dmabuf_kunmap(struct dma_buf *dma_buf, unsigned long page_n
 
 }
 
+static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
+{
+	return -EINVAL;
+}
+
 static const struct dma_buf_ops i915_dmabuf_ops =  {
 	.map_dma_buf = i915_gem_map_dma_buf,
 	.unmap_dma_buf = i915_gem_unmap_dma_buf,
@@ -154,6 +159,7 @@ static const struct dma_buf_ops i915_dmabuf_ops =  {
 	.kunmap_atomic = i915_gem_dmabuf_kunmap_atomic,
 	.vmap = i915_gem_dmabuf_vmap,
 	.vunmap = i915_gem_dmabuf_vunmap,
+	.mmap = i915_gem_dmabuf_mmap,
 };
 
 struct dma_buf *i915_gem_prime_export(struct drm_device *dev,
