@@ -217,6 +217,22 @@ int radeon_gem_create_ioctl(struct drm_device *dev, void *data,
 	uint32_t handle;
 	int r;
 
+	/* if in middle of gpu reset wait on the mutex, if reset
+	 * failed don't do anything, otherwise proceed.
+	 */
+	if (!rdev->accel_working) {
+		/* lockup situation wait for cs mutex to be droped */
+		radeon_mutex_lock(&rdev->cs_mutex);
+		radeon_mutex_unlock(&rdev->cs_mutex);
+		/* we are after a gpu reset */
+		if (!rdev->accel_working) {
+			/* gpu reset failed, don't create anymore GPU
+			 * object
+			 */
+			return -EBUSY;
+		}
+	}
+
 	/* create a gem object to contain this object in */
 	args->size = roundup(args->size, PAGE_SIZE);
 	r = radeon_gem_object_create(rdev, args->size, args->alignment,
@@ -240,12 +256,29 @@ int radeon_gem_create_ioctl(struct drm_device *dev, void *data,
 int radeon_gem_set_domain_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *filp)
 {
+	struct radeon_device *rdev = dev->dev_private;
 	/* transition the BO to a domain -
 	 * just validate the BO into a certain domain */
 	struct drm_radeon_gem_set_domain *args = data;
 	struct drm_gem_object *gobj;
 	struct radeon_bo *robj;
 	int r;
+
+	/* if in middle of gpu reset wait on the mutex, if reset
+	 * failed don't do anything, otherwise proceed.
+	 */
+	if (!rdev->accel_working) {
+		/* lockup situation wait for cs mutex to be droped */
+		radeon_mutex_lock(&rdev->cs_mutex);
+		radeon_mutex_unlock(&rdev->cs_mutex);
+		/* we are after a gpu reset */
+		if (!rdev->accel_working) {
+			/* gpu reset failed, don't create anymore GPU
+			 * object
+			 */
+			return -EBUSY;
+		}
+	}
 
 	/* for now if someone requests domain CPU -
 	 * just make sure the buffer is finished with */

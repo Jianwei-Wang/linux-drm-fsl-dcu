@@ -386,6 +386,7 @@ static int rv515_startup(struct radeon_device *rdev)
 		if (r)
 			return r;
 	}
+	rdev->accel_working = true;
 
 	/* allocate wb buffer */
 	r = radeon_wb_init(rdev);
@@ -441,7 +442,6 @@ int rv515_resume(struct radeon_device *rdev)
 	/* Initialize surface registers */
 	radeon_surface_init(rdev);
 
-	rdev->accel_working = true;
 	r =  rv515_startup(rdev);
 	if (r) {
 		rdev->accel_working = false;

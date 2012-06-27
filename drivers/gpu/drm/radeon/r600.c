@@ -2378,6 +2378,7 @@ int r600_startup(struct radeon_device *rdev)
 		if (r)
 			return r;
 	}
+	rdev->accel_working = true;
 	r600_gpu_init(rdev);
 	r = r600_blit_init(rdev);
 	if (r) {
@@ -2461,7 +2462,6 @@ int r600_resume(struct radeon_device *rdev)
 	/* post card */
 	atom_asic_init(rdev->mode_info.atom_context);
 
-	rdev->accel_working = true;
 	r = r600_startup(rdev);
 	if (r) {
 		DRM_ERROR("r600 startup failed on resume\n");

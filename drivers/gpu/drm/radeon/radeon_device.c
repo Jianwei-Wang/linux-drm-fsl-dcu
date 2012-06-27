@@ -998,10 +998,12 @@ int radeon_gpu_reset(struct radeon_device *rdev)
 	if (!r) {
 		dev_info(rdev->dev, "GPU reset succeed\n");
 		radeon_resume(rdev);
-		radeon_restore_bios_scratch_regs(rdev);
-		drm_helper_resume_force_mode(rdev->ddev);
-		ttm_bo_unlock_delayed_workqueue(&rdev->mman.bdev, resched);
 	}
+
+	/* no matter what restore video mode */
+	radeon_restore_bios_scratch_regs(rdev);
+	drm_helper_resume_force_mode(rdev->ddev);
+	ttm_bo_unlock_delayed_workqueue(&rdev->mman.bdev, resched);
 
 	if (r) {
 		/* bad news, how to tell it to userspace ? */

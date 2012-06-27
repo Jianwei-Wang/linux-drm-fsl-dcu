@@ -117,6 +117,7 @@ void radeon_gart_table_vram_unpin(struct radeon_device *rdev)
 	if (rdev->gart.robj == NULL) {
 		return;
 	}
+	rdev->accel_working = false;
 	r = radeon_bo_reserve(rdev->gart.robj, false);
 	if (likely(r == 0)) {
 		radeon_bo_kunmap(rdev->gart.robj);

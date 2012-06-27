@@ -3675,6 +3675,7 @@ static int si_startup(struct radeon_device *rdev)
 	r = si_pcie_gart_enable(rdev);
 	if (r)
 		return r;
+	rdev->accel_working = true;
 	si_gpu_init(rdev);
 
 #if 0
@@ -3795,7 +3796,6 @@ int si_resume(struct radeon_device *rdev)
 	/* post card */
 	atom_asic_init(rdev->mode_info.atom_context);
 
-	rdev->accel_working = true;
 	r = si_startup(rdev);
 	if (r) {
 		DRM_ERROR("si startup failed on resume\n");

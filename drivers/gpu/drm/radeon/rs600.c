@@ -886,6 +886,7 @@ static int rs600_startup(struct radeon_device *rdev)
 	r = rs600_gart_enable(rdev);
 	if (r)
 		return r;
+	rdev->accel_working = true;
 
 	/* allocate wb buffer */
 	r = radeon_wb_init(rdev);
@@ -946,7 +947,6 @@ int rs600_resume(struct radeon_device *rdev)
 	/* Initialize surface registers */
 	radeon_surface_init(rdev);
 
-	rdev->accel_working = true;
 	r = rs600_startup(rdev);
 	if (r) {
 		rdev->accel_working = false;

@@ -1358,6 +1358,7 @@ static int r300_startup(struct radeon_device *rdev)
 		if (r)
 			return r;
 	}
+	rdev->accel_working = true;
 
 	if (rdev->family == CHIP_R300 ||
 	    rdev->family == CHIP_R350 ||
@@ -1426,7 +1427,6 @@ int r300_resume(struct radeon_device *rdev)
 	/* Initialize surface registers */
 	radeon_surface_init(rdev);
 
-	rdev->accel_working = true;
 	r = r300_startup(rdev);
 	if (r) {
 		rdev->accel_working = false;
