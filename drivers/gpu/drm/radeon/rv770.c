@@ -910,6 +910,7 @@ static int rv770_startup(struct radeon_device *rdev)
 		if (r)
 			return r;
 	}
+	rdev->accel_working = true;
 
 	rv770_gpu_init(rdev);
 	r = r600_blit_init(rdev);
@@ -979,7 +980,6 @@ int rv770_resume(struct radeon_device *rdev)
 	/* post card */
 	atom_asic_init(rdev->mode_info.atom_context);
 
-	rdev->accel_working = true;
 	r = rv770_startup(rdev);
 	if (r) {
 		DRM_ERROR("r600 startup failed on resume\n");

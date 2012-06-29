@@ -371,6 +371,15 @@ static int radeon_bo_move(struct ttm_buffer_object *bo,
 		radeon_move_null(bo, new_mem);
 		return 0;
 	}
+	if (!rdev->accel_working) {
+		if (new_mem->mem_type == TTM_PL_TT ||
+		    old_mem->mem_type == TTM_PL_TT) {
+			/* can't bind/unbind tt */
+			return -EBUSY;
+		}
+		/* try memcpy */
+		goto memcpy;
+	}
 	if ((old_mem->mem_type == TTM_PL_TT &&
 	     new_mem->mem_type == TTM_PL_SYSTEM) ||
 	    (old_mem->mem_type == TTM_PL_SYSTEM &&
@@ -517,6 +526,13 @@ static int radeon_ttm_backend_bind(struct ttm_tt *ttm,
 		WARN(1, "nothing to bind %lu pages for mreg %p back %p!\n",
 		     ttm->num_pages, bo_mem, ttm);
 	}
+	if (!gtt->rdev->accel_working) {
+		/* when accel is not working GPU is in broken state just
+		 * do nothing for any ttm operation to avoid making the
+		 * situation worse than it is
+		 */
+		return 0;
+	}
 	r = radeon_gart_bind(gtt->rdev, gtt->offset,
 			     ttm->num_pages, ttm->pages, gtt->ttm.dma_address);
 	if (r) {
@@ -531,6 +547,13 @@ static int radeon_ttm_backend_unbind(struct ttm_tt *ttm)
 {
 	struct radeon_ttm_tt *gtt = (void *)ttm;
 
+	if (!gtt->rdev->accel_working) {
+		/* when accel is not working GPU is in broken state just
+		 * do nothing for any ttm operation to avoid making the
+		 * situation worse than it is
+		 */
+		return 0;
+	}
 	radeon_gart_unbind(gtt->rdev, gtt->offset, ttm->num_pages);
 	return 0;
 }

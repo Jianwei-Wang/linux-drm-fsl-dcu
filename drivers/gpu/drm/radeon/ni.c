@@ -1229,6 +1229,7 @@ static int cayman_startup(struct radeon_device *rdev)
 	r = cayman_pcie_gart_enable(rdev);
 	if (r)
 		return r;
+	rdev->accel_working = true;
 	cayman_gpu_init(rdev);
 
 	r = evergreen_blit_init(rdev);
@@ -1321,7 +1322,6 @@ int cayman_resume(struct radeon_device *rdev)
 	/* post card */
 	atom_asic_init(rdev->mode_info.atom_context);
 
-	rdev->accel_working = true;
 	r = cayman_startup(rdev);
 	if (r) {
 		DRM_ERROR("cayman startup failed on resume\n");
