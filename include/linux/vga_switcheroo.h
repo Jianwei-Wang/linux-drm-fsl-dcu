@@ -11,6 +11,7 @@
 #define _LINUX_VGA_SWITCHEROO_H_
 
 #include <linux/fb.h>
+#include <linux/notifier.h>
 
 struct pci_dev;
 
@@ -26,6 +27,13 @@ enum vga_switcheroo_client_id {
 	VGA_SWITCHEROO_IGD,
 	VGA_SWITCHEROO_DIS,
 	VGA_SWITCHEROO_MAX_CLIENTS,
+};
+
+enum vga_switcheroo_event {
+	VGA_SWITCHEROO_CLIENT_REGISTERED,
+	VGA_SWITCHEROO_CLIENT_UNREGISTERED,
+	VGA_SWITCHEROO_HANDLER_REGISTERED,
+	VGA_SWITCHEROO_HANDLER_UNREGISTERED,
 };
 
 struct vga_switcheroo_handler {
@@ -44,6 +52,9 @@ struct vga_switcheroo_client_ops {
 };
 
 #if defined(CONFIG_VGA_SWITCHEROO)
+int vga_switcheroo_register_notifier(struct notifier_block *nb);
+int vga_switcheroo_unregister_notifier(struct notifier_block *nb);
+bool vga_switcheroo_handler_registered(void);
 void vga_switcheroo_unregister_client(struct pci_dev *dev);
 int vga_switcheroo_register_client(struct pci_dev *dev,
 				   const struct vga_switcheroo_client_ops *ops);
@@ -66,6 +77,9 @@ int vga_switcheroo_get_client_state(struct pci_dev *dev);
 
 #else
 
+static inline int vga_switcheroo_register_notifier(struct notifier_block *nb) { return 0; }
+static inline int vga_switcheroo_unregister_notifier(struct notifier_block *nb) { return 0; }
+static inline bool vga_switcheroo_handler_registered(void) { return false; }
 static inline void vga_switcheroo_unregister_client(struct pci_dev *dev) {}
 static inline int vga_switcheroo_register_client(struct pci_dev *dev,
 		const struct vga_switcheroo_client_ops *ops) { return 0; }

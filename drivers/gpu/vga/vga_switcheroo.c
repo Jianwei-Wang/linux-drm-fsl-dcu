@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/debugfs.h>
 #include <linux/fb.h>
+#include <linux/notifier.h>
 
 #include <linux/pci.h>
 #include <linux/vga_switcheroo.h>
@@ -70,6 +71,28 @@ static struct vgasr_priv vgasr_priv = {
 	.clients = LIST_HEAD_INIT(vgasr_priv.clients),
 };
 
+static BLOCKING_NOTIFIER_HEAD(vga_switcheroo_notifier_list);
+
+int vga_switcheroo_register_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&vga_switcheroo_notifier_list,
+						nb);
+}
+EXPORT_SYMBOL(vga_switcheroo_register_notifier);
+
+int vga_switcheroo_unregister_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&vga_switcheroo_notifier_list,
+						  nb);
+}
+EXPORT_SYMBOL(vga_switcheroo_unregister_notifier);
+
+static int vga_switcheroo_notifier_call_chain(enum vga_switcheroo_event event)
+{
+	return blocking_notifier_call_chain(&vga_switcheroo_notifier_list,
+					    event, NULL);
+}
+
 static bool vga_switcheroo_ready(void)
 {
 	/* we're ready if we get two clients + handler */
@@ -113,9 +136,17 @@ int vga_switcheroo_register_handler(struct vga_switcheroo_handler *handler)
 		vga_switcheroo_enable();
 	}
 	mutex_unlock(&vgasr_mutex);
+
+	vga_switcheroo_notifier_call_chain(VGA_SWITCHEROO_HANDLER_REGISTERED);
 	return 0;
 }
 EXPORT_SYMBOL(vga_switcheroo_register_handler);
+
+bool vga_switcheroo_handler_registered(void)
+{
+	return !!vgasr_priv.handler;
+}
+EXPORT_SYMBOL(vga_switcheroo_handler_registered);
 
 void vga_switcheroo_unregister_handler(void)
 {
@@ -127,6 +158,7 @@ void vga_switcheroo_unregister_handler(void)
 		vgasr_priv.active = false;
 	}
 	mutex_unlock(&vgasr_mutex);
+	vga_switcheroo_notifier_call_chain(VGA_SWITCHEROO_HANDLER_UNREGISTERED);
 }
 EXPORT_SYMBOL(vga_switcheroo_unregister_handler);
 
@@ -156,6 +188,7 @@ static int register_client(struct pci_dev *pdev,
 		vga_switcheroo_enable();
 	}
 	mutex_unlock(&vgasr_mutex);
+	vga_switcheroo_notifier_call_chain(VGA_SWITCHEROO_CLIENT_REGISTERED);
 	return 0;
 }
 
@@ -250,6 +283,7 @@ void vga_switcheroo_unregister_client(struct pci_dev *pdev)
 		vgasr_priv.active = false;
 	}
 	mutex_unlock(&vgasr_mutex);
+	vga_switcheroo_notifier_call_chain(VGA_SWITCHEROO_CLIENT_UNREGISTERED);
 }
 EXPORT_SYMBOL(vga_switcheroo_unregister_client);
 
