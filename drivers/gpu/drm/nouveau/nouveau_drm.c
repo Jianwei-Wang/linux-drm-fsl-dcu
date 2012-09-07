@@ -385,7 +385,7 @@ nouveau_drm_remove(struct pci_dev *pdev)
 	struct nouveau_object *device;
 
 	device = drm->client.base.device;
-	drm_put_dev(dev);
+	drm_put_pci_dev(dev);
 
 	nouveau_object_ref(NULL, &device);
 	nouveau_object_debug();

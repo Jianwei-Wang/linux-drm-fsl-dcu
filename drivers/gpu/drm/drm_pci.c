@@ -388,6 +388,12 @@ err_g1:
 }
 EXPORT_SYMBOL(drm_get_pci_dev);
 
+void drm_put_pci_dev(struct drm_device *dev)
+{
+	drm_put_dev(dev);
+}
+EXPORT_SYMBOL(drm_put_pci_dev);
+
 /**
  * PCI device initialization. Called direct from modules at load time.
  *
@@ -460,7 +466,7 @@ void drm_pci_exit(struct drm_driver *driver, struct pci_driver *pdriver)
 		pci_unregister_driver(pdriver);
 	} else {
 		list_for_each_entry_safe(dev, tmp, &driver->device_list, driver_item)
-			drm_put_dev(dev);
+			drm_put_pci_dev(dev);
 	}
 	DRM_INFO("Module unloaded\n");
 }

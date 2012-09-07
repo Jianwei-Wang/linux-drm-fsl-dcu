@@ -312,7 +312,7 @@ radeon_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
-	drm_put_dev(dev);
+	drm_put_pci_dev(dev);
 }
 
 static int

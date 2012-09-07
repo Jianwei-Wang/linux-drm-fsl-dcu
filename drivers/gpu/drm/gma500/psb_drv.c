@@ -585,7 +585,7 @@ static void psb_driver_preclose(struct drm_device *dev, struct drm_file *priv)
 static void psb_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
-	drm_put_dev(dev);
+	drm_put_pci_dev(dev);
 }
 
 static const struct dev_pm_ops psb_pm_ops = {
