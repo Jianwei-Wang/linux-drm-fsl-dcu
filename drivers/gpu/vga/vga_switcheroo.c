@@ -252,6 +252,29 @@ void vga_switcheroo_client_fb_set(struct pci_dev *pdev,
 }
 EXPORT_SYMBOL(vga_switcheroo_client_fb_set);
 
+int vga_switcheroo_switch_ddc(struct pci_dev *pdev)
+{
+	int ret = 0;
+	int id;
+
+	mutex_lock(&vgasr_mutex);
+
+	if (!vgasr_priv.handler) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	if (vgasr_priv.handler->switch_ddc) {
+		id = vgasr_priv.handler->get_client_id(pdev);
+		ret = vgasr_priv.handler->switch_ddc(id);
+	}
+
+out:
+	mutex_unlock(&vgasr_mutex);
+	return ret;
+}
+EXPORT_SYMBOL(vga_switcheroo_switch_ddc);
+
 static int vga_switcheroo_show(struct seq_file *m, void *v)
 {
 	struct vga_switcheroo_client *client;
@@ -342,9 +365,15 @@ static int vga_switchto_stage2(struct vga_switcheroo_client *new_client)
 		fb_notifier_call_chain(FB_EVENT_REMAP_ALL_CONSOLE, &event);
 	}
 
+	if (vgasr_priv.handler->switch_ddc) {
+		ret = vgasr_priv.handler->switch_ddc(new_client->id);
+		if (ret)
+			return ret;
+	}
+
 	ret = vgasr_priv.handler->switchto(new_client->id);
 	if (ret)
-		return ret;
+		goto restore_ddc;
 
 	if (new_client->ops->reprobe)
 		new_client->ops->reprobe(new_client->pdev);
@@ -356,6 +385,14 @@ static int vga_switchto_stage2(struct vga_switcheroo_client *new_client)
 
 	new_client->active = true;
 	return 0;
+
+restore_ddc:
+	if (vgasr_priv.handler->switch_ddc) {
+		int id = (new_client->id == VGA_SWITCHEROO_IGD) ?
+				VGA_SWITCHEROO_DIS : VGA_SWITCHEROO_IGD;
+		ret = vgasr_priv.handler->switch_ddc(id);
+	}
+	return ret;
 }
 
 static bool check_can_switch(void)
