@@ -276,6 +276,8 @@ static int __init drm_core_init(void)
 		goto err_p3;
 	}
 
+	drm_pci_module_init();
+
 	DRM_INFO("Initialized %s %d.%d.%d %s\n",
 		 CORE_NAME, CORE_MAJOR, CORE_MINOR, CORE_PATCHLEVEL, CORE_DATE);
 	return 0;
@@ -291,6 +293,7 @@ err_p1:
 
 static void __exit drm_core_exit(void)
 {
+	drm_pci_module_exit();
 	remove_proc_entry("dri", NULL);
 	debugfs_remove(drm_debugfs_root);
 	drm_sysfs_destroy();

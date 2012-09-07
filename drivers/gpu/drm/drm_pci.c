@@ -40,6 +40,10 @@
 #include <linux/slab.h>
 #include <linux/dma-mapping.h>
 #include <linux/export.h>
+#include <linux/dmi.h>
+#include <linux/notifier.h>
+#include <linux/vgaarb.h>
+#include <linux/vga_switcheroo.h>
 #include "drmP.h"
 
 /**********************************************************************/
@@ -297,19 +301,8 @@ static struct drm_bus drm_pci_bus = {
 	.agp_init = drm_pci_agp_init,
 };
 
-/**
- * Register.
- *
- * \param pdev - PCI device structure
- * \param ent entry from the PCI ID table with device type flags
- * \return zero on success or a negative number on failure.
- *
- * Attempt to gets inter module "drm" information. If we are first
- * then register the character device and inter module information.
- * Try and register, if we fail to register, backout previous work.
- */
-int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
-		    struct drm_driver *driver)
+int __drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
+		      struct drm_driver *driver)
 {
 	struct drm_device *dev;
 	int ret;
@@ -333,8 +326,6 @@ int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 #ifdef __alpha__
 	dev->hose = pdev->sysdata;
 #endif
-
-	mutex_lock(&drm_global_mutex);
 
 	if ((ret = drm_fill_in_dev(dev, ent, driver))) {
 		printk(KERN_ERR "DRM: Fill_in_dev failed.\n");
@@ -371,7 +362,6 @@ int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 		 driver->name, driver->major, driver->minor, driver->patchlevel,
 		 driver->date, pci_name(pdev), dev->primary->index);
 
-	mutex_unlock(&drm_global_mutex);
 	return 0;
 
 err_g4:
@@ -386,10 +376,140 @@ err_g1:
 	mutex_unlock(&drm_global_mutex);
 	return ret;
 }
+
+/*
+ * List of machines that require delaying initialization of the secondary
+ * GPU until vga_switcheroo is ready.
+ */
+static struct dmi_system_id deferred_init_dmi_table[] = {
+	{
+		.ident = "Apple Laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+			DMI_MATCH(DMI_CHASSIS_TYPE, "10"), /* Notebook */
+		},
+	},
+};
+
+struct deferred_init_data {
+	struct list_head list;
+	struct pci_dev *pdev;
+	const struct pci_device_id *ent;
+	struct drm_driver *driver;
+};
+
+static LIST_HEAD(deferred_init_list);
+
+static bool drm_pci_switcheroo_ready(void)
+{
+	if (!vga_switcheroo_handler_registered())
+		return false;
+	if (!vga_switcheroo_get_active_client())
+		return false;
+	return true;
+}
+
+static void drm_deferred_init_work_fn(struct work_struct *work)
+{
+	struct deferred_init_data *di_data, *temp;
+
+	mutex_lock(&drm_global_mutex);
+
+	if (!drm_pci_switcheroo_ready()) {
+		mutex_unlock(&drm_global_mutex);
+		return;
+	}
+
+	list_for_each_entry_safe(di_data, temp, &deferred_init_list, list) {
+		if (__drm_get_pci_dev(di_data->pdev, di_data->ent,
+				      di_data->driver))
+			DRM_ERROR("pci device initialization failed\n");
+		list_del(&di_data->list);
+		kfree(di_data);
+	}
+	mutex_unlock(&drm_global_mutex);
+}
+static DECLARE_WORK(deferred_init_work, drm_deferred_init_work_fn);
+
+static int drm_switcheroo_notifier_fn(struct notifier_block *nb,
+				      unsigned long val, void *unused)
+{
+	if (val == VGA_SWITCHEROO_CLIENT_REGISTERED ||
+	    val == VGA_SWITCHEROO_HANDLER_REGISTERED)
+		queue_work(system_nrt_wq, &deferred_init_work);
+	return NOTIFY_OK;
+}
+
+static struct notifier_block drm_switcheroo_notifier = {
+	.notifier_call = drm_switcheroo_notifier_fn,
+};
+
+static bool drm_pci_needs_deferred_init(struct pci_dev *pdev)
+{
+	if (!dmi_check_system(deferred_init_dmi_table))
+		return false;
+	if (vga_default_device() == pdev)
+		return false;
+	return !drm_pci_switcheroo_ready();
+}
+
+/**
+ * Register.
+ *
+ * \param pdev - PCI device structure
+ * \param ent entry from the PCI ID table with device type flags
+ * \return zero on success or a negative number on failure.
+ *
+ * Attempt to gets inter module "drm" information. If we are first
+ * then register the character device and inter module information.
+ * Try and register, if we fail to register, backout previous work.
+ */
+int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
+		    struct drm_driver *driver)
+{
+	int ret = 0;
+
+	mutex_lock(&drm_global_mutex);
+
+	/*
+	 * On some machines secondary graphics devices shouldn't be
+	 * initialized until the handler and primary graphics device
+	 * have been registered with vga_switcheroo.
+	 */
+	if (drm_pci_needs_deferred_init(pdev)) {
+		struct deferred_init_data *di_data =
+			kmalloc(sizeof(*di_data), GFP_KERNEL);
+		if (!di_data) {
+			ret = -ENOMEM;
+		} else {
+			di_data->pdev = pdev;
+			di_data->ent = ent;
+			di_data->driver = driver;
+			list_add_tail(&di_data->list, &deferred_init_list);
+		}
+	} else {
+		ret = __drm_get_pci_dev(pdev, ent, driver);
+	}
+
+	mutex_unlock(&drm_global_mutex);
+	return ret;
+}
 EXPORT_SYMBOL(drm_get_pci_dev);
 
 void drm_put_pci_dev(struct drm_device *dev)
 {
+	struct deferred_init_data *di_data;
+
+	mutex_lock(&drm_global_mutex);
+	list_for_each_entry(di_data, &deferred_init_list, list) {
+		if (di_data->pdev == dev->pdev) {
+			list_del(&di_data->list);
+			kfree(di_data);
+			break;
+		}
+	}
+	mutex_unlock(&drm_global_mutex);
+
 	drm_put_dev(dev);
 }
 EXPORT_SYMBOL(drm_put_pci_dev);
@@ -520,3 +640,15 @@ int drm_pcie_get_speed_cap_mask(struct drm_device *dev, u32 *mask)
 	return 0;
 }
 EXPORT_SYMBOL(drm_pcie_get_speed_cap_mask);
+
+int drm_pci_module_init(void)
+{
+	return vga_switcheroo_register_notifier(&drm_switcheroo_notifier);
+}
+EXPORT_SYMBOL(drm_pci_module_init);
+
+void drm_pci_module_exit(void)
+{
+	vga_switcheroo_unregister_notifier(&drm_switcheroo_notifier);
+}
+EXPORT_SYMBOL(drm_pci_module_exit);
