@@ -271,14 +271,21 @@ static const struct backlight_ops gmux_bl_ops = {
 	.update_status = gmux_update_status,
 };
 
+static int gmux_switch_ddc(enum vga_switcheroo_client_id id)
+{
+	if (id == VGA_SWITCHEROO_IGD)
+		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DDC, 1);
+	else
+		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DDC, 2);
+	return 0;
+}
+
 static int gmux_switchto(enum vga_switcheroo_client_id id)
 {
 	if (id == VGA_SWITCHEROO_IGD) {
-		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DDC, 1);
 		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DISPLAY, 2);
 		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_EXTERNAL, 2);
 	} else {
-		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DDC, 2);
 		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DISPLAY, 3);
 		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_EXTERNAL, 3);
 	}
@@ -345,6 +352,7 @@ gmux_active_client(struct apple_gmux_data *gmux_data)
 }
 
 static struct vga_switcheroo_handler gmux_handler = {
+	.switch_ddc = gmux_switch_ddc,
 	.switchto = gmux_switchto,
 	.power_state = gmux_set_power_state,
 	.get_client_id = gmux_get_client_id,
