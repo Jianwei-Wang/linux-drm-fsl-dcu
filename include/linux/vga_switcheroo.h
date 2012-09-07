@@ -61,6 +61,7 @@ void vga_switcheroo_unregister_handler(void);
 
 int vga_switcheroo_process_delayed_switch(void);
 
+struct pci_dev *vga_switcheroo_get_active_client(void);
 int vga_switcheroo_get_client_state(struct pci_dev *dev);
 
 #else
@@ -76,6 +77,7 @@ static inline int vga_switcheroo_register_audio_client(struct pci_dev *pdev,
 	int id, bool active) { return 0; }
 static inline void vga_switcheroo_unregister_handler(void) {}
 static inline int vga_switcheroo_process_delayed_switch(void) { return 0; }
+static inline struct pci_dev *vga_switcheroo_get_active_client(void) { return NULL; }
 static inline int vga_switcheroo_get_client_state(struct pci_dev *dev) { return VGA_SWITCHEROO_ON; }
 
 

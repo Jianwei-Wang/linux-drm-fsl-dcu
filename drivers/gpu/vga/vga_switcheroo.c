@@ -205,6 +205,20 @@ find_active_client(struct list_head *head)
 	return NULL;
 }
 
+struct pci_dev *vga_switcheroo_get_active_client(void)
+{
+	struct vga_switcheroo_client *client;
+	struct pci_dev *pdev = NULL;
+
+	mutex_lock(&vgasr_mutex);
+	client = find_active_client(&vgasr_priv.clients);
+	if (client)
+		pdev = client->pdev;
+	mutex_unlock(&vgasr_mutex);
+	return pdev;
+}
+EXPORT_SYMBOL(vga_switcheroo_get_active_client);
+
 int vga_switcheroo_get_client_state(struct pci_dev *pdev)
 {
 	struct vga_switcheroo_client *client;
