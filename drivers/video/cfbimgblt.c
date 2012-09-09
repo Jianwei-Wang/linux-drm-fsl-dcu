@@ -209,7 +209,7 @@ static inline void slow_imageblit(const struct fb_image *image, struct fb_info *
  *
  * Only if:  bits_per_pixel == 8, 16, or 32
  *           image->width is divisible by pixel/dword (ppw);
- *           fix->line_legth is divisible by 4;
+ *           fix->line_length is divisible by 4;
  *           beginning and end of a scanline is dword aligned
  */
 static inline void fast_imageblit(const struct fb_image *image, struct fb_info *p, 
