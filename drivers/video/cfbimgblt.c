@@ -250,7 +250,7 @@ static inline void fast_imageblit(const struct fb_image *image, struct fb_info *
 
 	for (i = image->height; i--; ) {
 		dst = (u32 __iomem *) dst1, shift = 8; src = s;
-		
+
 		for (j = k; j--; ) {
 			shift -= ppw;
 			end_mask = tab[(*src >> shift) & bit_mask];
@@ -260,7 +260,7 @@ static inline void fast_imageblit(const struct fb_image *image, struct fb_info *
 		dst1 += p->fix.line_length;
 		s += spitch;
 	}
-}	
+}
 	
 void cfb_imageblit(struct fb_info *p, const struct fb_image *image)
 {
