@@ -487,6 +487,9 @@ static int ttm_bo_ioremap(struct ttm_buffer_object *bo,
 {
 	struct ttm_mem_reg *mem = &bo->mem;
 
+	//printk("%s:%d: bo->mem.bus = {.base %ld, .offset %ld, .addr %p}\n",
+	//	__func__, __LINE__,
+	//	bo->mem.bus.base, bo->mem.bus.offset, bo->mem.bus.addr);
 	if (bo->mem.bus.addr) {
 		map->bo_kmap_type = ttm_bo_map_premapped;
 		map->virtual = (void *)(((u8 *)bo->mem.bus.addr) + offset);

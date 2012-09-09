@@ -1160,6 +1160,18 @@ int ttm_bo_check_placement(struct ttm_buffer_object *bo,
 	return 0;
 }
 
+#if 0
+static const char *ttm_bo_type_to_string(int ttm_bo_type)
+{
+	switch (ttm_bo_type) {
+	case ttm_bo_type_device: return "device";
+	case ttm_bo_type_kernel: return "kernel";
+	default:
+		return "unknown";
+	}
+}
+#endif
+
 int ttm_bo_init(struct ttm_bo_device *bdev,
 		struct ttm_buffer_object *bo,
 		unsigned long size,
@@ -1176,6 +1188,7 @@ int ttm_bo_init(struct ttm_bo_device *bdev,
 	unsigned long num_pages;
 	struct ttm_mem_global *mem_glob = bdev->glob->mem_glob;
 
+	//printk("%s: size = %ld, type = %s\n", __func__, size, ttm_bo_type_to_string(type));
 	ret = ttm_mem_global_alloc(mem_glob, acc_size, false, false);
 	if (ret) {
 		pr_err("Out of kernel memory\n");
@@ -1671,8 +1684,12 @@ retry_pre_get:
 		return ret;
 
 	write_lock(&bdev->vm_lock);
+	//printk("%s: calling drm_mm_search_free %ld\n", __func__,
+	//	bo->mem.num_pages);
 	bo->vm_node = drm_mm_search_free(&bdev->addr_space_mm,
 					 bo->mem.num_pages, 0, 0);
+	//printk("%s: got a vm_node->start == %ld\n", __func__,
+	//	bo->vm_node->start);
 
 	if (unlikely(bo->vm_node == NULL)) {
 		ret = -ENOMEM;

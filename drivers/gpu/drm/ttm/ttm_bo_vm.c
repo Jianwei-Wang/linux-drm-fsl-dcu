@@ -61,12 +61,44 @@ static struct ttm_buffer_object *ttm_bo_vm_lookup_rb(struct ttm_bo_device *bdev,
 			cur = cur->rb_left;
 	}
 
-	if (unlikely(best_bo == NULL))
+	if (unlikely(best_bo == NULL)) {
+		printk("%s: best_bo == NULL, Here comes the tree: (bo start, #pages)\n", __func__);
+		cur = bdev->addr_space_rb.rb_node;
+		while (likely(cur != NULL)) {
+			bo = rb_entry(cur, struct ttm_buffer_object, vm_rb);
+			printk("%s: cur = %p, (%ld, %ld)\n", __func__, cur, bo->vm_node->start, bo->num_pages);
+			cur_offset = bo->vm_node->start;
+			if (page_start >= cur_offset) {
+				cur = cur->rb_right;
+				best_bo = bo;
+				if (page_start == cur_offset)
+					break;
+			} else
+				cur = cur->rb_left;
+		}
 		return NULL;
+	}
 
 	if (unlikely((best_bo->vm_node->start + best_bo->num_pages) <
-		     (page_start + num_pages)))
+		     (page_start + num_pages))) {
+		printk("%s: best_bo->vm_node->start + best_bo->num_pages %ld + %ld < %ld + %ld page_start + num_pages\nHere comes the branch: (bo start, #pages)\n",
+			__func__, best_bo->vm_node->start, best_bo->num_pages,
+			page_start, num_pages);
+		cur = bdev->addr_space_rb.rb_node;
+		while (likely(cur != NULL)) {
+			bo = rb_entry(cur, struct ttm_buffer_object, vm_rb);
+			printk("%s: cur = %p, (%ld, %ld)\n", __func__, cur, bo->vm_node->start, bo->num_pages);
+			cur_offset = bo->vm_node->start;
+			if (page_start >= cur_offset) {
+				cur = cur->rb_right;
+				best_bo = bo;
+				if (page_start == cur_offset)
+					break;
+			} else
+				cur = cur->rb_left;
+		}
 		return NULL;
+	}
 
 	return best_bo;
 }
@@ -94,10 +126,18 @@ static int ttm_bo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	 * for reserve, and if it fails, retry the fault after scheduling.
 	 */
 
+#if 0
+	printk("%s: enter: reserved = %d, mem.bus.is_iomem = %d\n", __func__,
+		bo->reserved.counter,
+		bo->mem.bus.is_iomem
+		);
+#endif
+
 	ret = ttm_bo_reserve(bo, true, true, false, 0);
 	if (unlikely(ret != 0)) {
 		if (ret == -EBUSY)
 			set_need_resched();
+		printk("%s: VM_FAULT_NOPAGE (ttm_bo_reserve = %d)\n", __func__, ret);
 		return VM_FAULT_NOPAGE;
 	}
 
@@ -141,6 +181,8 @@ static int ttm_bo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	}
 	ret = ttm_mem_io_reserve_vm(bo);
 	if (unlikely(ret != 0)) {
+		printk("%s: VM_FAULT_SIGBUS (ttm_bo_io_reserve = %d)\n",
+			__func__, ret);
 		retval = VM_FAULT_SIGBUS;
 		goto out_io_unlock;
 	}
@@ -151,6 +193,10 @@ static int ttm_bo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	    bo->vm_node->start - vma->vm_pgoff;
 
 	if (unlikely(page_offset >= bo->num_pages)) {
+		printk("%s: VM_FAULT_SIGBUS (page_offset %ld >= bo->num_pages %ld)\n",
+			__func__, page_offset, bo->num_pages);
+		printk("%s: address %ld\nvma->vm_start %ld\nbo->vm_node->start %ld\nvma->vm_pgoff %ld\n",
+			__func__, address, vma->vm_start, bo->vm_node->start, vma->vm_pgoff);
 		retval = VM_FAULT_SIGBUS;
 		goto out_io_unlock;
 	}
