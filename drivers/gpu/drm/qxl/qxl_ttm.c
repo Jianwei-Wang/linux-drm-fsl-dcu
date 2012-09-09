@@ -1,0 +1,405 @@
+
+#include <ttm/ttm_bo_api.h>
+#include <ttm/ttm_bo_driver.h>
+#include <ttm/ttm_placement.h>
+#include <ttm/ttm_module.h>
+#include <drm/drmP.h>
+#include <drm/drm.h>
+#include <drm/qxl_drm.h>
+#include "qxl_drv.h"
+#include "qxl_object.h"
+
+static struct qxl_device *qxl_get_qdev(struct ttm_bo_device *bdev)
+{
+	struct qxl_mman *mman;
+	struct qxl_device *qdev;
+
+	mman = container_of(bdev, struct qxl_mman, bdev);
+	qdev = container_of(mman, struct qxl_device, mman);
+	return qdev;
+}
+
+static int qxl_ttm_mem_global_init(struct drm_global_reference *ref)
+{
+	return ttm_mem_global_init(ref->object);
+}
+
+static void qxl_ttm_mem_global_release(struct drm_global_reference *ref)
+{
+	ttm_mem_global_release(ref->object);
+}
+
+static int qxl_ttm_global_init(struct qxl_device *qdev)
+{
+	struct drm_global_reference *global_ref;
+	int r;
+
+	qdev->mman.mem_global_referenced = false;
+	global_ref = &qdev->mman.mem_global_ref;
+	global_ref->global_type = DRM_GLOBAL_TTM_MEM;
+	global_ref->size = sizeof(struct ttm_mem_global);
+	global_ref->init = &qxl_ttm_mem_global_init;
+	global_ref->release = &qxl_ttm_mem_global_release;
+
+	r = drm_global_item_ref(global_ref);
+	if (r != 0) {
+		DRM_ERROR("Failed setting up TTM memory accounting "
+			  "subsystem.\n");
+		return r;
+	}
+
+	qdev->mman.bo_global_ref.mem_glob =
+		qdev->mman.mem_global_ref.object;
+	global_ref = &qdev->mman.bo_global_ref.ref;
+	global_ref->global_type = DRM_GLOBAL_TTM_BO;
+	global_ref->size = sizeof(struct ttm_bo_global);
+	global_ref->init = &ttm_bo_global_init;
+	global_ref->release = &ttm_bo_global_release;
+	r = drm_global_item_ref(global_ref);
+	if (r != 0) {
+		DRM_ERROR("Failed setting up TTM BO subsystem.\n");
+		drm_global_item_unref(&qdev->mman.mem_global_ref);
+		return r;
+	}
+
+	qdev->mman.mem_global_referenced = true;
+	return 0;
+}
+
+static void qxl_ttm_global_fini(struct qxl_device *qdev)
+{
+	if (qdev->mman.mem_global_referenced) {
+		drm_global_item_unref(&qdev->mman.bo_global_ref.ref);
+		drm_global_item_unref(&qdev->mman.mem_global_ref);
+		qdev->mman.mem_global_referenced = false;
+	}
+}
+
+static struct vm_operations_struct qxl_ttm_vm_ops;
+static const struct vm_operations_struct *ttm_vm_ops;
+
+static int qxl_ttm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct ttm_buffer_object *bo;
+	struct qxl_device *qdev;
+	int r;
+
+	bo = (struct ttm_buffer_object *)vma->vm_private_data;
+	if (bo == NULL)
+		return VM_FAULT_NOPAGE;
+	qdev = qxl_get_qdev(bo->bdev);
+	r = ttm_vm_ops->fault(vma, vmf);
+	return r;
+}
+
+int qxl_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	struct drm_file *file_priv;
+	struct qxl_device *qdev;
+	int r;
+
+	if (unlikely(vma->vm_pgoff < DRM_FILE_PAGE_OFFSET)) {
+		pr_info("%s: vma->vm_pgoff (%ld) < DRM_FILE_PAGE_OFFSET\n",
+			__func__, vma->vm_pgoff);
+		return drm_mmap(filp, vma);
+	}
+
+	file_priv = filp->private_data;
+	qdev = file_priv->minor->dev->dev_private;
+	if (qdev == NULL) {
+		DRM_ERROR(
+		 "filp->private_data->minor->dev->dev_private == NULL\n");
+		return -EINVAL;
+	}
+	QXL_INFO(qdev, "%s: filp->private_data = 0x%p, vma->vm_pgoff = %ld\n",
+		 __func__, filp->private_data, vma->vm_pgoff);
+
+	r = ttm_bo_mmap(filp, vma, &qdev->mman.bdev);
+	if (unlikely(r != 0))
+		return r;
+	if (unlikely(ttm_vm_ops == NULL)) {
+		ttm_vm_ops = vma->vm_ops;
+		qxl_ttm_vm_ops = *ttm_vm_ops;
+		qxl_ttm_vm_ops.fault = &qxl_ttm_fault;
+	}
+	vma->vm_ops = &qxl_ttm_vm_ops;
+	return 0;
+}
+
+static int qxl_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
+{
+	return 0;
+}
+
+static int qxl_bo_man_init(struct ttm_mem_type_manager *man,
+			   unsigned long p_size)
+{
+	return ttm_bo_manager_func.init(man, p_size);
+}
+
+static int qxl_bo_man_takedown(struct ttm_mem_type_manager *man)
+{
+	return ttm_bo_manager_func.takedown(man);
+}
+
+static int qxl_bo_man_get_node(struct ttm_mem_type_manager *man,
+			       struct ttm_buffer_object *bo,
+			       struct ttm_placement *placement,
+			       struct ttm_mem_reg *mem)
+{
+	struct qxl_device *qdev = container_of(man->bdev, struct qxl_device,
+					       mman.bdev);
+	int ret;
+	int res = 0;
+
+	ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
+	while (unlikely(ret || mem->mm_node == NULL)) {
+		qxl_io_notify_oom(qdev);
+		res += qxl_garbage_collect(qdev);
+		/* TODO - sleep here */
+		ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
+	}
+	if (unlikely(res > 0))
+		QXL_INFO(qdev, "%s: released %d\n", res);
+	return ret;
+}
+
+static void qxl_bo_man_put_node(struct ttm_mem_type_manager *man,
+				struct ttm_mem_reg *mem)
+{
+	ttm_bo_manager_func.put_node(man, mem);
+}
+
+static void qxl_bo_man_debug(struct ttm_mem_type_manager *man,
+			     const char *prefix)
+{
+	ttm_bo_manager_func.debug(man, prefix);
+}
+
+static const struct ttm_mem_type_manager_func qxl_bo_manager_func = {
+	qxl_bo_man_init,
+	qxl_bo_man_takedown,
+	qxl_bo_man_get_node,
+	qxl_bo_man_put_node,
+	qxl_bo_man_debug,
+};
+
+static int qxl_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
+			     struct ttm_mem_type_manager *man)
+{
+	struct qxl_device *qdev;
+
+	qdev = qxl_get_qdev(bdev);
+
+	switch (type) {
+	case TTM_PL_SYSTEM:
+		/* System memory */
+		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->available_caching = TTM_PL_MASK_CACHING;
+		man->default_caching = TTM_PL_FLAG_CACHED;
+		break;
+	case TTM_PL_VRAM:
+	case TTM_PL_PRIV0:
+		/* "On-card" video ram */
+		man->func = &qxl_bo_manager_func;
+		man->gpu_offset = 0;
+		man->flags = TTM_MEMTYPE_FLAG_FIXED |
+			     TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->available_caching = TTM_PL_MASK_CACHING;
+		man->default_caching = TTM_PL_FLAG_CACHED;
+		break;
+	default:
+		DRM_ERROR("Unsupported memory type %u\n", (unsigned)type);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static void qxl_evict_flags(struct ttm_buffer_object *bo,
+				struct ttm_placement *placement)
+{
+	struct qxl_bo *qbo;
+	static u32 placements = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
+
+	if (!qxl_ttm_bo_is_qxl_bo(bo)) {
+		placement->fpfn = 0;
+		placement->lpfn = 0;
+		placement->placement = &placements;
+		placement->busy_placement = &placements;
+		placement->num_placement = 1;
+		placement->num_busy_placement = 1;
+		return;
+	}
+	qbo = container_of(bo, struct qxl_bo, tbo);
+	qxl_ttm_placement_from_domain(qbo, QXL_GEM_DOMAIN_CPU);
+	*placement = qbo->placement;
+}
+
+static int qxl_verify_access(struct ttm_buffer_object *bo, struct file *filp)
+{
+	return 0;
+}
+
+static int qxl_ttm_io_mem_reserve(struct ttm_bo_device *bdev,
+				  struct ttm_mem_reg *mem)
+{
+	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
+	struct qxl_device *qdev = qxl_get_qdev(bdev);
+
+	mem->bus.addr = NULL;
+	mem->bus.offset = 0;
+	mem->bus.size = mem->num_pages << PAGE_SHIFT;
+	mem->bus.base = 0;
+	mem->bus.is_iomem = false;
+	if (!(man->flags & TTM_MEMTYPE_FLAG_MAPPABLE))
+		return -EINVAL;
+	switch (mem->mem_type) {
+	case TTM_PL_SYSTEM:
+		/* system memory */
+		return 0;
+	case TTM_PL_VRAM:
+		mem->bus.is_iomem = true;
+		mem->bus.base = qdev->vram_base;
+		mem->bus.offset = mem->start << PAGE_SHIFT;
+		break;
+	case TTM_PL_PRIV0:
+		qxl_io_log(qdev, "PRIV0 reservation\n");
+		mem->bus.is_iomem = true;
+		mem->bus.base = qdev->surfaceram_base;
+		mem->bus.offset = mem->start << PAGE_SHIFT;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static void qxl_ttm_io_mem_free(struct ttm_bo_device *bdev,
+				struct ttm_mem_reg *mem)
+{
+}
+
+/*
+ * TTM backend functions.
+ */
+struct qxl_ttm_tt {
+	struct ttm_dma_tt		ttm;
+	struct qxl_device		*qdev;
+	u64				offset;
+};
+
+static int qxl_ttm_backend_bind(struct ttm_tt *ttm,
+				struct ttm_mem_reg *bo_mem)
+{
+	struct qxl_ttm_tt *gtt = (void *)ttm;
+
+	gtt->offset = (unsigned long)(bo_mem->start << PAGE_SHIFT);
+	if (!ttm->num_pages) {
+		WARN(1, "nothing to bind %lu pages for mreg %p back %p!\n",
+		     ttm->num_pages, bo_mem, ttm);
+	}
+	/* Not implemented */
+	return -1;
+}
+
+static int qxl_ttm_backend_unbind(struct ttm_tt *ttm)
+{
+	/* Not implemented */
+	return -1;
+}
+
+static void qxl_ttm_backend_destroy(struct ttm_tt *ttm)
+{
+	struct qxl_ttm_tt *gtt = (void *)ttm;
+
+	ttm_dma_tt_fini(&gtt->ttm);
+	kfree(gtt);
+}
+
+static struct ttm_backend_func qxl_backend_func = {
+	.bind = &qxl_ttm_backend_bind,
+	.unbind = &qxl_ttm_backend_unbind,
+	.destroy = &qxl_ttm_backend_destroy,
+};
+
+
+struct ttm_tt *qxl_ttm_tt_create(struct ttm_bo_device *bdev,
+				 unsigned long size, uint32_t page_flags,
+				 struct page *dummy_read_page)
+{
+	struct qxl_device *qdev;
+	struct qxl_ttm_tt *gtt;
+
+	qdev = qxl_get_qdev(bdev);
+	gtt = kzalloc(sizeof(struct qxl_ttm_tt), GFP_KERNEL);
+	if (gtt == NULL)
+		return NULL;
+	gtt->ttm.ttm.func = &qxl_backend_func;
+	gtt->qdev = qdev;
+	if (ttm_dma_tt_init(&gtt->ttm, bdev, size, page_flags,
+			    dummy_read_page)) {
+		kfree(gtt);
+		return NULL;
+	}
+	return &gtt->ttm.ttm;
+}
+
+static struct ttm_bo_driver qxl_bo_driver = {
+	.ttm_tt_create = &qxl_ttm_tt_create,
+	.invalidate_caches = &qxl_invalidate_caches,
+	.init_mem_type = &qxl_init_mem_type,
+	.evict_flags = &qxl_evict_flags,
+	.verify_access = &qxl_verify_access,
+	.io_mem_reserve = &qxl_ttm_io_mem_reserve,
+	.io_mem_free = &qxl_ttm_io_mem_free,
+};
+
+int qxl_ttm_init(struct qxl_device *qdev)
+{
+	int r;
+	int num_io_pages; /* != rom->num_io_pages, we include surface0 */
+
+	r = qxl_ttm_global_init(qdev);
+	if (r)
+		return r;
+	/* No others user of address space so set it to 0 */
+	r = ttm_bo_device_init(&qdev->mman.bdev,
+			       qdev->mman.bo_global_ref.ref.object,
+			       &qxl_bo_driver, DRM_FILE_PAGE_OFFSET, 0);
+	if (r) {
+		DRM_ERROR("failed initializing buffer object driver(%d).\n", r);
+		return r;
+	}
+	pr_info("%s: qdev->mman.bdev.glob == %p\n", __func__,
+		qdev->mman.bdev.glob);
+	/* NOTE: this includes the framebuffer (aka surface 0) */
+	num_io_pages = qdev->rom->ram_header_offset / PAGE_SIZE;
+	r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_VRAM,
+			   num_io_pages);
+	if (r) {
+		DRM_ERROR("Failed initializing VRAM heap.\n");
+		return r;
+	}
+	r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_PRIV0,
+			   qdev->surfaceram_size / PAGE_SIZE);
+	if (r) {
+		DRM_ERROR("Failed initializing Surfaces heap.\n");
+		return r;
+	}
+	DRM_INFO("qxl: %uM of VRAM memory size\n",
+		 (unsigned)qdev->vram_size / (1024 * 1024));
+	DRM_INFO("qxl: %luM of IO pages memory ready (VRAM domain)\n",
+		 ((unsigned)num_io_pages * PAGE_SIZE) / (1024 * 1024));
+	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
+		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
+	return 0;
+}
+
+void qxl_ttm_fini(struct qxl_device *qdev)
+{
+	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_VRAM);
+	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV0);
+	ttm_bo_device_release(&qdev->mman.bdev);
+	qxl_ttm_global_fini(qdev);
+	DRM_INFO("qxl: ttm finalized\n");
+}

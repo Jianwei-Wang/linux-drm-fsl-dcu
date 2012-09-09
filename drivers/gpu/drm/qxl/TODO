@@ -1,0 +1,42 @@
+airlied:
+ drop unmap ioctl, userspace can use munmap
+ reorder qxl_drm_command, uint64_t together.
+ implement our own gamma, used for fades.
+ no need to print a kernel git version, we have that in dmesg anyawys
+
+Allocation of on device memory in smaller chunks then PAGE_SIZE.
+For two users:
+ internal: can be done with preallocated lists, or on the fly allocating of chunks of them
+  - specialize for each message.
+ ioctl (xf86-video-qxl): can again do our own memory allocator on top of pages, but now we don't
+    know the sizes in advance.
+ can solve both with mspace, adopted to be on top of TTM.
+
+qxl_image: allocate chunks.
+ we can do this without memory allocator
+
+remove the garbage qxl_io_log
+use QXL_INFO / QXL_DEBUG macros that check a debugfs settable variable to toggle qxl_io_log.
+
+cleanup
+
+running checkpatch.pl
+
+Dynamic output number (QXL_NUM_OUTPUTS define must go)
+
+module parameter log in [0,2] => qxl_log_level
+
+coalesce updates (for fb mainly - let userspace do it for itself)
+
+qxl_image hashing: either implement (good for modesetting) or ditch (xf86-video-qxl
+does it's own hashing, we don't see/don't check for the created images)
+
+====
+Misc
+====
+
+// TODO: why have a seperate mmap and alloc ioctl? also, why not just unmmap on the last
+// decref, i.e. when destroyed? is there a huge performance gain to unmapping stuff before
+// destroying? and can anyone use an allocated but not mapped memory from userspace??
+
+qxlfb_create_pinned_object - 1024x768 limit is actually used?

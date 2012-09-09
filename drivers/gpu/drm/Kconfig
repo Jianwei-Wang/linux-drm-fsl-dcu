@@ -212,3 +212,14 @@ source "drivers/gpu/drm/cirrus/Kconfig"
 source "drivers/gpu/drm/shmobile/Kconfig"
 
 source "drivers/gpu/drm/tegra/Kconfig"
+
+config DRM_QXL
+	tristate "QXL virtual GPU"
+	depends on DRM && PCI
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+        select DRM_KMS_HELPER
+        select DRM_TTM
+	help
+		QXL virtual GPU for Spice virtualization desktop integration.
