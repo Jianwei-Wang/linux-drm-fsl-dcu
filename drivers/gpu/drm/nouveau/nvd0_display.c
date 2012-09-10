@@ -848,7 +848,7 @@ static const struct drm_crtc_funcs nvd0_crtc_func = {
 	.cursor_set = nvd0_crtc_cursor_set,
 	.cursor_move = nvd0_crtc_cursor_move,
 	.gamma_set = nvd0_crtc_gamma_set,
-	.set_config = drm_crtc_helper_set_config,
+	.set_config = nouveau_crtc_set_config,
 	.destroy = nvd0_crtc_destroy,
 	.page_flip = nouveau_crtc_page_flip,
 };

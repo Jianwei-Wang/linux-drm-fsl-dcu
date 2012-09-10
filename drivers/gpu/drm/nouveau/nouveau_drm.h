@@ -115,6 +115,11 @@ struct nouveau_drm {
 
 	/* power management */
 	struct nouveau_pm *pm;
+
+	/* display power reference */
+	bool have_disp_power_ref;
+
+	struct dev_pm_domain vga_pm_domain;
 };
 
 static inline struct nouveau_drm *

@@ -25,7 +25,10 @@
 #include <linux/console.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-
+#include <linux/pm_runtime.h>
+#include <linux/vga_switcheroo.h>
+#include "drmP.h"
+#include "drm_crtc_helper.h"
 #include <core/device.h>
 #include <core/client.h>
 #include <core/gpuobj.h>
@@ -335,6 +338,13 @@ nouveau_drm_load(struct drm_device *dev, unsigned long flags)
 
 	nouveau_accel_init(drm);
 	nouveau_fbcon_init(dev);
+
+	pm_runtime_use_autosuspend(dev->dev);
+	pm_runtime_set_autosuspend_delay(dev->dev, 5000);
+	pm_runtime_set_active(dev->dev);
+	pm_runtime_allow(dev->dev);
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
 	return 0;
 
 fail_dispinit:
@@ -350,6 +360,7 @@ fail_ttm:
 	nouveau_vga_fini(drm);
 fail_device:
 	nouveau_cli_destroy(&drm->client);
+
 	return ret;
 }
 
@@ -358,6 +369,7 @@ nouveau_drm_unload(struct drm_device *dev)
 {
 	struct nouveau_drm *drm = nouveau_drm(dev);
 
+	pm_runtime_get_noresume(dev->dev);
 	nouveau_fbcon_fini(dev);
 	nouveau_accel_fini(drm);
 
@@ -398,8 +410,6 @@ nouveau_do_suspend(struct drm_device *dev)
 	struct nouveau_cli *cli;
 	int ret;
 
-	NV_INFO(drm, "suspending fbcon...\n");
-	nouveau_fbcon_set_suspend(dev, 1);
 
 	NV_INFO(drm, "suspending display...\n");
 	ret = nouveau_display_suspend(dev);
@@ -447,6 +457,8 @@ int nouveau_pmops_suspend(struct device *dev)
 	if (drm_dev->switch_power_state == DRM_SWITCH_POWER_OFF)
 		return 0;
 
+	nouveau_fbcon_set_suspend(drm_dev, 1);
+
 	ret = nouveau_do_suspend(drm_dev);
 	if (ret)
 		return ret;
@@ -484,7 +496,8 @@ nouveau_do_resume(struct drm_device *dev)
 	nouveau_pm_resume(dev);
 
 	NV_INFO(drm, "resuming display...\n");
-	nouveau_display_resume(dev);
+	nouveau_display_repin(dev);
+
 	return 0;
 }
 
@@ -504,13 +517,22 @@ int nouveau_pmops_resume(struct device *dev)
 		return ret;
 	pci_set_master(pdev);
 
-	return nouveau_do_resume(drm_dev);
+	ret = nouveau_do_resume(drm_dev);
+	if (ret)
+		return ret;
+
+	nouveau_fbcon_set_suspend(drm_dev, 0);
+	nouveau_fbcon_zfill_all(drm_dev);
+	nouveau_display_resume(drm_dev);
+	return 0;
 }
 
 static int nouveau_pmops_freeze(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+
+	nouveau_fbcon_set_suspend(drm_dev, 1);
 
 	return nouveau_do_suspend(drm_dev);
 }
@@ -519,8 +541,15 @@ static int nouveau_pmops_thaw(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
 
-	return nouveau_do_resume(drm_dev);
+	ret = nouveau_do_resume(drm_dev);
+	if (ret)
+		return ret;
+	nouveau_fbcon_set_suspend(drm_dev, 0);
+	nouveau_fbcon_zfill_all(drm_dev);
+	nouveau_display_resume(drm_dev);
+	return 0;
 }
 
 
@@ -533,18 +562,23 @@ nouveau_drm_open(struct drm_device *dev, struct drm_file *fpriv)
 	char name[16];
 	int ret;
 
+	/* need to bring up power immediately if opening device */
+	ret = pm_runtime_get_sync(dev->dev);
+	if (ret < 0)
+		return ret;
+
 	snprintf(name, sizeof(name), "%d", pid_nr(fpriv->pid));
 
 	ret = nouveau_cli_create(pdev, name, sizeof(*cli), (void **)&cli);
 	if (ret)
-		return ret;
+		goto out_suspend;
 
 	if (nv_device(drm->device)->card_type >= NV_50) {
 		ret = nouveau_vm_new(nv_device(drm->device), 0, (1ULL << 40),
 				     0x1000, &cli->base.vm);
 		if (ret) {
 			nouveau_cli_destroy(cli);
-			return ret;
+			goto out_suspend;
 		}
 	}
 
@@ -553,7 +587,12 @@ nouveau_drm_open(struct drm_device *dev, struct drm_file *fpriv)
 	mutex_lock(&drm->client.mutex);
 	list_add(&cli->head, &drm->clients);
 	mutex_unlock(&drm->client.mutex);
-	return 0;
+
+out_suspend:
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
+
+	return ret;
 }
 
 static void
@@ -562,12 +601,15 @@ nouveau_drm_preclose(struct drm_device *dev, struct drm_file *fpriv)
 	struct nouveau_cli *cli = nouveau_cli(fpriv);
 	struct nouveau_drm *drm = nouveau_drm(dev);
 
+	pm_runtime_get_sync(dev->dev);
+
 	if (cli->abi16)
 		nouveau_abi16_fini(cli->abi16);
 
 	mutex_lock(&drm->client.mutex);
 	list_del(&cli->head);
 	mutex_unlock(&drm->client.mutex);
+
 }
 
 static void
@@ -575,6 +617,8 @@ nouveau_drm_postclose(struct drm_device *dev, struct drm_file *fpriv)
 {
 	struct nouveau_cli *cli = nouveau_cli(fpriv);
 	nouveau_cli_destroy(cli);
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
 }
 
 static struct drm_ioctl_desc
@@ -593,12 +637,29 @@ nouveau_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_INFO, nouveau_gem_ioctl_info, DRM_UNLOCKED|DRM_AUTH),
 };
 
+long nouveau_drm_ioctl(struct file *filp,
+		       unsigned int cmd, unsigned long arg)
+{
+	struct drm_file *file_priv = filp->private_data;
+	struct drm_device *dev;
+	long ret;
+	dev = file_priv->minor->dev;
+	ret = pm_runtime_get(dev->dev);
+	if (ret < 0)
+		return ret;
+
+	ret = drm_ioctl(filp, cmd, arg);
+	
+	pm_runtime_mark_last_busy(dev->dev);
+	pm_runtime_put_autosuspend(dev->dev);
+	return ret;
+}
 static const struct file_operations
 nouveau_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
 	.release = drm_release,
-	.unlocked_ioctl = drm_ioctl,
+	.unlocked_ioctl = nouveau_drm_ioctl,
 	.mmap = nouveau_ttm_mmap,
 	.poll = drm_poll,
 	.fasync = drm_fasync,
@@ -676,6 +737,72 @@ nouveau_drm_pci_table[] = {
 	{}
 };
 
+static int nouveau_pmops_runtime_suspend(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
+	printk("runtime suspend called\n");
+
+	drm_dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
+	drm_kms_helper_poll_disable(drm_dev);
+	vga_switcheroo_set_dynamic_switch(pdev, VGA_SWITCHEROO_OFF);
+	nouveau_switcheroo_optimus_dsm();
+	ret = nouveau_do_suspend(drm_dev);
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
+	drm_dev->switch_power_state = DRM_SWITCH_POWER_DYNAMIC_OFF;
+	return ret;
+}
+
+static int nouveau_pmops_runtime_resume(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
+	printk("runtime resume called\n");
+	drm_dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
+
+	pci_set_power_state(pdev, PCI_D0);
+	pci_restore_state(pdev);
+	ret = pci_enable_device(pdev);
+	if (ret)
+		return ret;
+	pci_set_master(pdev);
+
+	ret = nouveau_do_resume(drm_dev);
+	nouveau_display_resume(drm_dev);
+	drm_kms_helper_poll_enable(drm_dev);
+	vga_switcheroo_set_dynamic_switch(pdev, VGA_SWITCHEROO_ON);
+	drm_dev->switch_power_state = DRM_SWITCH_POWER_ON;
+	return ret;
+}
+
+static int nouveau_pmops_runtime_idle(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	struct nouveau_drm *drm = nouveau_drm(drm_dev);
+	struct drm_crtc *crtc;
+
+	/* are we optimus enabled? */
+	if (!nouveau_is_optimus() && !nouveau_is_v1_dsm()) {
+		DRM_DEBUG_DRIVER("failing to power off - not optimus\n");
+		return -EBUSY;
+	}
+
+	list_for_each_entry(crtc, &drm->dev->mode_config.crtc_list, head) {
+		if (crtc->enabled) {
+			DRM_DEBUG_DRIVER("failing to power off - crtc active\n");
+			return -EBUSY;
+		}
+	}
+	printk("runtime idle called\n");
+	WARN_ON(1);
+	return 0;
+}
+
 static const struct dev_pm_ops nouveau_pm_ops = {
 	.suspend = nouveau_pmops_suspend,
 	.resume = nouveau_pmops_resume,
@@ -683,6 +810,9 @@ static const struct dev_pm_ops nouveau_pm_ops = {
 	.thaw = nouveau_pmops_thaw,
 	.poweroff = nouveau_pmops_freeze,
 	.restore = nouveau_pmops_resume,
+	.runtime_suspend = nouveau_pmops_runtime_suspend,
+	.runtime_resume = nouveau_pmops_runtime_resume,
+	.runtime_idle = nouveau_pmops_runtime_idle,
 };
 
 static struct pci_driver
