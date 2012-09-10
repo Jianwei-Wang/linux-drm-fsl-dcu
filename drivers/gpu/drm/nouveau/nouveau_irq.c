@@ -23,7 +23,7 @@
  */
 
 #include <subdev/mc.h>
-
+#include <linux/pm_runtime.h>
 #include "nouveau_drm.h"
 #include "nouveau_irq.h"
 #include "nv50_display.h"
@@ -60,6 +60,8 @@ nouveau_irq_handler(DRM_IRQ_ARGS)
 		return IRQ_NONE;
 
 	nv_subdev(pmc)->intr(nv_subdev(pmc));
+
+	pm_runtime_mark_last_busy(dev->dev);
 	return IRQ_HANDLED;
 }
 

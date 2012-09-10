@@ -33,7 +33,7 @@
 
 #include "nouveau_drm.h"
 #include "nouveau_pm.h"
-
+#include "nouveau_acpi.h"
 #include <subdev/gpio.h>
 #include <subdev/timer.h>
 #include <subdev/therm.h>
