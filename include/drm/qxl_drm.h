@@ -19,9 +19,8 @@
 #define DRM_QXL_INCREF      0x01
 #define DRM_QXL_DECREF      0x02
 #define DRM_QXL_MAP         0x03
-#define DRM_QXL_UNMAP       0x04
-#define DRM_QXL_EXECBUFFER  0x05
-#define DRM_QXL_UPDATE_AREA 0x06
+#define DRM_QXL_EXECBUFFER  0x04
+#define DRM_QXL_UPDATE_AREA 0x05
 
 enum {
 	QXL_ALLOC_TYPE_DATA,
