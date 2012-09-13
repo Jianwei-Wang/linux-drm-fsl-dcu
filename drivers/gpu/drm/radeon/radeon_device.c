@@ -908,19 +908,18 @@ static void radeon_check_arguments(struct radeon_device *rdev)
 static void radeon_switcheroo_set_state(struct pci_dev *pdev, enum vga_switcheroo_state state)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
-	pm_message_t pmm = { .event = PM_EVENT_SUSPEND };
 	if (state == VGA_SWITCHEROO_ON) {
 		printk(KERN_INFO "radeon: switched on\n");
 		/* don't suspend or resume card normally */
 		dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
-		radeon_resume_kms(dev);
+		radeon_resume_kms(dev, true);
 		dev->switch_power_state = DRM_SWITCH_POWER_ON;
 		drm_kms_helper_poll_enable(dev);
 	} else {
 		printk(KERN_INFO "radeon: switched off\n");
 		drm_kms_helper_poll_disable(dev);
 		dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
-		radeon_suspend_kms(dev, pmm);
+		radeon_suspend_kms(dev, true);
 		dev->switch_power_state = DRM_SWITCH_POWER_OFF;
 	}
 }
@@ -1157,7 +1156,7 @@ void radeon_device_fini(struct radeon_device *rdev)
  * Returns 0 for success or an error on failure.
  * Called at driver suspend.
  */
-int radeon_suspend_kms(struct drm_device *dev, pm_message_t state)
+int radeon_suspend_kms(struct drm_device *dev, bool suspend)
 {
 	struct radeon_device *rdev;
 	struct drm_crtc *crtc;
@@ -1167,9 +1166,7 @@ int radeon_suspend_kms(struct drm_device *dev, pm_message_t state)
 	if (dev == NULL || dev->dev_private == NULL) {
 		return -ENODEV;
 	}
-	if (state.event == PM_EVENT_PRETHAW) {
-		return 0;
-	}
+
 	rdev = dev->dev_private;
 
 	if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
@@ -1220,7 +1217,7 @@ int radeon_suspend_kms(struct drm_device *dev, pm_message_t state)
 	radeon_agp_suspend(rdev);
 
 	pci_save_state(dev->pdev);
-	if (state.event == PM_EVENT_SUSPEND) {
+	if (suspend) {
 		/* Shut down the device */
 		pci_disable_device(dev->pdev);
 		pci_set_power_state(dev->pdev, PCI_D3hot);
@@ -1240,7 +1237,7 @@ int radeon_suspend_kms(struct drm_device *dev, pm_message_t state)
  * Returns 0 for success or an error on failure.
  * Called at driver resume.
  */
-int radeon_resume_kms(struct drm_device *dev)
+int radeon_resume_kms(struct drm_device *dev, bool resume)
 {
 	struct drm_connector *connector;
 	struct radeon_device *rdev = dev->dev_private;
@@ -1250,11 +1247,13 @@ int radeon_resume_kms(struct drm_device *dev)
 		return 0;
 
 	console_lock();
-	pci_set_power_state(dev->pdev, PCI_D0);
-	pci_restore_state(dev->pdev);
-	if (pci_enable_device(dev->pdev)) {
-		console_unlock();
-		return -1;
+	if (resume) {
+		pci_set_power_state(dev->pdev, PCI_D0);
+		pci_restore_state(dev->pdev);
+		if (pci_enable_device(dev->pdev)) {
+			console_unlock();
+			return -1;
+		}
 	}
 	/* resume AGP if in use */
 	radeon_agp_resume(rdev);
