@@ -28,6 +28,7 @@
 #include <linux/i2c.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <linux/dmi.h>
 #include "drmP.h"
 #include "drm.h"
 #include "drm_crtc.h"
@@ -2429,6 +2430,30 @@ intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connect
 	intel_attach_broadcast_rgb_property(connector);
 }
 
+struct intel_edp_panel_values {
+	u32 pch_pp_on_delays;
+	u32 pch_pp_off_delays;
+	u32 pch_pp_divisor;
+	u32 pch_pp_control_mask;
+};
+
+static struct intel_edp_panel_values macbookpro101 = { 0x407d0834,
+						       0x02e409c4,
+						       0x186906,
+						       EDP_BLC_ENABLE };
+
+static struct dmi_system_id edp_fallback_ids[] = {
+	{
+		.ident = "Apple Macbook 10,1",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "MacBookPro10,1"),
+		},
+		.driver_data = &macbookpro101,
+	},
+	{ }
+};
+
 void
 intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 {
@@ -2524,16 +2549,42 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 	if (is_edp(intel_dp)) {
 		struct edp_power_seq	cur, vbt;
 		u32 pp_on, pp_off, pp_div;
+		bool force_bl_on = false;
 
 		pp_on = I915_READ(PCH_PP_ON_DELAYS);
 		pp_off = I915_READ(PCH_PP_OFF_DELAYS);
 		pp_div = I915_READ(PCH_PP_DIVISOR);
 
 		if (!pp_on || !pp_off || !pp_div) {
-			DRM_INFO("bad panel power sequencing delays, disabling panel\n");
-			intel_dp_encoder_destroy(&intel_dp->base.base);
-			intel_dp_destroy(&intel_connector->base);
-			return;
+			const struct dmi_system_id *match;
+			u32 pp_control, mask = 0;
+
+			match = dmi_first_match(edp_fallback_ids);
+			if (match) {
+				struct intel_edp_panel_values *values = match->driver_data;
+				pp_on = values->pch_pp_on_delays;
+				pp_off = values->pch_pp_off_delays;
+				pp_div = values->pch_pp_divisor;
+				mask = values->pch_pp_control_mask;
+				if (mask & EDP_BLC_ENABLE)
+					force_bl_on = true;
+			} else {
+				DRM_INFO("bad panel power sequencing delays, disabling panel\n");
+				intel_dp_encoder_destroy(&intel_dp->base.base);
+				intel_dp_destroy(&intel_connector->base);
+				return;
+			}
+
+			I915_WRITE(PCH_PP_ON_DELAYS, pp_on);
+			I915_WRITE(PCH_PP_OFF_DELAYS, pp_off);
+			I915_WRITE(PCH_PP_DIVISOR, pp_div);
+			POSTING_READ(PCH_PP_DIVISOR);
+			if (mask) {
+				pp_control = ironlake_get_pp_control(dev_priv);
+				pp_control |= mask;
+				I915_WRITE(PCH_PP_CONTROL, pp_control);
+				POSTING_READ(PCH_PP_CONTROL);
+			}
 		}
 
 		/* Pull timing values out of registers */
@@ -2574,6 +2625,8 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 
 		DRM_DEBUG_KMS("backlight on delay %d, off delay %d\n",
 			      intel_dp->backlight_on_delay, intel_dp->backlight_off_delay);
+		if (force_bl_on)
+			ironlake_edp_backlight_on(intel_dp);
 	}
 
 	intel_dp_i2c_init(intel_dp, intel_connector, name);
