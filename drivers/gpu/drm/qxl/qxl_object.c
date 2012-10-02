@@ -64,7 +64,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 		if (size > PAGE_SIZE)
 			size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 		else {
-			printk_once("lost %d bytes (%ld -> %ld)\n",
+			printk_once("lost %ld bytes (%ld -> %ld)\n",
 				PAGE_SIZE - size, size, PAGE_SIZE);
 			size = PAGE_SIZE;
 		}
