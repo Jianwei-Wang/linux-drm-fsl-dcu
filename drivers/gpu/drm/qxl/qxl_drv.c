@@ -31,7 +31,7 @@
 #include <linux/module.h>
 
 #include "drmP.h"
-#include "drm.h"
+#include "drm/drm.h"
 
 #include "qxl_drv.h"
 

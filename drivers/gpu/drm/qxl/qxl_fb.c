@@ -31,9 +31,9 @@
 #include <linux/fb.h>
 
 #include "drmP.h"
-#include "drm.h"
-#include "drm_crtc.h"
-#include "drm_crtc_helper.h"
+#include "drm/drm.h"
+#include "drm/drm_crtc.h"
+#include "drm/drm_crtc_helper.h"
 #include "qxl_drm.h"
 #include "qxl_drv.h"
 
