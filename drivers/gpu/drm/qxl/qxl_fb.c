@@ -390,7 +390,6 @@ static void qxl_fb_do_work_items(struct qxl_device *qdev)
 		spin_lock_irqsave(&qdev->fb_workqueue_spinlock, flags);
 		list_del(&item->head);
 		list_add_tail(&item->head, &qdev->fb_work_item_free);
-		spin_unlock_irqrestore(&qdev->fb_workqueue_spinlock, flags);
 	}
 	spin_unlock_irqrestore(&qdev->fb_workqueue_spinlock, flags);
 }

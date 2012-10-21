@@ -2,7 +2,7 @@ airlied:
  drop unmap ioctl, userspace can use munmap
  reorder qxl_drm_command, uint64_t together.
  implement our own gamma, used for fades.
- no need to print a kernel git version, we have that in dmesg anyawys
+ no need to print a kernel git version, we have that in dmesg anyway.
 
 Allocation of on device memory in smaller chunks then PAGE_SIZE.
 For two users:
@@ -40,3 +40,8 @@ Misc
 // destroying? and can anyone use an allocated but not mapped memory from userspace??
 
 qxlfb_create_pinned_object - 1024x768 limit is actually used?
+
+============
+BROKEN STUFF
+============
+
