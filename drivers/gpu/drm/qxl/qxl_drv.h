@@ -206,6 +206,8 @@ struct qxl_fb_work_item {
 	};
 };
 
+#define QXL_MAX_SURFACES 8192
+
 struct qxl_device {
 	struct device			*dev;
 	struct drm_device		*ddev;
@@ -231,6 +233,8 @@ struct qxl_device {
 	struct qxl_mman		mman;
 	struct qxl_gem		gem;
 	struct qxl_mode_info mode_info;
+
+	struct qxl_surface	surfaces[QXL_MAX_SURFACES];
 
 	/*
 	 * last created framebuffer with fb_create
@@ -287,6 +291,22 @@ struct qxl_device {
 	wait_queue_head_t io_cmd_event;
 	struct work_struct client_monitors_config_work;
 };
+
+static inline unsigned
+qxl_surface_width(struct qxl_device *qdev, unsigned surface_id) {
+	return surface_id == 0 ? qdev->primary_width :
+		(surface_id < QXL_MAX_SURFACES &&
+		 qdev->surfaces[surface_id].data != 0 ?
+		 qdev->surfaces[surface_id].width : 0);
+}
+
+static inline unsigned
+qxl_surface_height(struct qxl_device *qdev, unsigned surface_id) {
+	return surface_id == 0 ? qdev->primary_height :
+		(surface_id < QXL_MAX_SURFACES &&
+		 qdev->surfaces[surface_id].data != 0 ?
+		 qdev->surfaces[surface_id].height : 0);
+}
 
 /* forward declaration for QXL_INFO_IO */
 void qxl_io_log(struct qxl_device *qdev, const char *fmt, ...);

@@ -242,6 +242,16 @@ done:
 void qxl_io_update_area(struct qxl_device *qdev, uint32_t surface_id,
 			const struct qxl_rect *area)
 {
+	unsigned surface_width = qxl_surface_width(qdev, surface_id);
+	unsigned surface_height = qxl_surface_height(qdev, surface_id);
+
+	if (area->left < 0 || area->top < 0 ||
+	    area->right > surface_width || area->bottom > surface_height) {
+		qxl_io_log(qdev, "%s: not doing area update for "
+			   "%d, (%d,%d,%d,%d)\n", surface_id, area->left,
+			   area->top, area->right, area->bottom);
+		return;
+	}
 	qdev->ram_header->update_area = *area;
 	qdev->ram_header->update_surface = surface_id;
 	wait_for_io_cmd(qdev, 0, QXL_IO_UPDATE_AREA_ASYNC);
