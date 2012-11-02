@@ -410,13 +410,12 @@ nouveau_do_suspend(struct drm_device *dev)
 	struct nouveau_cli *cli;
 	int ret;
 
-
-	NV_INFO(drm, "suspending display...\n");
+	NV_SUSPEND(drm, "suspending display...\n");
 	ret = nouveau_display_suspend(dev);
 	if (ret)
 		return ret;
 
-	NV_INFO(drm, "evicting buffers...\n");
+	NV_SUSPEND(drm, "evicting buffers...\n");
 	ttm_bo_evict_mm(&drm->ttm.bdev, TTM_PL_VRAM);
 
 	if (drm->fence && nouveau_fence(drm)->suspend) {
@@ -424,7 +423,7 @@ nouveau_do_suspend(struct drm_device *dev)
 			return -ENOMEM;
 	}
 
-	NV_INFO(drm, "suspending client object trees...\n");
+	NV_SUSPEND(drm, "suspending client object trees...\n");
 	list_for_each_entry(cli, &drm->clients, head) {
 		ret = nouveau_client_fini(&cli->base, true);
 		if (ret)
@@ -443,7 +442,7 @@ fail_client:
 		nouveau_client_init(&cli->base);
 	}
 
-	NV_INFO(drm, "resuming display...\n");
+	NV_SUSPEND(drm, "resuming display...\n");
 	nouveau_display_resume(dev);
 	return ret;
 }
@@ -459,6 +458,7 @@ int nouveau_pmops_suspend(struct device *dev)
 
 	nouveau_fbcon_set_suspend(drm_dev, 1);
 
+	nv_suspend_set_printk_level(NV_DBG_INFO);
 	ret = nouveau_do_suspend(drm_dev);
 	if (ret)
 		return ret;
@@ -466,6 +466,7 @@ int nouveau_pmops_suspend(struct device *dev)
 	pci_save_state(pdev);
 	pci_disable_device(pdev);
 	pci_set_power_state(pdev, PCI_D3hot);
+	nv_suspend_set_printk_level(NV_DBG_DEBUG);
 
 	return 0;
 }
@@ -476,11 +477,11 @@ nouveau_do_resume(struct drm_device *dev)
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nouveau_cli *cli;
 
-	NV_INFO(drm, "re-enabling device...\n");
+	NV_SUSPEND(drm, "re-enabling device...\n");
 
 	nouveau_agp_reset(drm);
 
-	NV_INFO(drm, "resuming client object trees...\n");
+	NV_SUSPEND(drm, "resuming client object trees...\n");
 	nouveau_client_init(&drm->client.base);
 	nouveau_agp_init(drm);
 
@@ -495,7 +496,7 @@ nouveau_do_resume(struct drm_device *dev)
 	nouveau_irq_postinstall(dev);
 	nouveau_pm_resume(dev);
 
-	NV_INFO(drm, "resuming display...\n");
+	NV_SUSPEND(drm, "resuming display...\n");
 	nouveau_display_repin(dev);
 
 	return 0;
@@ -517,13 +518,17 @@ int nouveau_pmops_resume(struct device *dev)
 		return ret;
 	pci_set_master(pdev);
 
+	nv_suspend_set_printk_level(NV_DBG_INFO);
 	ret = nouveau_do_resume(drm_dev);
-	if (ret)
+	if (ret) {
+		nv_suspend_set_printk_level(NV_DBG_DEBUG);
 		return ret;
+	}
 
 	nouveau_fbcon_set_suspend(drm_dev, 0);
 	nouveau_fbcon_zfill_all(drm_dev);
 	nouveau_display_resume(drm_dev);
+	nv_suspend_set_printk_level(NV_DBG_DEBUG);
 	return 0;
 }
 
@@ -531,10 +536,14 @@ static int nouveau_pmops_freeze(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	int ret;
 
+	nv_suspend_set_printk_level(NV_DBG_INFO);
 	nouveau_fbcon_set_suspend(drm_dev, 1);
 
-	return nouveau_do_suspend(drm_dev);
+	ret = nouveau_do_suspend(drm_dev);
+	nv_suspend_set_printk_level(NV_DBG_DEBUG);
+	return ret;
 }
 
 static int nouveau_pmops_thaw(struct device *dev)
@@ -543,12 +552,16 @@ static int nouveau_pmops_thaw(struct device *dev)
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 	int ret;
 
+	nv_suspend_set_printk_level(NV_DBG_INFO);
 	ret = nouveau_do_resume(drm_dev);
-	if (ret)
+	if (ret) {
+		nv_suspend_set_printk_level(NV_DBG_DEBUG);
 		return ret;
+	}
 	nouveau_fbcon_set_suspend(drm_dev, 0);
 	nouveau_fbcon_zfill_all(drm_dev);
 	nouveau_display_resume(drm_dev);
+	nv_suspend_set_printk_level(NV_DBG_DEBUG);
 	return 0;
 }
 
