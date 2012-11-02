@@ -244,16 +244,17 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 	int ret;
 	enum drm_connector_status conn_status = connector_status_disconnected;
 
-	ret = pm_runtime_get_sync(connector->dev->dev);
-	if (ret < 0)
-		return ret;
-
 	/* Cleanup the previous EDID block. */
 	if (nv_connector->edid) {
 		drm_mode_connector_update_edid_property(connector, NULL);
 		kfree(nv_connector->edid);
 		nv_connector->edid = NULL;
 	}
+
+	ret = pm_runtime_get_sync(connector->dev->dev);
+	if (ret < 0)
+		return conn_status;
+
 
 	i2c = nouveau_connector_ddc_detect(connector, &nv_encoder);
 	if (i2c) {
