@@ -70,6 +70,10 @@ MODULE_PARM_DESC(modeset, "enable driver");
 static int nouveau_modeset = -1;
 module_param_named(modeset, nouveau_modeset, int, 0400);
 
+MODULE_PARM_DESC(runpm, "disable (0), force enable (1), optimus only default (-1)");
+static int nouveau_runtime_pm = -1;
+module_param_named(runpm, nouveau_runtime_pm, int, 0400);
+
 static struct drm_driver driver;
 
 static u64
@@ -339,12 +343,14 @@ nouveau_drm_load(struct drm_device *dev, unsigned long flags)
 	nouveau_accel_init(drm);
 	nouveau_fbcon_init(dev);
 
-	pm_runtime_use_autosuspend(dev->dev);
-	pm_runtime_set_autosuspend_delay(dev->dev, 5000);
-	pm_runtime_set_active(dev->dev);
-	pm_runtime_allow(dev->dev);
-	pm_runtime_mark_last_busy(dev->dev);
-	pm_runtime_put_autosuspend(dev->dev);
+	if (nouveau_runtime_pm != 0) {
+		pm_runtime_use_autosuspend(dev->dev);
+		pm_runtime_set_autosuspend_delay(dev->dev, 5000);
+		pm_runtime_set_active(dev->dev);
+		pm_runtime_allow(dev->dev);
+		pm_runtime_mark_last_busy(dev->dev);
+		pm_runtime_put_autosuspend(dev->dev);
+	}
 	return 0;
 
 fail_dispinit:
@@ -755,7 +761,9 @@ static int nouveau_pmops_runtime_suspend(struct device *dev)
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 	int ret;
-	printk("runtime suspend called\n");
+
+	if (nouveau_runtime_pm == 0)
+		return -EINVAL;
 
 	drm_dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
 	drm_kms_helper_poll_disable(drm_dev);
@@ -774,7 +782,10 @@ static int nouveau_pmops_runtime_resume(struct device *dev)
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 	int ret;
-	printk("runtime resume called\n");
+
+	if (nouveau_runtime_pm == 0)
+		return -EINVAL;
+
 	drm_dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
 
 	pci_set_power_state(pdev, PCI_D0);
@@ -799,8 +810,11 @@ static int nouveau_pmops_runtime_idle(struct device *dev)
 	struct nouveau_drm *drm = nouveau_drm(drm_dev);
 	struct drm_crtc *crtc;
 
+	if (nouveau_runtime_pm == 0)
+		return -EBUSY;
+
 	/* are we optimus enabled? */
-	if (!nouveau_is_optimus() && !nouveau_is_v1_dsm()) {
+	if (nouveau_runtime_pm == -1 && !nouveau_is_optimus() && !nouveau_is_v1_dsm()) {
 		DRM_DEBUG_DRIVER("failing to power off - not optimus\n");
 		return -EBUSY;
 	}
