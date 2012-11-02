@@ -826,8 +826,6 @@ static int nouveau_pmops_runtime_idle(struct device *dev)
 			return -EBUSY;
 		}
 	}
-	printk("runtime idle called\n");
-	WARN_ON(1);
 	return 0;
 }
 
