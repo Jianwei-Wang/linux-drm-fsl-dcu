@@ -375,7 +375,7 @@ nouveau_drm_unload(struct drm_device *dev)
 {
 	struct nouveau_drm *drm = nouveau_drm(dev);
 
-	pm_runtime_get_noresume(dev->dev);
+	pm_runtime_get_sync(dev->dev);
 	nouveau_fbcon_fini(dev);
 	nouveau_accel_fini(drm);
 
@@ -663,7 +663,8 @@ long nouveau_drm_ioctl(struct file *filp,
 	struct drm_device *dev;
 	long ret;
 	dev = file_priv->minor->dev;
-	ret = pm_runtime_get(dev->dev);
+
+	ret = pm_runtime_get_sync(dev->dev);
 	if (ret < 0)
 		return ret;
 
