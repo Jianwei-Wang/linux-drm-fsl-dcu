@@ -84,7 +84,7 @@ nouveau_vga_init(struct nouveau_drm *drm)
 	vga_client_register(dev->pdev, dev, NULL, nouveau_vga_set_decode);
 	vga_switcheroo_register_client(dev->pdev, &nouveau_switcheroo_ops, nouveau_is_optimus() || nouveau_is_v1_dsm());
 
-	if (nouveau_is_v1_dsm())
+	if (nouveau_is_v1_dsm() && !nouveau_is_optimus())
 		vga_switcheroo_init_domain_pm_ops(drm->dev->dev, &drm->vga_pm_domain);
 }
 
