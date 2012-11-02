@@ -58,6 +58,8 @@ nouveau_cli(struct drm_file *fpriv)
 	return fpriv ? fpriv->driver_priv : NULL;
 }
 
+extern int nouveau_runtime_pm;
+
 struct nouveau_drm {
 	struct nouveau_cli client;
 	struct drm_device *dev;
