@@ -2,6 +2,7 @@
 #include <ttm/ttm_bo_api.h>
 #include <ttm/ttm_bo_driver.h>
 #include <ttm/ttm_placement.h>
+#include <ttm/ttm_page_alloc.h>
 #include <ttm/ttm_module.h>
 #include <drm/drmP.h>
 #include <drm/drm.h>
@@ -151,11 +152,17 @@ static int qxl_bo_man_get_node(struct ttm_mem_type_manager *man,
 					       mman.bdev);
 	int ret;
 	int res = 0;
+	int count_loops = 0;
 
 	ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
 	while (unlikely(ret || mem->mm_node == NULL)) {
 		qxl_io_notify_oom(qdev);
 		res += qxl_garbage_collect(qdev);
+		if (res == 0)
+		  mdelay(10);
+		count_loops++;
+		if (count_loops == 2)
+		  return 0;
 		/* TODO - sleep here */
 		ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
 	}
@@ -322,6 +329,25 @@ static struct ttm_backend_func qxl_backend_func = {
 	.destroy = &qxl_ttm_backend_destroy,
 };
 
+static int qxl_ttm_tt_populate(struct ttm_tt *ttm)
+{
+	int r;
+
+	if (ttm->state != tt_unpopulated)
+		return 0;
+
+	r = ttm_pool_populate(ttm);
+	if (r) {
+		return r;
+	}
+
+	return 0;
+}
+
+static void qxl_ttm_tt_unpopulate(struct ttm_tt *ttm)
+{
+	ttm_pool_unpopulate(ttm);
+}
 
 struct ttm_tt *qxl_ttm_tt_create(struct ttm_bo_device *bdev,
 				 unsigned long size, uint32_t page_flags,
@@ -346,6 +372,8 @@ struct ttm_tt *qxl_ttm_tt_create(struct ttm_bo_device *bdev,
 
 static struct ttm_bo_driver qxl_bo_driver = {
 	.ttm_tt_create = &qxl_ttm_tt_create,
+	.ttm_tt_populate = &qxl_ttm_tt_populate,
+	.ttm_tt_unpopulate = &qxl_ttm_tt_unpopulate,
 	.invalidate_caches = &qxl_invalidate_caches,
 	.init_mem_type = &qxl_init_mem_type,
 	.evict_flags = &qxl_evict_flags,
