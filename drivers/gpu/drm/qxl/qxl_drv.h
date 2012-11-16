@@ -30,6 +30,8 @@
 #define DRIVER_PATCHLEVEL 0
 
 #define QXL_NUM_OUTPUTS 1
+ 
+#define QXL_DEBUGFS_MAX_COMPONENTS		32
 
 extern int qxl_log_level;
 extern int qxl_debug_disable_fb;
@@ -206,6 +208,20 @@ struct qxl_fb_work_item {
 	};
 };
 
+/*
+ * Debugfs
+ */
+struct qxl_debugfs {
+	struct drm_info_list	*files;
+	unsigned		num_files;
+};
+
+int qxl_debugfs_add_files(struct qxl_device *rdev,
+			     struct drm_info_list *files,
+			     unsigned nfiles);
+int qxl_debugfs_fence_init(struct qxl_device *rdev);
+
+
 #define QXL_MAX_SURFACES 8192
 
 struct qxl_device {
@@ -290,6 +306,10 @@ struct qxl_device {
 	wait_queue_head_t cursor_event;
 	wait_queue_head_t io_cmd_event;
 	struct work_struct client_monitors_config_work;
+
+	/* debugfs */
+	struct qxl_debugfs	debugfs[QXL_DEBUGFS_MAX_COMPONENTS];
+	unsigned 		debugfs_count;
 };
 
 static inline unsigned
@@ -529,4 +549,7 @@ int qxl_fb_queue_imageblit(struct qxl_device *qdev,
 			   const struct fb_image *image);
 int qxl_fb_queue_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec);
 
+int qxl_debugfs_add_files(struct qxl_device *qdev,
+			  struct drm_info_list *files,
+			  unsigned nfiles);
 #endif

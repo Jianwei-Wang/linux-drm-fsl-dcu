@@ -10,6 +10,8 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+static int qxl_ttm_debugfs_init(struct qxl_device *qdev);
+
 static struct qxl_device *qxl_get_qdev(struct ttm_bo_device *bdev)
 {
 	struct qxl_mman *mman;
@@ -419,7 +421,12 @@ int qxl_ttm_init(struct qxl_device *qdev)
 	DRM_INFO("qxl: %luM of IO pages memory ready (VRAM domain)\n",
 		 ((unsigned)num_io_pages * PAGE_SIZE) / (1024 * 1024));
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
-		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
+		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping; 
+	r = qxl_ttm_debugfs_init(qdev);
+	if (r) {
+		DRM_ERROR("Failed to init debugfs\n");
+		return r;
+	}
 	return 0;
 }
 
@@ -430,4 +437,47 @@ void qxl_ttm_fini(struct qxl_device *qdev)
 	ttm_bo_device_release(&qdev->mman.bdev);
 	qxl_ttm_global_fini(qdev);
 	DRM_INFO("qxl: ttm finalized\n");
+}
+
+
+#define QXL_DEBUGFS_MEM_TYPES 2
+
+#if defined(CONFIG_DEBUG_FS)
+static int qxl_mm_dump_table(struct seq_file *m, void *data)
+{
+	struct drm_info_node *node = (struct drm_info_node *)m->private;
+	struct drm_mm *mm = (struct drm_mm *)node->info_ent->data;
+	struct drm_device *dev = node->minor->dev;
+	struct qxl_device *rdev = dev->dev_private;
+	int ret;
+	struct ttm_bo_global *glob = rdev->mman.bdev.glob;
+
+	spin_lock(&glob->lru_lock);
+	ret = drm_mm_dump_table(m, mm);
+	spin_unlock(&glob->lru_lock);
+	return ret;
+}
+#endif
+
+static int qxl_ttm_debugfs_init(struct qxl_device *qdev)
+{
+  	static struct drm_info_list qxl_mem_types_list[QXL_DEBUGFS_MEM_TYPES];
+	static char qxl_mem_types_names[QXL_DEBUGFS_MEM_TYPES][32];
+	unsigned i;
+
+	for (i = 0; i < QXL_DEBUGFS_MEM_TYPES; i++) {
+		if (i == 0)
+			sprintf(qxl_mem_types_names[i], "qxl_mem_mm");
+		else
+			sprintf(qxl_mem_types_names[i], "qxl_surf_mm");
+		qxl_mem_types_list[i].name = qxl_mem_types_names[i];
+		qxl_mem_types_list[i].show = &qxl_mm_dump_table;
+		qxl_mem_types_list[i].driver_features = 0;
+		if (i == 0)
+			qxl_mem_types_list[i].data = qdev->mman.bdev.man[TTM_PL_VRAM].priv;
+		else
+			qxl_mem_types_list[i].data = qdev->mman.bdev.man[TTM_PL_PRIV0].priv;
+
+	}
+	return qxl_debugfs_add_files(qdev, qxl_mem_types_list, i);
 }
