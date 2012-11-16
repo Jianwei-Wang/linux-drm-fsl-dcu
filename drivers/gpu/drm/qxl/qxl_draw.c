@@ -93,7 +93,7 @@ qxl_release_free_locked(struct qxl_device *qdev,
 		QXL_INFO(qdev, "release %llx\n",
 			release->bos[i]->tbo.addr_space_offset
 						- DRM_FILE_OFFSET);
-		qxl_bo_free(release->bos[i]);
+		qxl_bo_unref(&release->bos[i]);
 	}
 	idr_remove(&qdev->release_idr, release->id);
 	kfree(release);

@@ -139,6 +139,12 @@ void qxl_bo_unref(struct qxl_bo **bo)
 		*bo = NULL;
 }
 
+struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo)
+{
+	ttm_bo_reference(&bo->tbo);
+	return bo;
+}
+
 int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 {
 	int r, i;

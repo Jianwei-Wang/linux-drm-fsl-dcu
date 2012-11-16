@@ -1,4 +1,5 @@
 #include "qxl_drv.h"
+#include "qxl_object.h"
 
 /*
  * TODO: allocating a new gem(in qxl_bo) for each request.
@@ -121,6 +122,7 @@ apply_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
 			dst, dst_off, qdev->main_mem_slot);
 }
 
+/* return holding the reference to this object */
 struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 		struct drm_file *file_priv, uint64_t handle,
 		struct qxl_bo *handle_0_bo)
@@ -136,7 +138,6 @@ struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 		return NULL;
 	}
 	qobj = gem_to_qxl_bo(gobj);
-	drm_gem_object_unreference_unlocked(gobj);
 	return qobj;
 }
 
@@ -223,6 +224,14 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				return -EINVAL;
 			apply_reloc(qdev, reloc_src_bo, reloc.src_offset,
 				    reloc_dst_bo, reloc.dst_offset);
+
+			if (reloc_dst_bo != cmd_bo) {
+				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
+				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
+			}
+
+			if (reloc_src_bo != cmd_bo)
+				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 		}
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */

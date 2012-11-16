@@ -16,7 +16,7 @@ void qxl_gem_object_free(struct drm_gem_object *gobj)
 
 	if (qobj) {
 		/* or unref? */
-		qxl_bo_free(qobj);
+		qxl_bo_unref(&qobj);
 	}
 }
 

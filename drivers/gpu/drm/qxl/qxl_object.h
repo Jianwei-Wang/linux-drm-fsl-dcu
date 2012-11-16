@@ -70,6 +70,7 @@ extern int qxl_bo_create(struct qxl_device *qdev,
 extern void qxl_bo_free(struct qxl_bo *bo);
 extern int qxl_bo_kmap(struct qxl_bo *bo, void **ptr);
 extern void qxl_bo_kunmap(struct qxl_bo *bo);
+extern struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo);
 extern void qxl_bo_unref(struct qxl_bo **bo);
 extern int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr);
 extern int qxl_bo_unpin(struct qxl_bo *bo);
