@@ -265,6 +265,36 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
+static int qxl_getparam_ioctl(struct drm_device *dev, void *data,
+		       struct drm_file *file_priv)
+{
+	struct qxl_device *qdev = dev->dev_private;
+	struct drm_qxl_getparam *param = data;
+
+	return 0;
+}
+
+static int qxl_clientcap_ioctl(struct drm_device *dev, void *data,
+				  struct drm_file *file_priv)
+{
+	struct qxl_device *qdev = dev->dev_private;
+	struct drm_qxl_clientcap *param = data;
+	int byte, idx;
+
+	byte = param->index / 8;
+	idx = param->index % 8;
+
+	if (qdev->pdev->revision < 4)
+	    return -ENOSYS;
+
+	if (byte > 58)
+	    return -ENOSYS;
+
+	if (qdev->rom->client_capabilities[byte] & (1 << idx))
+	    return 0;
+	return -ENOSYS;
+}
+
 struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC, qxl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(QXL_INCREF, qxl_incref_ioctl, DRM_AUTH|DRM_UNLOCKED),
@@ -279,6 +309,10 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_EXECBUFFER, qxl_execbuffer_ioctl,
 							DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(QXL_UPDATE_AREA, qxl_update_area_ioctl,
+							DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(QXL_GETPARAM, qxl_getparam_ioctl,
+							DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(QXL_CLIENTCAP, qxl_clientcap_ioctl,
 							DRM_AUTH|DRM_UNLOCKED),
 };
 

@@ -21,6 +21,8 @@
 #define DRM_QXL_MAP         0x03
 #define DRM_QXL_EXECBUFFER  0x04
 #define DRM_QXL_UPDATE_AREA 0x05
+#define DRM_QXL_GETPARAM    0x06
+#define DRM_QXL_CLIENTCAP   0x07
 
 enum {
 	QXL_ALLOC_TYPE_DATA,
@@ -82,6 +84,16 @@ struct drm_qxl_update_area {
 	uint32_t right;
 };
 
+struct drm_qxl_getparam {
+	uint64_t param;
+	uint64_t value;
+};
+
+/* these are one bit values */
+struct drm_qxl_clientcap {
+	uint32_t index;
+};
+
 #define DRM_IOCTL_QXL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC, struct drm_qxl_alloc)
 
@@ -102,4 +114,11 @@ struct drm_qxl_update_area {
 	DRM_IOW(DRM_COMMAND_BASE + DRM_QXL_UPDATE_AREA,\
 		struct drm_qxl_update_area)
 
+#define DRM_IOCTL_QXL_GETPARAM \
+	DRM_IOW(DRM_COMMAND_BASE + DRM_QXL_GETPARAM,\
+		struct drm_qxl_getparam)
+
+#define DRM_IOCTL_QXL_CLIENTCAP \
+	DRM_IOW(DRM_COMMAND_BASE + DRM_QXL_CLIENTCAP,\
+		struct drm_qxl_clientcap)
 #endif
