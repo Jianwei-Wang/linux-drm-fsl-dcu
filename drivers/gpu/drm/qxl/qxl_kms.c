@@ -185,6 +185,7 @@ int qxl_device_init(struct qxl_device *qdev,
 void qxl_device_fini(struct qxl_device *qdev)
 {
 	qxl_ring_free(qdev->command_ring);
+	qxl_ring_free(qdev->cursor_ring);
 	qxl_ring_free(qdev->release_ring);
 	qxl_bo_fini(qdev);
 	iounmap(qdev->ram_header);
