@@ -140,19 +140,6 @@ void qxl_ring_wait_idle(struct qxl_ring *ring)
 	spin_unlock_irqrestore(&ring->lock, flags);
 }
 
-void qxl_bo_free(struct qxl_bo *bo)
-{
-	int ret;
-	ret = qxl_bo_reserve(bo, false);
-	if (!ret) {
-		qxl_bo_kunmap(bo);
-		qxl_bo_unpin(bo);
-		qxl_bo_unreserve(bo);
-	}
-	drm_gem_object_release(&bo->gem_base);
-	qxl_bo_unref(&bo);
-}
-
 struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id)
 {

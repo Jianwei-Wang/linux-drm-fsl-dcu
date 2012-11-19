@@ -280,7 +280,7 @@ qxl_debugfs_bo_test(struct seq_file *m, void *data)
 		return 0;
 	}
 	/* TODO - pin test as well. qxl_allocnf test generally. */
-	qxl_bo_free(bo);
+	qxl_bo_unref(&bo);
 	return 0;
 }
 

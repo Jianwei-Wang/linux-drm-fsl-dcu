@@ -67,7 +67,6 @@ extern int qxl_bo_create(struct qxl_device *qdev,
 			 unsigned long size,
 			 bool kernel, u32 domain,
 			 struct qxl_bo **bo_ptr);
-extern void qxl_bo_free(struct qxl_bo *bo);
 extern int qxl_bo_kmap(struct qxl_bo *bo, void **ptr);
 extern void qxl_bo_kunmap(struct qxl_bo *bo);
 extern struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo);
