@@ -82,8 +82,8 @@ release_fail:
 }
 
 void
-qxl_release_free_locked(struct qxl_device *qdev,
-			struct drm_qxl_release *release)
+qxl_release_free(struct qxl_device *qdev,
+		 struct drm_qxl_release *release)
 {
 	int i;
 
@@ -95,7 +95,9 @@ qxl_release_free_locked(struct qxl_device *qdev,
 						- DRM_FILE_OFFSET);
 		qxl_bo_unref(&release->bos[i]);
 	}
+	spin_lock(&qdev->release_idr_lock);
 	idr_remove(&qdev->release_idr, release->id);
+	spin_unlock(&qdev->release_idr_lock);
 	kfree(release);
 }
 

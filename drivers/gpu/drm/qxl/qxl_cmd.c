@@ -145,7 +145,9 @@ struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 {
 	struct drm_qxl_release *release;
 
+	spin_lock(&qdev->release_idr_lock);
 	release = idr_find(&qdev->release_idr, id);
+	spin_unlock(&qdev->release_idr_lock);
 	if (!release) {
 		DRM_ERROR("failed to find id in release_idr\n");
 		return NULL;
@@ -165,7 +167,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	int ret;
 	union qxl_release_info *info;
 	struct qxl_bo *bo;
-	spin_lock(&qdev->release_idr_lock);
+
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
 		QXL_INFO(qdev, "popped %lld\n", id);
 		while (id) {
@@ -193,11 +195,11 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			}
 			id = info->next;
 			qxl_bo_kunmap(bo);
-			qxl_release_free_locked(qdev, release);
+			qxl_release_free(qdev, release);
 			++i;
 		}
 	}
-	spin_unlock(&qdev->release_idr_lock);
+
 	QXL_INFO(qdev, "%s: %lld\n", __func__, i);
 
 	return i;

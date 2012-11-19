@@ -518,8 +518,8 @@ uint64_t
 qxl_release_alloc(struct qxl_device *qdev, int type,
 		  struct drm_qxl_release **ret);
 
-void qxl_release_free_locked(struct qxl_device *qdev,
-			     struct drm_qxl_release *release);
+void qxl_release_free(struct qxl_device *qdev,
+		      struct drm_qxl_release *release);
 void qxl_release_add_res(struct qxl_device *qdev,
 			 struct drm_qxl_release *release,
 			 struct qxl_bo *bo);
