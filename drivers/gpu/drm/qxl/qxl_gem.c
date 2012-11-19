@@ -73,7 +73,6 @@ int qxl_gem_object_create_with_handle(struct qxl_device *qdev,
 	/* drop reference from allocate - handle holds it now */
 	drm_gem_object_unreference_unlocked(gobj);
 	*qobj = gem_to_qxl_bo(gobj);
-	qxl_bo_kmap(*qobj, NULL);
 	return 0;
 }
 

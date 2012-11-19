@@ -162,8 +162,9 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	struct drm_qxl_release *release;
 	uint64_t id;
 	int i = 0;
+	int ret;
 	union qxl_release_info *info;
-
+	struct qxl_bo *bo;
 	mutex_lock(&qdev->release_idr_mutex);
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
 		QXL_INFO(qdev, "popped %lld\n", id);
@@ -171,9 +172,15 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			release = qxl_release_from_id_locked(qdev, id);
 			if (release == NULL)
 				break;
-			info = (union qxl_release_info *)release->bos[0]->kptr;
+			bo = release->bos[0];
+
 			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
 				 info->next);
+			ret = qxl_bo_kmap(bo, &info);
+			if (ret) {
+				DRM_ERROR("failed to map release\n");
+				return -EINVAL;
+			}
 
 			switch (release->type) {
 			case QXL_RELEASE_DRAWABLE:
@@ -185,6 +192,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 				break;
 			}
 			id = info->next;
+			qxl_bo_kunmap(bo);
 			qxl_release_free_locked(qdev, release);
 			++i;
 		}
