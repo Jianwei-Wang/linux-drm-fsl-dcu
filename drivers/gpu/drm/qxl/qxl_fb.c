@@ -211,7 +211,7 @@ static void qxl_fb_fillrect(struct fb_info *info,
 	qxl_draw_fill_rec.rect = rect;
 	qxl_draw_fill_rec.color = color;
 	qxl_draw_fill_rec.rop = rop;
-	if (in_interrupt()) {
+	if (in_interrupt() || in_atomic()) {
 		qxl_io_log(qdev,
 			"%s: TODO use RCU, mysterious locks with spin_lock\n",
 			__func__);
@@ -334,7 +334,7 @@ static void qxl_fb_imageblit(struct fb_info *info,
 		QXL_INFO_ONCE(qfbdev->qdev, "%s: skipping\n", __func__);
 		return;
 	}
-	if (in_interrupt()) {
+	if (in_interrupt() || in_atomic()) {
 		/* we cannot do any ttm_bo allocation since that will fail on
 		 * ioremap_wc..__get_vm_area_node, so queue the work item
 		 * instead This can happen from printk inside an interrupt
@@ -367,7 +367,7 @@ static void qxl_fb_do_work_items(struct qxl_device *qdev)
 	struct qxl_fb_work_item *n;
 	unsigned long flags;
 
-	if (in_interrupt()) {
+	if (in_interrupt() || in_atomic()) {
 		qxl_io_log(qdev, "%s: wtf - should not happen\n", __func__);
 		return;
 	}

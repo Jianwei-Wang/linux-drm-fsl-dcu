@@ -79,8 +79,13 @@ void qxl_ring_push(struct qxl_ring *ring,
 		header->notify_on_cons = header->cons + 1;
 		mb();
 		spin_unlock_irqrestore(&ring->lock, flags);
-		wait_event_interruptible(*ring->push_event,
-					 qxl_check_header(ring));
+		if (in_atomic()) {
+			while (!qxl_check_header(ring))
+				udelay(1);
+			
+		} else
+			wait_event_interruptible(*ring->push_event,
+						 qxl_check_header(ring));
 		spin_lock_irqsave(&ring->lock, flags);
 	}
 
