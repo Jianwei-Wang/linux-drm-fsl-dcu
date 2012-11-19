@@ -1,5 +1,4 @@
 #include "qxl_drv.h"
-#include "qxl_drm.h"
 #include "qxl_object.h"
 
 static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)

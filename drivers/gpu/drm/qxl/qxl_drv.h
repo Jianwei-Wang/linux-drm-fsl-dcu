@@ -16,7 +16,7 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 
-#include "qxl_drm.h"
+#include <drm/qxl_drm.h>
 #include "qxl_dev.h"
 
 #define DRIVER_AUTHOR		"Dave Airlie"

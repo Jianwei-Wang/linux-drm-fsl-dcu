@@ -34,7 +34,6 @@
 #include "drm/drm.h"
 #include "drm/drm_crtc.h"
 #include "drm/drm_crtc_helper.h"
-#include "qxl_drm.h"
 #include "qxl_drv.h"
 
 #include "qxl_object.h"
