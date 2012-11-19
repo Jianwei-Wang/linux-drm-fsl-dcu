@@ -46,16 +46,10 @@ int qxl_mode_dumb_mmap(struct drm_file *file_priv,
 
 	BUG_ON(!offset_p);
 	gobj = drm_gem_object_lookup(dev, file_priv, handle);
-	DRM_INFO("%s: %d, %s\n", __func__, handle, gobj ? "success" : "failed");
 	if (gobj == NULL)
 		return -ENOENT;
 	qobj = gem_to_qxl_bo(gobj);
 	*offset_p = qxl_bo_mmap_offset(qobj);
-	DRM_INFO("%s: %p, %lld| %lld, %ld, %ld\n", __func__, gobj, *offset_p,
-		qobj->tbo.addr_space_offset,
-		qobj->tbo.vm_node ?
-		qobj->tbo.vm_node->start : -1,
-		qobj->tbo.num_pages);
 	drm_gem_object_unreference_unlocked(gobj);
 	return 0;
 }
