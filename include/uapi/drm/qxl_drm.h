@@ -84,6 +84,7 @@ struct drm_qxl_update_area {
 	uint32_t right;
 };
 
+#define QXL_PARAM_NUM_SURFACES 1 /* rom->n_surfaces */
 struct drm_qxl_getparam {
 	uint64_t param;
 	uint64_t value;

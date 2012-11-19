@@ -271,6 +271,13 @@ static int qxl_getparam_ioctl(struct drm_device *dev, void *data,
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_getparam *param = data;
 
+	switch (param->param) {
+	case QXL_PARAM_NUM_SURFACES:
+		param->value = qdev->rom->n_surfaces;
+		break;
+	default:
+		return -EINVAL;
+	}
 	return 0;
 }
 
