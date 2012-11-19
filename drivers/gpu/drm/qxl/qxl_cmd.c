@@ -14,6 +14,7 @@ struct qxl_ring {
 	int			n_elements;
 	int			prod_notify;
 	wait_queue_head_t      *push_event;
+	spinlock_t             lock;
 };
 
 void qxl_ring_free(struct qxl_ring *ring)
@@ -40,21 +41,47 @@ qxl_ring_create(struct qxl_ring_header *header,
 	ring->prod_notify = prod_notify;
 	ring->push_event = push_event;
 
+	spin_lock_init(&ring->lock);
 	return ring;
 }
 
+static int qxl_check_header(struct qxl_ring *ring)
+{
+	int ret;
+	struct qxl_ring_header *header = &(ring->ring->header);
+	unsigned long flags;
+	spin_lock_irqsave(&ring->lock, flags);
+	ret = header->prod - header->cons < header->num_items;
+	spin_unlock_irqrestore(&ring->lock, flags);
+	return ret;
+}
+
+static int qxl_check_idle(struct qxl_ring *ring)
+{
+	int ret;
+	struct qxl_ring_header *header = &(ring->ring->header);
+	unsigned long flags;
+	spin_lock_irqsave(&ring->lock, flags);
+	ret = header->prod == header->cons;
+	spin_unlock_irqrestore(&ring->lock, flags);
+	return ret;
+}
+	
 void qxl_ring_push(struct qxl_ring *ring,
 		   const void *new_elt)
 {
 	struct qxl_ring_header *header = &(ring->ring->header);
 	uint8_t *elt;
 	int idx;
-
+	unsigned long flags;
+	spin_lock_irqsave(&ring->lock, flags);
 	if (header->prod - header->cons == header->num_items) {
 		header->notify_on_cons = header->cons + 1;
 		mb();
+		spin_unlock_irqrestore(&ring->lock, flags);
 		wait_event_interruptible(*ring->push_event,
-			header->prod - header->cons < header->num_items);
+					 qxl_check_header(ring));
+		spin_lock_irqsave(&ring->lock, flags);
 	}
 
 	idx = header->prod & (ring->n_elements - 1);
@@ -68,6 +95,8 @@ void qxl_ring_push(struct qxl_ring *ring,
 
 	if (header->prod == header->notify_on_prod)
 		outb(0, ring->prod_notify);
+
+	spin_unlock_irqrestore(&ring->lock, flags);
 }
 
 bool qxl_ring_pop(struct qxl_ring *ring,
@@ -76,9 +105,12 @@ bool qxl_ring_pop(struct qxl_ring *ring,
 	volatile struct qxl_ring_header *header = &(ring->ring->header);
 	volatile uint8_t *ring_elt;
 	int idx;
-
-	if (header->cons == header->prod)
+	unsigned long flags;
+	spin_lock_irqsave(&ring->lock, flags);
+	if (header->cons == header->prod) {
+		spin_unlock_irqrestore(&ring->lock, flags);
 		return false;
+	}
 
 	idx = header->cons & (ring->n_elements - 1);
 	ring_elt = ring->ring->elements + idx * ring->element_size;
@@ -87,19 +119,25 @@ bool qxl_ring_pop(struct qxl_ring *ring,
 
 	header->cons++;
 
+	spin_unlock_irqrestore(&ring->lock, flags);
 	return true;
 }
 
 void qxl_ring_wait_idle(struct qxl_ring *ring)
 {
 	struct qxl_ring_header *header = &(ring->ring->header);
+	unsigned long flags;
 
+	spin_lock_irqsave(&ring->lock, flags);
 	if (ring->ring->header.cons < ring->ring->header.prod) {
 		header->notify_on_cons = header->prod;
 		mb();
+		spin_unlock_irqrestore(&ring->lock, flags);
 		wait_event_interruptible(*ring->push_event,
-			header->prod == header->cons);
+					 qxl_check_idle(ring));
+		spin_lock_irqsave(&ring->lock, flags);
 	}
+	spin_unlock_irqrestore(&ring->lock, flags);
 }
 
 void qxl_bo_free(struct qxl_bo *bo)
