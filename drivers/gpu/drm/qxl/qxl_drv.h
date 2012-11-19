@@ -285,7 +285,7 @@ struct qxl_device {
 	uint8_t		vram_mem_slot;
 
 	struct idr	release_idr;
-	struct mutex	release_idr_mutex;
+	spinlock_t release_idr_lock;
 	struct mutex	async_io_mutex;
 
 	/* framebuffer. workqueue to avoid bo allocation in interrupt context */

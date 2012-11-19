@@ -149,7 +149,7 @@ int qxl_device_init(struct qxl_device *qdev,
 			GFP_KERNEL);
 
 	idr_init(&qdev->release_idr);
-	mutex_init(&qdev->release_idr_mutex);
+	spin_lock_init(&qdev->release_idr_lock);
 	mutex_init(&qdev->async_io_mutex);
 
 	/* reset the device into a known state - no memslots, no primary

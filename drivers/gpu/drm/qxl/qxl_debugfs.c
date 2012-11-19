@@ -141,9 +141,9 @@ qxl_debugfs_release(struct seq_file *m, void *data)
 
 	idr_data.m = m;
 	idr_data.total_bo = 0;
-	mutex_lock(&qdev->release_idr_mutex);
+	spin_lock(&qdev->release_idr_lock);
 	idr_for_each(&qdev->release_idr, idr_iter_fn, &idr_data);
-	mutex_unlock(&qdev->release_idr_mutex);
+	spin_unlock(&qdev->release_idr_lock);
 	seq_printf(m, "ring %d [%d,%d] (%d,%d)\n", r->num_items, r->prod,
 		   r->cons, r->notify_on_prod, r->notify_on_cons);
 	seq_printf(m, "collected %d, release bo's %d / %d ttm\n",

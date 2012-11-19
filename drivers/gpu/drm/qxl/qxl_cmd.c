@@ -165,7 +165,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	int ret;
 	union qxl_release_info *info;
 	struct qxl_bo *bo;
-	mutex_lock(&qdev->release_idr_mutex);
+	spin_lock(&qdev->release_idr_lock);
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
 		QXL_INFO(qdev, "popped %lld\n", id);
 		while (id) {
@@ -197,7 +197,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			++i;
 		}
 	}
-	mutex_unlock(&qdev->release_idr_mutex);
+	spin_unlock(&qdev->release_idr_lock);
 	QXL_INFO(qdev, "%s: %lld\n", __func__, i);
 
 	return i;
