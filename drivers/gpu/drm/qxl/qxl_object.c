@@ -9,6 +9,7 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	mutex_lock(&bo->qdev->gem.mutex);
 	list_del_init(&bo->list);
 	mutex_unlock(&bo->qdev->gem.mutex);
+	drm_gem_object_release(&bo->gem_base);
 	kfree(bo);
 }
 
