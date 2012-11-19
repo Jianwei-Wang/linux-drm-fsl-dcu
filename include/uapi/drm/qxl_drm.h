@@ -116,7 +116,7 @@ struct drm_qxl_clientcap {
 		struct drm_qxl_update_area)
 
 #define DRM_IOCTL_QXL_GETPARAM \
-	DRM_IOW(DRM_COMMAND_BASE + DRM_QXL_GETPARAM,\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_GETPARAM,\
 		struct drm_qxl_getparam)
 
 #define DRM_IOCTL_QXL_CLIENTCAP \
