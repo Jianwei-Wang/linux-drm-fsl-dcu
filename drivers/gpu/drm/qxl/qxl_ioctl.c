@@ -64,40 +64,6 @@ int qxl_alloc_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
-int qxl_incref_ioctl(struct drm_device *dev, void *data,
-		     struct drm_file *file_priv)
-{
-	struct drm_qxl_incref *incref = data;
-	struct drm_gem_object *gobj;
-
-	/* this takes a reference */
-	gobj = drm_gem_object_lookup(dev, file_priv, incref->handle);
-
-	if (!gobj) {
-		DRM_ERROR("%s: invalid handle %u\n", __func__, incref->handle);
-		return -EINVAL;
-	}
-	return 0;
-}
-
-int qxl_decref_ioctl(struct drm_device *dev, void *data,
-		     struct drm_file *file_priv)
-{
-	struct drm_qxl_decref *decref = data;
-	struct drm_gem_object *gobj;
-
-	gobj = drm_gem_object_lookup(dev, file_priv, decref->handle);
-	if (!gobj) {
-		DRM_ERROR("%s: invalid handle %u\n", __func__, decref->handle);
-		return -EINVAL;
-	}
-	/* remove reference taken by lookup */
-	drm_gem_object_unreference_unlocked(gobj);
-
-	drm_gem_object_unreference_unlocked(gobj);
-	return 0;
-}
-
 int qxl_map_ioctl(struct drm_device *dev, void *data,
 		  struct drm_file *file_priv)
 {
@@ -308,8 +274,6 @@ static int qxl_clientcap_ioctl(struct drm_device *dev, void *data,
 
 struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC, qxl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(QXL_INCREF, qxl_incref_ioctl, DRM_AUTH|DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(QXL_DECREF, qxl_decref_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 	/* NB: QXL_MAP doesn't really map, it is similar to DUMPMAP in that it
 	 * provides the caller (userspace) with an offset to give to the mmap
