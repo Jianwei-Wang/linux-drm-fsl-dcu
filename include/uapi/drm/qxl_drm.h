@@ -37,6 +37,7 @@ struct drm_qxl_alloc {
 struct drm_qxl_map {
 	uint64_t offset; /* use for mmap system call */
 	uint32_t handle;
+	uint32_t pad;
 };
 
 /*
@@ -51,11 +52,12 @@ struct drm_qxl_reloc {
 };
 
 struct drm_qxl_command {
+	uint64_t	 __user command; /* void* */
+	uint64_t	 __user relocs; /* struct drm_qxl_reloc* */
 	uint32_t		type;
 	uint32_t		command_size;
-	uint64_t	 __user command; /* void* */
 	uint32_t		relocs_num;
-	uint64_t	 __user relocs; /* struct drm_qxl_reloc* */
+	uint32_t                pad;
 };
 
 /* XXX: call it drm_qxl_commands? */
