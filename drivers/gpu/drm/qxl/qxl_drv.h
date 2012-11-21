@@ -310,6 +310,8 @@ struct qxl_device {
 	/* debugfs */
 	struct qxl_debugfs	debugfs[QXL_DEBUGFS_MAX_COMPONENTS];
 	unsigned 		debugfs_count;
+
+	struct mutex		update_area_mutex;
 };
 
 static inline unsigned

@@ -292,9 +292,11 @@ void qxl_io_update_area(struct qxl_device *qdev, uint32_t surface_id,
 			   area->top, area->right, area->bottom);
 		return;
 	}
+	mutex_lock(&qdev->update_area_mutex);
 	qdev->ram_header->update_area = *area;
 	qdev->ram_header->update_surface = surface_id;
 	wait_for_io_cmd(qdev, 0, QXL_IO_UPDATE_AREA_ASYNC);
+	mutex_unlock(&qdev->update_area_mutex);
 }
 
 void qxl_io_notify_oom(struct qxl_device *qdev)
