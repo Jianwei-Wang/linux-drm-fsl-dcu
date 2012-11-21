@@ -183,7 +183,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 
 			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
 				 info->next);
-			ret = qxl_bo_kmap(bo, &info);
+			ret = qxl_bo_kmap(bo, (void **)&info);
 			if (ret) {
 				DRM_ERROR("failed to map release\n");
 				return -EINVAL;
