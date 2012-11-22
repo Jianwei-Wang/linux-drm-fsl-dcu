@@ -222,7 +222,6 @@ int qxl_debugfs_add_files(struct qxl_device *rdev,
 int qxl_debugfs_fence_init(struct qxl_device *rdev);
 
 
-#define QXL_MAX_SURFACES 8192
 
 struct qxl_device {
 	struct device			*dev;
@@ -249,8 +248,6 @@ struct qxl_device {
 	struct qxl_mman		mman;
 	struct qxl_gem		gem;
 	struct qxl_mode_info mode_info;
-
-	struct qxl_surface	surfaces[QXL_MAX_SURFACES];
 
 	/*
 	 * last created framebuffer with fb_create
@@ -312,22 +309,19 @@ struct qxl_device {
 	unsigned 		debugfs_count;
 
 	struct mutex		update_area_mutex;
+
+	struct idr	surf_id_idr;
+	spinlock_t surf_id_idr_lock;	
 };
 
 static inline unsigned
 qxl_surface_width(struct qxl_device *qdev, unsigned surface_id) {
-	return surface_id == 0 ? qdev->primary_width :
-		(surface_id < QXL_MAX_SURFACES &&
-		 qdev->surfaces[surface_id].data != 0 ?
-		 qdev->surfaces[surface_id].width : 0);
+	return surface_id == 0 ? qdev->primary_width : 0;
 }
 
 static inline unsigned
 qxl_surface_height(struct qxl_device *qdev, unsigned surface_id) {
-	return surface_id == 0 ? qdev->primary_height :
-		(surface_id < QXL_MAX_SURFACES &&
-		 qdev->surfaces[surface_id].data != 0 ?
-		 qdev->surfaces[surface_id].height : 0);
+	return surface_id == 0 ? qdev->primary_height : 0;
 }
 
 /* forward declaration for QXL_INFO_IO */
