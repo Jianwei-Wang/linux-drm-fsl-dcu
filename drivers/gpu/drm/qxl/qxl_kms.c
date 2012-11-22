@@ -244,3 +244,22 @@ out:
 	kfree(qdev);
 	return r;
 }
+
+int qxl_driver_open(struct drm_device *dev, struct drm_file *file)
+{
+	struct qxl_file_private *fpriv;
+
+	fpriv = kmalloc(sizeof(*fpriv), GFP_KERNEL);
+	if (!fpriv)
+		return -ENOMEM;
+
+	file->driver_priv = fpriv;
+	INIT_LIST_HEAD(&fpriv->surface_list);
+	return 0;
+}
+
+void qxl_driver_postclose(struct drm_device *dev, struct drm_file *file)
+{
+	struct qxl_file_private *fpriv = file->driver_priv;
+	kfree(fpriv);
+}

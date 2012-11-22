@@ -222,6 +222,9 @@ int qxl_debugfs_add_files(struct qxl_device *rdev,
 int qxl_debugfs_fence_init(struct qxl_device *rdev);
 
 
+struct qxl_file_private {
+	struct list_head surface_list;
+};
 
 struct qxl_device {
 	struct device			*dev;
@@ -332,6 +335,9 @@ extern int qxl_max_ioctl;
 
 int qxl_driver_load(struct drm_device *dev, unsigned long flags);
 int qxl_driver_unload(struct drm_device *dev);
+
+int qxl_driver_open(struct drm_device *dev, struct drm_file *file);
+void qxl_driver_postclose(struct drm_device *dev, struct drm_file *file);
 
 int qxl_modeset_init(struct qxl_device *qdev);
 void qxl_modeset_fini(struct qxl_device *qdev);
