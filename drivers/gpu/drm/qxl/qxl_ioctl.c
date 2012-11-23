@@ -92,6 +92,17 @@ apply_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
 	qxl_bo_kunmap(src);
 }
 
+static void
+apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
+		 struct qxl_drv_surface *surf)
+{
+	qxl_bo_kmap(src, NULL);
+
+	*(uint32_t *)(src->kptr + src_off) = surf->id;
+
+	qxl_bo_kunmap(src);
+}
+
 /* return holding the reference to this object */
 struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 		struct drm_file *file_priv, uint64_t handle,
@@ -184,24 +195,44 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				   __func__, i, reloc.src_handle,
 				   reloc.src_offset, reloc.dst_handle,
 				   reloc.dst_offset);
-			reloc_src_bo =
-				qxlhw_handle_to_bo(qdev, file_priv,
-						   reloc.src_handle, cmd_bo);
-			reloc_dst_bo =
-				qxlhw_handle_to_bo(qdev, file_priv,
-						   reloc.dst_handle, cmd_bo);
-			if (!reloc_src_bo || !reloc_dst_bo)
+			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
+				reloc_src_bo =
+					qxlhw_handle_to_bo(qdev, file_priv,
+							   reloc.src_handle, cmd_bo);
+				reloc_dst_bo =
+					qxlhw_handle_to_bo(qdev, file_priv,
+							   reloc.dst_handle, cmd_bo);
+				if (!reloc_src_bo || !reloc_dst_bo)
+					return -EINVAL;
+				apply_reloc(qdev, reloc_src_bo, reloc.src_offset,
+					    reloc_dst_bo, reloc.dst_offset);
+
+				if (reloc_dst_bo != cmd_bo) {
+					qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
+					drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
+				}
+				
+				if (reloc_src_bo != cmd_bo)
+					drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
+			} else if (reloc.reloc_type == QXL_RELOC_TYPE_SURF) {
+				struct qxl_drv_surface *surf;
+				reloc_src_bo =
+					qxlhw_handle_to_bo(qdev, file_priv,
+							   reloc.src_handle, cmd_bo);
+
+				surf = qxl_surface_lookup(dev, reloc.dst_handle);
+
+				if (!reloc_src_bo || !surf)
+					return -EINVAL;
+
+				apply_surf_reloc(qdev, reloc_src_bo, reloc.src_offset, surf);
+				qxl_surface_unreference(surf);
+				if (reloc_src_bo != cmd_bo)
+					drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
+			} else {
+				DRM_ERROR("unknown reloc type %d\n", reloc.reloc_type);
 				return -EINVAL;
-			apply_reloc(qdev, reloc_src_bo, reloc.src_offset,
-				    reloc_dst_bo, reloc.dst_offset);
-
-			if (reloc_dst_bo != cmd_bo) {
-				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
-				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
 			}
-
-			if (reloc_src_bo != cmd_bo)
-				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 		}
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
@@ -217,21 +248,29 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 #define NUM_SURFACES 1024
 
 int qxl_update_area_ioctl(struct drm_device *dev, void *data,
-			  struct drm_file *file_priv)
+			  struct drm_file *file)
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_update_area *update_area = data;
+	struct qxl_drv_surface *surf;
 	struct qxl_rect area = {.left = update_area->left,
 				.top = update_area->top,
 				.right = update_area->right,
 				.bottom = update_area->bottom};
-
-	if (update_area->surface_id > NUM_SURFACES ||
-	    update_area->left >= update_area->right ||
+	if (update_area->left >= update_area->right ||
 	    update_area->top >= update_area->bottom)
 		return -EINVAL;
 
-	qxl_io_update_area(qdev, update_area->surface_id, &area);
+	surf = qxl_surface_lookup(dev, update_area->surface_id);
+	if (!surf)
+		return -EINVAL;
+       
+	if (surf->file != file)
+		goto out;
+	qxl_io_update_area(qdev, surf->id, &area);
+
+out:
+	qxl_surface_unreference(surf);
 	return 0;
 }
 
@@ -272,6 +311,60 @@ static int qxl_clientcap_ioctl(struct drm_device *dev, void *data,
 	return -ENOSYS;
 }
 
+static int qxl_alloc_surface_ioctl(struct drm_device *dev, void *data,
+				   struct drm_file *file)
+{
+	struct qxl_device *qdev = dev->dev_private;
+	struct qxl_file_private *fpriv = file->driver_priv;
+	struct drm_qxl_alloc_surface_id *param = data;
+	struct drm_gem_object *gobj;
+	struct qxl_drv_surface *surf;
+	int handle;
+	int ret;
+
+	/* lookup bo */
+	gobj = drm_gem_object_lookup(dev, file, param->bo_handle);	
+	if (!gobj)
+		return -EINVAL;
+
+	handle = qxl_surface_alloc(qdev, &surf);
+
+	surf->surf.format = param->format;
+	surf->surf.width = param->width;
+	surf->surf.height = param->height;
+	surf->surf.stride = param->stride;
+	surf->bo = gem_to_qxl_bo(gobj);
+	surf->file = file;
+
+	ret = qxl_hw_surface_alloc(qdev, surf);
+
+	/* attach to file priv linked list */
+	list_add(&surf->fpriv_list, &fpriv->surface_list);
+
+	param->surface_id = handle;
+	return ret;
+}
+
+static int qxl_remove_surface_ioctl(struct drm_device *dev, void *data,
+				   struct drm_file *file)
+{
+	struct qxl_drv_surface *surf;
+	struct drm_qxl_remove_surface_id *param = data;
+
+	surf = qxl_surface_lookup(dev, param->surface_id);
+	if (!surf)
+		return -EINVAL;
+
+	if (surf->file != file) {
+		qxl_surface_unreference(surf);
+		return -EINVAL;
+	}
+	/* unref for the first and for the lookup */
+	qxl_surface_unreference(surf);
+	qxl_surface_unreference(surf);
+	return 0;
+}
+
 struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC, qxl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -288,6 +381,11 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_GETPARAM, qxl_getparam_ioctl,
 							DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(QXL_CLIENTCAP, qxl_clientcap_ioctl,
+							DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(QXL_ALLOC_SURF_ID, qxl_alloc_surface_ioctl,
+							DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(QXL_REMOVE_SURF_ID, qxl_remove_surface_ioctl,
 							DRM_AUTH|DRM_UNLOCKED),
 };
 

@@ -221,6 +221,17 @@ int qxl_debugfs_add_files(struct qxl_device *rdev,
 			     unsigned nfiles);
 int qxl_debugfs_fence_init(struct qxl_device *rdev);
 
+struct qxl_device;
+
+/* currently surfaces can't be shared between file privs */
+struct qxl_drv_surface {
+	struct kref refcount;
+	struct qxl_surface surf;
+	struct list_head fpriv_list;
+	struct qxl_bo *bo;
+	struct drm_file *file; /* owner */
+	uint32_t id;
+};
 
 struct qxl_file_private {
 	struct list_head surface_list;
@@ -337,6 +348,7 @@ int qxl_driver_load(struct drm_device *dev, unsigned long flags);
 int qxl_driver_unload(struct drm_device *dev);
 
 int qxl_driver_open(struct drm_device *dev, struct drm_file *file);
+void qxl_driver_preclose(struct drm_device *dev, struct drm_file *file);
 void qxl_driver_postclose(struct drm_device *dev, struct drm_file *file);
 
 int qxl_modeset_init(struct qxl_device *qdev);
@@ -554,4 +566,16 @@ int qxl_fb_queue_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec);
 int qxl_debugfs_add_files(struct qxl_device *qdev,
 			  struct drm_info_list *files,
 			  unsigned nfiles);
+
+int qxl_surface_alloc(struct qxl_device *qdev,
+		      struct qxl_drv_surface **rsurf);
+int qxl_hw_surface_alloc(struct qxl_device *qdev,
+			 struct qxl_drv_surface *surf);
+int qxl_hw_surface_dealloc(struct qxl_device *qdev,
+			   struct qxl_drv_surface *surf);
+void
+qxl_surface_unreference(struct qxl_drv_surface *surf);
+
+struct qxl_drv_surface *
+qxl_surface_lookup(struct drm_device *dev, int surface_id);
 #endif

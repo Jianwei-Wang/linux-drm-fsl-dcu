@@ -22,6 +22,9 @@
 #define DRM_QXL_GETPARAM    0x04
 #define DRM_QXL_CLIENTCAP   0x05
 
+#define DRM_QXL_ALLOC_SURF_ID 0x06
+#define DRM_QXL_REMOVE_SURF_ID 0x07
+
 enum {
 	QXL_ALLOC_TYPE_DATA,
 	QXL_ALLOC_TYPE_SURFACE,
@@ -44,11 +47,16 @@ struct drm_qxl_map {
  * *(src_handle.base_addr + src_offset) = physical_address(dst_handle.addr +
  * dst_offset)
  */
+#define QXL_RELOC_TYPE_BO 1
+#define QXL_RELOC_TYPE_SURF 2
+
 struct drm_qxl_reloc {
 	uint64_t src_offset; /* offset into src_handle or src buffer */
 	uint64_t dst_offset; /* offset in dest handle */
 	uint32_t src_handle; /* 0 if to command buffer */
 	uint32_t dst_handle; /* dest handle to compute address from */
+        uint32_t reloc_type;
+        uint32_t pad;
 };
 
 struct drm_qxl_command {
@@ -88,6 +96,19 @@ struct drm_qxl_clientcap {
 	uint32_t pad;
 };
 
+struct drm_qxl_alloc_surface_id {
+        uint32_t format;
+        uint32_t width;
+        uint32_t height;
+        int32_t stride;
+        uint32_t bo_handle;
+        uint32_t surface_id;
+};
+
+struct drm_qxl_remove_surface_id {
+        uint32_t surface_id;
+};
+
 #define DRM_IOCTL_QXL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC, struct drm_qxl_alloc)
 
@@ -109,4 +130,12 @@ struct drm_qxl_clientcap {
 #define DRM_IOCTL_QXL_CLIENTCAP \
 	DRM_IOW(DRM_COMMAND_BASE + DRM_QXL_CLIENTCAP,\
 		struct drm_qxl_clientcap)
+
+#define DRM_IOCTL_QXL_ALLOC_SURF_ID \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC_SURF_ID,\
+		struct drm_qxl_alloc_surface_id)
+
+#define DRM_IOCTL_QXL_REMOVE_SURF_ID \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_REMOVE_SURF_ID,\
+		struct drm_qxl_remove_surface_id)
 #endif

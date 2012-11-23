@@ -399,3 +399,135 @@ void qxl_io_monitors_config(struct qxl_device *qdev)
 
 	wait_for_io_cmd(qdev, 0, QXL_IO_MONITORS_CONFIG_ASYNC);
 }
+
+/* allocates the surface at the kernel level */
+int qxl_surface_alloc(struct qxl_device *qdev,
+		      struct qxl_drv_surface **rsurf)
+{
+	struct qxl_drv_surface *surf;
+	uint32_t handle = -ENOMEM;
+	int idr_ret;
+	
+	surf = kzalloc(sizeof(*surf), GFP_KERNEL);
+	if (!surf)
+		return -ENOMEM;
+
+again:
+	spin_lock(&qdev->surf_id_idr_lock);
+	if (idr_pre_get(&qdev->surf_id_idr, GFP_ATOMIC) == 0) {
+		DRM_ERROR("Out of memory for surf idr\n");
+		kfree(surf);
+		goto alloc_fail;
+	}
+
+	idr_ret = idr_get_new_above(&qdev->surf_id_idr, surf, 1, &handle);
+	if (idr_ret == -EAGAIN)
+		goto again;
+	if (rsurf)
+		*rsurf = surf;
+
+	surf->id = handle;
+	kref_init(&surf->refcount);
+	
+ alloc_fail:
+	spin_unlock(&qdev->surf_id_idr_lock);
+	return handle;
+}
+
+static void
+push_surface(struct qxl_device *qdev, struct qxl_bo *cmd_bo)
+{
+	qxl_push_command_ring(qdev, cmd_bo, QXL_CMD_SURFACE);
+}
+
+int qxl_hw_surface_alloc(struct qxl_device *qdev,
+			 struct qxl_drv_surface *surf)
+{
+	struct qxl_surface_cmd *cmd;
+	struct qxl_bo *cmd_bo;
+
+	struct drm_qxl_release *release;
+
+	/* allocate releaseable and send commands */
+	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
+				   &release, &cmd_bo);
+	
+	cmd->type = QXL_SURFACE_CMD_CREATE;
+	cmd->u.surface_create.format = surf->surf.format;
+	cmd->u.surface_create.width = surf->surf.width;
+	cmd->u.surface_create.height = surf->surf.height;
+	cmd->u.surface_create.stride = surf->surf.stride;
+	cmd->u.surface_create.data = qxl_fb_physical_address(qdev, surf->bo);
+	cmd->surface_id = surf->id;
+
+	push_surface(qdev, cmd_bo);
+
+	return 0;
+}
+
+int qxl_hw_surface_dealloc(struct qxl_device *qdev,
+			   struct qxl_drv_surface *surf)
+{
+	struct qxl_surface_cmd *cmd;
+	struct qxl_bo *cmd_bo;
+	struct drm_qxl_release *release;
+
+	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
+				   &release, &cmd_bo);
+	
+	cmd->type = QXL_SURFACE_CMD_DESTROY;
+	cmd->surface_id = surf->id;
+
+	push_surface(qdev, cmd_bo);
+	surf->id = 0;
+	return 0;
+}
+
+static void
+qxl_surface_free(struct kref *kref)
+{
+	struct qxl_drv_surface *surf = (struct qxl_drv_surface *)kref;
+	struct qxl_device *qdev = surf->bo->qdev;
+
+	/* remove from fpriv list */
+	list_del(&surf->fpriv_list);	
+
+	/* remove from idr */
+	spin_lock(&qdev->surf_id_idr_lock);
+	idr_remove(&qdev->surf_id_idr, surf->id);
+	spin_unlock(&qdev->surf_id_idr_lock);
+
+	/* dealloc hw bits */
+	qxl_hw_surface_dealloc(qdev, surf);
+
+	/* drop reference on the surf bo */
+	drm_gem_object_unreference_unlocked(&surf->bo->gem_base);
+
+	kfree(surf);
+}
+
+void
+qxl_surface_unreference(struct qxl_drv_surface *surf)
+{
+	kref_put(&surf->refcount, qxl_surface_free);
+}
+
+struct qxl_drv_surface *
+qxl_surface_lookup(struct drm_device *dev, int surface_id)
+{
+	struct qxl_device *qdev = dev->dev_private;
+	struct qxl_drv_surface *surf;
+
+	spin_lock(&qdev->surf_id_idr_lock);
+
+	surf = idr_find(&qdev->surf_id_idr, surface_id);
+	if (surf == NULL) {
+		spin_unlock(&qdev->surf_id_idr_lock);
+		return NULL;
+	}
+
+	kref_get(&surf->refcount);
+
+	spin_unlock(&qdev->surf_id_idr_lock);
+	return surf;
+}

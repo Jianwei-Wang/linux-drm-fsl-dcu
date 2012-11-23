@@ -90,6 +90,7 @@ static struct drm_driver qxl_driver = {
 	.load = qxl_driver_load,
 	.unload = qxl_driver_unload,
 	.open = qxl_driver_open,
+	.preclose = qxl_driver_preclose,
 	.postclose = qxl_driver_postclose,
 	.dumb_create = qxl_mode_dumb_create,
 	.dumb_map_offset = qxl_mode_dumb_mmap,
