@@ -115,6 +115,18 @@ qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
 	release->bos[release->bo_count++] = bo;
 }
 
+void
+qxl_release_add_surf(struct qxl_device *qdev, struct drm_qxl_release *release,
+		     struct qxl_drv_surface *surf)
+{
+	if (release->surf_count >= QXL_MAX_RES) {
+		DRM_ERROR("exceeded max resource on a drm_qxl_release item\n");
+		return;
+	}
+	kref_get(&surf->refcount);
+	release->surfs[release->surf_count++] = surf;
+}
+
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 			   int type, struct drm_qxl_release **release,
 			   struct qxl_bo **bo)
