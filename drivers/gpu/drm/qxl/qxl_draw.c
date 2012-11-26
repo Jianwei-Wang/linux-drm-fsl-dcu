@@ -62,13 +62,14 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 	release->type = type;
 	release->bo_count = 0;
 again:
-	spin_lock(&qdev->release_idr_lock);
 	if (idr_pre_get(&qdev->release_idr, GFP_KERNEL) == 0) {
 		DRM_ERROR("Out of memory for release idr\n");
 		kfree(release);
 		goto release_fail;
 	}
+	spin_lock(&qdev->release_idr_lock);
 	idr_ret = idr_get_new_above(&qdev->release_idr, release, 1, &handle);
+	spin_unlock(&qdev->release_idr_lock);
 	if (idr_ret == -EAGAIN)
 		goto again;
 	if (ret)
@@ -76,7 +77,7 @@ again:
 	QXL_INFO(qdev, "allocated release %lld\n", handle);
 	release->id = handle;
 release_fail:
-	spin_unlock(&qdev->release_idr_lock);
+
 	return handle;
 }
 
