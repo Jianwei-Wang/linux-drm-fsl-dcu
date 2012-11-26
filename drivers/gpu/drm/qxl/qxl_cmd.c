@@ -181,13 +181,13 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 				break;
 			bo = release->bos[0];
 
-			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
-				 info->next);
 			ret = qxl_bo_kmap(bo, (void **)&info);
 			if (ret) {
 				DRM_ERROR("failed to map release\n");
 				return -EINVAL;
 			}
+			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
+				 info->next);
 
 			switch (release->type) {
 			case QXL_RELEASE_DRAWABLE:
