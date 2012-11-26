@@ -485,7 +485,8 @@ void qxl_io_create_primary(struct qxl_device *qdev,
 void qxl_io_destroy_primary(struct qxl_device *qdev);
 void qxl_io_memslot_add(struct qxl_device *qdev, uint8_t id);
 void qxl_io_notify_oom(struct qxl_device *qdev);
-void qxl_io_update_area(struct qxl_device *qdev, uint32_t surface_id,
+
+int qxl_io_update_area(struct qxl_device *qdev, struct qxl_drv_surface *surf,
 			const struct qxl_rect *area);
 void qxl_io_reset(struct qxl_device *qdev);
 void qxl_io_monitors_config(struct qxl_device *qdev);

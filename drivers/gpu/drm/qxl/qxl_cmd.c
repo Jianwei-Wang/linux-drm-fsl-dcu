@@ -279,24 +279,31 @@ done:
 	mutex_unlock(&qdev->async_io_mutex);
 }
 
-void qxl_io_update_area(struct qxl_device *qdev, uint32_t surface_id,
+int qxl_io_update_area(struct qxl_device *qdev, struct qxl_drv_surface *surf,
 			const struct qxl_rect *area)
 {
+	int surface_id = 0;
 	unsigned surface_width = qxl_surface_width(qdev, surface_id);
 	unsigned surface_height = qxl_surface_height(qdev, surface_id);
 
+	if (surf) {
+		surface_id = surf->id;
+		surface_width = surf->surf.width;
+		surface_height = surf->surf.height;
+	}
 	if (area->left < 0 || area->top < 0 ||
 	    area->right > surface_width || area->bottom > surface_height) {
 		qxl_io_log(qdev, "%s: not doing area update for "
-			   "%d, (%d,%d,%d,%d)\n", surface_id, area->left,
+			   "%d, (%d,%d,%d,%d)\n", __func__, surface_id, area->left,
 			   area->top, area->right, area->bottom);
-		return;
+		return -EINVAL;
 	}
 	mutex_lock(&qdev->update_area_mutex);
 	qdev->ram_header->update_area = *area;
 	qdev->ram_header->update_surface = surface_id;
 	wait_for_io_cmd(qdev, 0, QXL_IO_UPDATE_AREA_ASYNC);
 	mutex_unlock(&qdev->update_area_mutex);
+	return 0;
 }
 
 void qxl_io_notify_oom(struct qxl_device *qdev)
@@ -317,7 +324,7 @@ void qxl_io_update_screen(struct qxl_device *qdev)
 	area.right = width;
 	area.bottom = height;
 
-	qxl_io_update_area(qdev, 0, &area);
+	qxl_io_update_area(qdev, NULL, &area);
 }
 
 void qxl_io_destroy_primary(struct qxl_device *qdev)

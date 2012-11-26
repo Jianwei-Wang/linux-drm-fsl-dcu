@@ -257,21 +257,28 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 				.top = update_area->top,
 				.right = update_area->right,
 				.bottom = update_area->bottom};
+	int ret;
 	if (update_area->left >= update_area->right ||
 	    update_area->top >= update_area->bottom)
 		return -EINVAL;
 
 	surf = qxl_surface_lookup(dev, update_area->surface_id);
 	if (!surf)
-		return -EINVAL;
+		if (update_area->surface_id)
+			return -EINVAL;
        
-	if (surf->file != file)
-		goto out;
-	qxl_io_update_area(qdev, surf->id, &area);
+	if (surf) {
+		if (surf->file != file) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+	ret = qxl_io_update_area(qdev, surf, &area);
 
 out:
-	qxl_surface_unreference(surf);
-	return 0;
+	if (surf)
+		qxl_surface_unreference(surf);
+	return ret;
 }
 
 static int qxl_getparam_ioctl(struct drm_device *dev, void *data,
