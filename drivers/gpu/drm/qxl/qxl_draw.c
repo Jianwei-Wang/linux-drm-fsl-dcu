@@ -54,12 +54,11 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 	size_t size = sizeof(*release);
 	int idr_ret;
 
-	release = kmalloc(size, GFP_KERNEL);
+	release = kzalloc(size, GFP_KERNEL);
 	if (!release) {
 		DRM_ERROR("Out of memory\n");
 		return 0;
 	}
-	memset(release, 0, size);
 	release->type = type;
 	release->bo_count = 0;
 again:
