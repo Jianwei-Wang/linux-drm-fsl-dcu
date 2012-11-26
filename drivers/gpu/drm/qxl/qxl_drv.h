@@ -174,6 +174,8 @@ struct drm_qxl_release {
 	int type;
 	int bo_count;
 	struct qxl_bo *bos[QXL_MAX_RES];
+	int surf_count;
+	struct qxl_drv_surface *surfs[QXL_MAX_RES];
 };
 
 /* all information required for an image blit. used instead
@@ -538,7 +540,9 @@ void qxl_release_free(struct qxl_device *qdev,
 void qxl_release_add_res(struct qxl_device *qdev,
 			 struct drm_qxl_release *release,
 			 struct qxl_bo *bo);
-
+void qxl_release_add_surf(struct qxl_device *qdev,
+			  struct drm_qxl_release *release,
+			  struct qxl_drv_surface *surf);
 /* used by qxl_debugfs_release */
 struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id);

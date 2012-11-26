@@ -96,9 +96,12 @@ static void
 apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
 		 struct qxl_drv_surface *surf)
 {
+	uint32_t id = 0;
 	qxl_bo_kmap(src, NULL);
 
-	*(uint32_t *)(src->kptr + src_off) = surf->id;
+	if (surf)
+		id = surf->id;
+	*(uint32_t *)(src->kptr + src_off) = id;
 
 	qxl_bo_kunmap(src);
 }
@@ -220,13 +223,21 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 					qxlhw_handle_to_bo(qdev, file_priv,
 							   reloc.src_handle, cmd_bo);
 
-				surf = qxl_surface_lookup(dev, reloc.dst_handle);
-
-				if (!reloc_src_bo || !surf)
+				if (!reloc_src_bo)
 					return -EINVAL;
 
+				surf = qxl_surface_lookup(dev, reloc.dst_handle);
+					
+				if (!surf && reloc.dst_handle != 0) {
+					DRM_ERROR("invalid arg %p %p %d\n", reloc_src_bo, surf, reloc.dst_handle);
+					return -EINVAL;
+				}
+
 				apply_surf_reloc(qdev, reloc_src_bo, reloc.src_offset, surf);
-				qxl_surface_unreference(surf);
+				if (surf) {
+					qxl_release_add_surf(qdev, release, surf);
+					qxl_surface_unreference(surf);
+				}
 				if (reloc_src_bo != cmd_bo)
 					drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			} else {

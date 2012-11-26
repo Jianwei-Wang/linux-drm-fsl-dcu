@@ -95,6 +95,9 @@ qxl_release_free(struct qxl_device *qdev,
 						- DRM_FILE_OFFSET);
 		qxl_bo_unref(&release->bos[i]);
 	}
+	for (i = 0 ; i < release->surf_count; ++i) {
+		qxl_surface_unreference(release->surfs[i]);
+	}
 	spin_lock(&qdev->release_idr_lock);
 	idr_remove(&qdev->release_idr, release->id);
 	spin_unlock(&qdev->release_idr_lock);
