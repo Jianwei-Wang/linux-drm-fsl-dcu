@@ -41,8 +41,10 @@ struct drm_qxl_map {
 };
 
 /*
- * *(src_handle.base_addr + src_offset) = physical_address(dst_handle.addr +
- * dst_offset)
+ * dest is the bo we are writing the relocation into
+ * src is bo we are relocating.
+ * *(dest_handle.base_addr + dest_offset) = physical_address(src_handle.addr +
+ * src_offset)
  */
 #define QXL_RELOC_TYPE_BO 1
 #define QXL_RELOC_TYPE_SURF 2
@@ -50,8 +52,8 @@ struct drm_qxl_map {
 struct drm_qxl_reloc {
 	uint64_t src_offset; /* offset into src_handle or src buffer */
 	uint64_t dst_offset; /* offset in dest handle */
-	uint32_t src_handle; /* 0 if to command buffer */
-	uint32_t dst_handle; /* dest handle to compute address from */
+	uint32_t src_handle; /* dest handle to compute address from */
+	uint32_t dst_handle; /* 0 if to command buffer */
         uint32_t reloc_type;
         uint32_t pad;
 };

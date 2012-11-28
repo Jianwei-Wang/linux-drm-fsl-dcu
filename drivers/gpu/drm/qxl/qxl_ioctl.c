@@ -52,32 +52,29 @@ int qxl_map_ioctl(struct drm_device *dev, void *data,
 /*
  * dst must be validated, i.e. whole bo on vram/surfacesram (right now all bo's
  * are on vram).
- * *(src + src_off) = qxl_bo_physical_address(dst, dst_off)
+ * *(dst + dst_off) = qxl_bo_physical_address(src, src_off)
  */
 static void
-apply_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
-	    struct qxl_bo *dst, uint64_t dst_off)
+apply_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
+	    struct qxl_bo *src, uint64_t src_off)
 {
-	qxl_bo_kmap(src, NULL);
-
-	*(uint64_t *)(src->kptr + src_off) = qxl_bo_physical_address(qdev,
-			dst, dst_off);
-
-	qxl_bo_kunmap(src);
+	qxl_bo_kmap(dst, NULL);
+	*(uint64_t *)(dst->kptr + dst_off) = qxl_bo_physical_address(qdev,
+								     src, src_off);
+	qxl_bo_kunmap(dst);
 }
 
 static void
-apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
-		 struct qxl_bo *dst)
+apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
+		 struct qxl_bo *src)
 {
 	uint32_t id = 0;
-	qxl_bo_kmap(src, NULL);
 
-	if (dst)
-		id = dst->surface_id;
-	*(uint32_t *)(src->kptr + src_off) = id;
-
-	qxl_bo_kunmap(src);
+	qxl_bo_kmap(dst, NULL);
+	if (src)
+		id = src->surface_id;
+	*(uint32_t *)(dst->kptr + dst_off) = id;
+	qxl_bo_kunmap(dst);
 }
 
 /* return holding the reference to this object */
@@ -176,37 +173,37 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				   reloc.src_offset, reloc.dst_handle,
 				   reloc.dst_offset);
 #endif
-			reloc_src_bo =
+			reloc_dst_bo =
 				qxlhw_handle_to_bo(qdev, file_priv,
-						   reloc.src_handle, cmd_bo);
-			if (!reloc_src_bo)
+						   reloc.dst_handle, cmd_bo);
+			if (!reloc_dst_bo)
 				return -EINVAL;
 
-			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.dst_handle > 0) {
-				reloc_dst_bo =
+			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.src_handle > 0) {
+				reloc_src_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
-							   reloc.dst_handle, cmd_bo);
-				if (!reloc_dst_bo)
+							   reloc.src_handle, cmd_bo);
+				if (!reloc_src_bo)
 					return -EINVAL;
 			} else
-				reloc_dst_bo = NULL;
+				reloc_src_bo = NULL;
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
-				apply_reloc(qdev, reloc_src_bo, reloc.src_offset,
-					    reloc_dst_bo, reloc.dst_offset);
+				apply_reloc(qdev, reloc_dst_bo, reloc.dst_offset,
+					    reloc_src_bo, reloc.src_offset);
 			} else if (reloc.reloc_type == QXL_RELOC_TYPE_SURF) {
-				apply_surf_reloc(qdev, reloc_src_bo, reloc.src_offset, reloc_dst_bo);
+				apply_surf_reloc(qdev, reloc_dst_bo, reloc.dst_offset, reloc_src_bo);
 			} else {
 				DRM_ERROR("unknown reloc type %d\n", reloc.reloc_type);
 				return -EINVAL;
 			}
 				
-			if (reloc_dst_bo && reloc_dst_bo != cmd_bo) {
-				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
-				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
+			if (reloc_src_bo && reloc_src_bo != cmd_bo) {
+				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_src_bo));
+				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			}
 
-			if (reloc_src_bo != cmd_bo)
-				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
+			if (reloc_dst_bo != cmd_bo)
+				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
 		}
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
