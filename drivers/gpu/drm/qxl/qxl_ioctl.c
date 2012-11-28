@@ -45,7 +45,6 @@ int qxl_map_ioctl(struct drm_device *dev, void *data,
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_map *qxl_map = data;
 
-	DRM_INFO("%s: handle in %d\n", __func__, qxl_map->handle);
 	return qxl_mode_dumb_mmap(file_priv, qdev->ddev, qxl_map->handle,
 				  &qxl_map->offset);
 }
@@ -161,18 +160,22 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 					(void *)user_cmd.command,
 					user_cmd.command_size))
 			return -EFAULT;
+#if 0
 		qxl_io_log(qdev, "%s: type %d, size %d, #relocs %d\n",
 			   __func__, user_cmd.type,
 			   user_cmd.command_size, user_cmd.relocs_num);
+#endif
 		for (i = 0 ; i < user_cmd.relocs_num; ++i) {
 			if (DRM_COPY_FROM_USER(&reloc,
 				&((struct drm_qxl_reloc *)user_cmd.relocs)[i],
 				sizeof(reloc)))
 				return -EFAULT;
+#if 0
 			qxl_io_log(qdev, "%s: r#%d: %d+%d->%d+%d\n",
 				   __func__, i, reloc.src_handle,
 				   reloc.src_offset, reloc.dst_handle,
 				   reloc.dst_offset);
+#endif
 			reloc_src_bo =
 				qxlhw_handle_to_bo(qdev, file_priv,
 						   reloc.src_handle, cmd_bo);
