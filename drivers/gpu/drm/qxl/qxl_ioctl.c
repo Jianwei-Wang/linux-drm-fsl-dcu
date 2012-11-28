@@ -297,6 +297,24 @@ static int qxl_alloc_surf_ioctl(struct drm_device *dev, void *data,
 	int ret;
 	int size, actual_stride;
 
+	if (param->type == QXL_SURF_ALLOC_TYPE_PRIMARY) {
+		/*
+		 * TODO: would be nice if the primary always had a handle of 1,
+		 * but for that we would need to change drm gem code a little,
+		 * so probably not worth it.  Note: The size is a actually
+		 * ignored here, we return a handle to the primary surface BO
+		 */
+		ret = qxl_get_handle_for_primary_fb(qdev, file,
+						    &param->handle);
+		if (ret) {
+			DRM_ERROR("%s: failed to allocate handle for primary"
+				  "fb gem object %p\n", __func__,
+				  qdev->fbdev_qfb->obj);
+		}
+		
+		return 0;
+	}
+
 	/* work out size allocate bo with handle */
 	actual_stride = param->stride < 0 ? -param->stride : param->stride;
 	size = actual_stride * param->height + actual_stride;
@@ -355,23 +373,3 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 };
 
 int qxl_max_ioctls = DRM_ARRAY_SIZE(qxl_ioctls);
-
-#if 0
-
-	case QXL_ALLOC_TYPE_SURFACE_PRIMARY:
-		/*
-		 * TODO: would be nice if the primary always had a handle of 1,
-		 * but for that we would need to change drm gem code a little,
-		 * so probably not worth it.  Note: The size is a actually
-		 * ignored here, we return a handle to the primary surface BO
-		 */
-		ret = qxl_get_handle_for_primary_fb(qdev, file_priv,
-						    &qxl_alloc->handle);
-		if (ret) {
-			DRM_ERROR("%s: failed to allocate handle for primary"
-				  "fb gem object %p\n", __func__,
-				  qdev->fbdev_qfb->obj);
-		}
-		break;
-
-#endif
