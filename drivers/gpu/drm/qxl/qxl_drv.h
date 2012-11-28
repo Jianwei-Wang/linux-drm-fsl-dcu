@@ -80,7 +80,7 @@ struct qxl_bo {
 	unsigned			pin_count;
 	void				*kptr;
 	u32				pitch;
-	int				surface_reg;
+	int                             type;
 	/* Constant after initialization */
 	struct qxl_device		*qdev;
 	struct drm_gem_object		gem_base;
@@ -295,8 +295,6 @@ struct qxl_device {
 	uint8_t		slot_gen_bits;
 	uint64_t	va_slot_mask;
 
-	uint8_t		vram_mem_slot;
-
 	struct idr	release_idr;
 	spinlock_t release_idr_lock;
 	struct mutex	async_io_mutex;
@@ -368,25 +366,6 @@ void qxl_ring_free(struct qxl_ring *ring);
 extern void *qxl_allocnf(struct qxl_device *qdev, unsigned long size,
 			 struct drm_qxl_release *release);
 
-static inline uint64_t
-qxl_physical_address(struct qxl_device *qdev, uint64_t kptr)
-{
-	struct qxl_memslot *slot = &(qdev->mem_slots[qdev->main_mem_slot]);
-
-	return slot->high_bits | kptr;
-}
-
-static inline uint64_t
-qxl_fb_physical_address(struct qxl_device *qdev, struct qxl_bo *bo)
-{
-	uint64_t offset = bo->tbo.offset;
-
-	QXL_INFO(qdev, "physical from tbo %llx (%llx, %llx)\n",
-		 bo->tbo.addr_space_offset, offset,
-		 bo->tbo.offset);
-	BUG_ON(bo->tbo.addr_space_offset & 0xf000000000000000);
-	return qxl_physical_address(qdev, offset);
-}
 
 static inline void *
 qxl_fb_virtual_address(struct qxl_device *qdev, unsigned long physical)
@@ -397,8 +376,9 @@ qxl_fb_virtual_address(struct qxl_device *qdev, unsigned long physical)
 
 static inline uint64_t
 qxl_bo_physical_address(struct qxl_device *qdev, struct qxl_bo *bo,
-			unsigned long offset, uint8_t slot_id)
+			unsigned long offset)
 {
+	int slot_id = bo->type == QXL_GEM_DOMAIN_VRAM ? qdev->main_mem_slot : qdev->surfaces_mem_slot;
 	struct qxl_memslot *slot = &(qdev->mem_slots[slot_id]);
 
 	/* TODO - need to hold one of the locks to read tbo.offset */

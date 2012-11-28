@@ -349,8 +349,7 @@ void qxl_io_create_primary(struct qxl_device *qdev, unsigned width,
 	create->height = height;
 	create->stride = stride;
 	create->mem = qxl_bo_physical_address(qdev,
-					      qdev->surface0_bo, 0,
-					      qdev->main_mem_slot);
+					      qdev->surface0_bo, 0);
 	QXL_INFO(qdev, "%s: mem = %llx, from %p\n", __func__, create->mem,
 		 qdev->surface0_bo->kptr);
 
@@ -464,7 +463,7 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	cmd->u.surface_create.width = surf->surf.width;
 	cmd->u.surface_create.height = surf->surf.height;
 	cmd->u.surface_create.stride = surf->surf.stride;
-	cmd->u.surface_create.data = qxl_fb_physical_address(qdev, surf->bo);
+	cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf->bo, 0);
 	cmd->surface_id = surf->id;
 
 	push_surface(qdev, cmd_bo);

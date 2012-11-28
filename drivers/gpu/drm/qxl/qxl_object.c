@@ -80,7 +80,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	}
 	bo->gem_base.driver_private = NULL;
 	bo->qdev = qdev;
-	bo->surface_reg = -1;
+	bo->type = domain;
 	INIT_LIST_HEAD(&bo->list);
 
 	qxl_ttm_placement_from_domain(bo, domain);

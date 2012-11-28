@@ -192,7 +192,7 @@ qxl_image_create_helper(struct qxl_device *qdev,
 	image->u.bitmap.y = height;
 	image->u.bitmap.stride = chunk_stride;
 	image->u.bitmap.palette = 0;
-	image->u.bitmap.data = qxl_fb_physical_address(qdev, chunk_bo);
+	image->u.bitmap.data = qxl_bo_physical_address(qdev, chunk_bo, 0);
 
 	/* Add to hash table */
 	if (!hash) {

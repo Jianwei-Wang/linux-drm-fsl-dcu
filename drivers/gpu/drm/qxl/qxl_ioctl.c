@@ -87,7 +87,7 @@ apply_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
 	qxl_bo_kmap(src, NULL);
 
 	*(uint64_t *)(src->kptr + src_off) = qxl_bo_physical_address(qdev,
-			dst, dst_off, qdev->main_mem_slot);
+			dst, dst_off);
 
 	qxl_bo_kunmap(src);
 }

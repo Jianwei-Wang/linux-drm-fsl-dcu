@@ -744,8 +744,8 @@ int qxl_modeset_init(struct qxl_device *qdev)
 	qxl_bo_kmap(qdev->monitors_config_bo, NULL);
 	qdev->monitors_config = qdev->monitors_config_bo->kptr;
 	qdev->ram_header->monitors_config =
-		qxl_bo_physical_address(qdev, qdev->monitors_config_bo, 0,
-					qdev->main_mem_slot);
+		qxl_bo_physical_address(qdev, qdev->monitors_config_bo, 0);
+
 	memset(qdev->monitors_config, 0, monitors_config_size);
 	qdev->monitors_config->max_allowed = max_allowed;
 
