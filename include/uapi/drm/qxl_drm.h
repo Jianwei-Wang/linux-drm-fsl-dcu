@@ -22,17 +22,14 @@
 #define DRM_QXL_GETPARAM    0x04
 #define DRM_QXL_CLIENTCAP   0x05
 
-#define DRM_QXL_ALLOC_SURF_ID 0x06
-#define DRM_QXL_REMOVE_SURF_ID 0x07
+#define DRM_QXL_ALLOC_SURF  0x06
 
 enum {
-	QXL_ALLOC_TYPE_DATA,
-	QXL_ALLOC_TYPE_SURFACE,
-	QXL_ALLOC_TYPE_SURFACE_PRIMARY,
+	QXL_SURF_ALLOC_TYPE_SURFACE,
+	QXL_SURF_ALLOC_TYPE_PRIMARY,
 };
 
 struct drm_qxl_alloc {
-	uint32_t type;
 	uint32_t size;
 	uint32_t handle; /* 0 is an invalid handle */
 };
@@ -77,7 +74,7 @@ struct drm_qxl_execbuffer {
 };
 
 struct drm_qxl_update_area {
-	uint32_t surface_id;
+	uint32_t handle;
 	uint32_t top;
 	uint32_t left;
 	uint32_t bottom;
@@ -96,17 +93,13 @@ struct drm_qxl_clientcap {
 	uint32_t pad;
 };
 
-struct drm_qxl_alloc_surface_id {
+struct drm_qxl_alloc_surf {
+	uint32_t type;
         uint32_t format;
         uint32_t width;
         uint32_t height;
         int32_t stride;
-        uint32_t bo_handle;
-        uint32_t surface_id;
-};
-
-struct drm_qxl_remove_surface_id {
-        uint32_t surface_id;
+        uint32_t handle;
 };
 
 #define DRM_IOCTL_QXL_ALLOC \
@@ -131,11 +124,8 @@ struct drm_qxl_remove_surface_id {
 	DRM_IOW(DRM_COMMAND_BASE + DRM_QXL_CLIENTCAP,\
 		struct drm_qxl_clientcap)
 
-#define DRM_IOCTL_QXL_ALLOC_SURF_ID \
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC_SURF_ID,\
-		struct drm_qxl_alloc_surface_id)
+#define DRM_IOCTL_QXL_ALLOC_SURF \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC_SURF,\
+		struct drm_qxl_alloc_surf)
 
-#define DRM_IOCTL_QXL_REMOVE_SURF_ID \
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_REMOVE_SURF_ID,\
-		struct drm_qxl_remove_surface_id)
 #endif

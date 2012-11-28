@@ -21,28 +21,10 @@ int qxl_alloc_ioctl(struct drm_device *dev, void *data,
 		DRM_ERROR("invalid size %d\n", qxl_alloc->size);
 		return -EINVAL;
 	}
-	switch (qxl_alloc->type) {
-	case QXL_ALLOC_TYPE_SURFACE_PRIMARY:
-		/*
-		 * TODO: would be nice if the primary always had a handle of 1,
-		 * but for that we would need to change drm gem code a little,
-		 * so probably not worth it.  Note: The size is a actually
-		 * ignored here, we return a handle to the primary surface BO
-		 */
-		ret = qxl_get_handle_for_primary_fb(qdev, file_priv,
-						    &qxl_alloc->handle);
-		if (ret) {
-			DRM_ERROR("%s: failed to allocate handle for primary"
-				  "fb gem object %p\n", __func__,
-				  qdev->fbdev_qfb->obj);
-		}
-		break;
-	case QXL_ALLOC_TYPE_SURFACE:
-	case QXL_ALLOC_TYPE_DATA: {
+	{
 		struct qxl_bo *qobj;
 		uint32_t handle;
-		u32 domain = qxl_alloc->type == QXL_ALLOC_TYPE_SURFACE ?
-			     QXL_GEM_DOMAIN_SURFACE : QXL_GEM_DOMAIN_VRAM;
+		u32 domain = QXL_GEM_DOMAIN_VRAM;
 		ret = qxl_gem_object_create_with_handle(qdev, file_priv,
 							domain,
 							qxl_alloc->size,
@@ -53,13 +35,6 @@ int qxl_alloc_ioctl(struct drm_device *dev, void *data,
 			return -ENOMEM;
 		}
 		qxl_alloc->handle = handle;
-		break;
-	}
-	default:
-		DRM_ERROR("%s: unexpected alloc type %d\n", __func__,
-			  qxl_alloc->type);
-		return -EINVAL;
-		break;
 	}
 	return 0;
 }
@@ -94,13 +69,13 @@ apply_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
 
 static void
 apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *src, uint64_t src_off,
-		 struct qxl_drv_surface *surf)
+		 struct qxl_bo *dst)
 {
 	uint32_t id = 0;
 	qxl_bo_kmap(src, NULL);
 
-	if (surf)
-		id = surf->id;
+	if (dst)
+		id = dst->surface_id;
 	*(uint32_t *)(src->kptr + src_off) = id;
 
 	qxl_bo_kunmap(src);
@@ -198,52 +173,37 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				   __func__, i, reloc.src_handle,
 				   reloc.src_offset, reloc.dst_handle,
 				   reloc.dst_offset);
-			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
-				reloc_src_bo =
-					qxlhw_handle_to_bo(qdev, file_priv,
-							   reloc.src_handle, cmd_bo);
+			reloc_src_bo =
+				qxlhw_handle_to_bo(qdev, file_priv,
+						   reloc.src_handle, cmd_bo);
+			if (!reloc_src_bo)
+				return -EINVAL;
+
+			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.dst_handle > 0) {
 				reloc_dst_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
 							   reloc.dst_handle, cmd_bo);
-				if (!reloc_src_bo || !reloc_dst_bo)
+				if (!reloc_dst_bo)
 					return -EINVAL;
+			} else
+				reloc_dst_bo = NULL;
+			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
 				apply_reloc(qdev, reloc_src_bo, reloc.src_offset,
 					    reloc_dst_bo, reloc.dst_offset);
-
-				if (reloc_dst_bo != cmd_bo) {
-					qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
-					drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
-				}
-				
-				if (reloc_src_bo != cmd_bo)
-					drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			} else if (reloc.reloc_type == QXL_RELOC_TYPE_SURF) {
-				struct qxl_drv_surface *surf;
-				reloc_src_bo =
-					qxlhw_handle_to_bo(qdev, file_priv,
-							   reloc.src_handle, cmd_bo);
-
-				if (!reloc_src_bo)
-					return -EINVAL;
-
-				surf = qxl_surface_lookup(dev, reloc.dst_handle);
-					
-				if (!surf && reloc.dst_handle != 0) {
-					DRM_ERROR("invalid arg %p %p %d\n", reloc_src_bo, surf, reloc.dst_handle);
-					return -EINVAL;
-				}
-
-				apply_surf_reloc(qdev, reloc_src_bo, reloc.src_offset, surf);
-				if (surf) {
-					qxl_release_add_surf(qdev, release, surf);
-					qxl_surface_unreference(surf);
-				}
-				if (reloc_src_bo != cmd_bo)
-					drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
+				apply_surf_reloc(qdev, reloc_src_bo, reloc.src_offset, reloc_dst_bo);
 			} else {
 				DRM_ERROR("unknown reloc type %d\n", reloc.reloc_type);
 				return -EINVAL;
 			}
+				
+			if (reloc_dst_bo && reloc_dst_bo != cmd_bo) {
+				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
+				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
+			}
+
+			if (reloc_src_bo != cmd_bo)
+				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 		}
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
@@ -263,32 +223,30 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_update_area *update_area = data;
-	struct qxl_drv_surface *surf;
 	struct qxl_rect area = {.left = update_area->left,
 				.top = update_area->top,
 				.right = update_area->right,
 				.bottom = update_area->bottom};
 	int ret;
+	struct drm_gem_object *gobj = NULL;
+	struct qxl_bo *qobj = NULL;
+
 	if (update_area->left >= update_area->right ||
 	    update_area->top >= update_area->bottom)
 		return -EINVAL;
 
-	surf = qxl_surface_lookup(dev, update_area->surface_id);
-	if (!surf)
-		if (update_area->surface_id)
-			return -EINVAL;
-       
-	if (surf) {
-		if (surf->file != file) {
-			ret = -EINVAL;
-			goto out;
-		}
+	if (update_area->handle) {
+		gobj = drm_gem_object_lookup(dev, file, update_area->handle);
+		if (gobj == NULL)
+			return -ENOENT;
+
+		qobj = gem_to_qxl_bo(gobj);
 	}
-	ret = qxl_io_update_area(qdev, surf, &area);
+	ret = qxl_io_update_area(qdev, qobj, &area);
 
 out:
-	if (surf)
-		qxl_surface_unreference(surf);
+	if (gobj)
+		drm_gem_object_unreference_unlocked(gobj);
 	return ret;
 }
 
@@ -329,58 +287,49 @@ static int qxl_clientcap_ioctl(struct drm_device *dev, void *data,
 	return -ENOSYS;
 }
 
-static int qxl_alloc_surface_ioctl(struct drm_device *dev, void *data,
-				   struct drm_file *file)
+static int qxl_alloc_surf_ioctl(struct drm_device *dev, void *data,
+				struct drm_file *file)
 {
 	struct qxl_device *qdev = dev->dev_private;
-	struct qxl_file_private *fpriv = file->driver_priv;
-	struct drm_qxl_alloc_surface_id *param = data;
-	struct drm_gem_object *gobj;
-	struct qxl_drv_surface *surf;
+	struct drm_qxl_alloc_surf *param = data;
+	struct qxl_bo *qobj;
 	int handle;
 	int ret;
+	int size, actual_stride;
 
-	/* lookup bo */
-	gobj = drm_gem_object_lookup(dev, file, param->bo_handle);	
-	if (!gobj)
-		return -EINVAL;
+	/* work out size allocate bo with handle */
+	actual_stride = param->stride < 0 ? -param->stride : param->stride;
+	size = actual_stride * param->height + actual_stride;
 
-	handle = qxl_surface_alloc(qdev, &surf);
-
-	surf->surf.format = param->format;
-	surf->surf.width = param->width;
-	surf->surf.height = param->height;
-	surf->surf.stride = param->stride;
-	surf->bo = gem_to_qxl_bo(gobj);
-	surf->file = file;
-
-	ret = qxl_hw_surface_alloc(qdev, surf);
-
-	/* attach to file priv linked list */
-	list_add(&surf->fpriv_list, &fpriv->surface_list);
-
-	param->surface_id = handle;
-	return ret;
-}
-
-static int qxl_remove_surface_ioctl(struct drm_device *dev, void *data,
-				   struct drm_file *file)
-{
-	struct qxl_drv_surface *surf;
-	struct drm_qxl_remove_surface_id *param = data;
-
-	surf = qxl_surface_lookup(dev, param->surface_id);
-	if (!surf)
-		return -EINVAL;
-
-	if (surf->file != file) {
-		qxl_surface_unreference(surf);
-		return -EINVAL;
+	ret = qxl_gem_object_create_with_handle(qdev, file,
+						QXL_GEM_DOMAIN_SURFACE,
+						size,
+						&qobj, &handle);
+	if (ret) {
+		DRM_ERROR("%s: failed to create gem ret=%d\n",
+			  __func__, ret);
+		return -ENOMEM;
 	}
-	/* unref for the first and for the lookup */
-	qxl_surface_unreference(surf);
-	qxl_surface_unreference(surf);
-	return 0;
+
+	ret = qxl_surface_id_alloc(qdev, qobj);
+	if (ret)
+		goto fail;
+
+	qobj->surf.format = param->format;
+	qobj->surf.width = param->width;
+	qobj->surf.height = param->height;
+	qobj->surf.stride = param->stride;
+
+	ret = qxl_hw_surface_alloc(qdev, qobj);
+	if (ret)
+		goto fail_surf;
+	param->handle = handle;
+	return ret;
+fail_surf:
+	qxl_surface_id_dealloc(qdev, qobj);
+fail:
+	drm_gem_object_handle_unreference_unlocked(&qobj->gem_base);
+	return ret;
 }
 
 struct drm_ioctl_desc qxl_ioctls[] = {
@@ -401,10 +350,28 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_CLIENTCAP, qxl_clientcap_ioctl,
 							DRM_AUTH|DRM_UNLOCKED),
 
-	DRM_IOCTL_DEF_DRV(QXL_ALLOC_SURF_ID, qxl_alloc_surface_ioctl,
-							DRM_AUTH|DRM_UNLOCKED),
-	DRM_IOCTL_DEF_DRV(QXL_REMOVE_SURF_ID, qxl_remove_surface_ioctl,
-							DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(QXL_ALLOC_SURF, qxl_alloc_surf_ioctl,
+			  DRM_AUTH|DRM_UNLOCKED),
 };
 
 int qxl_max_ioctls = DRM_ARRAY_SIZE(qxl_ioctls);
+
+#if 0
+
+	case QXL_ALLOC_TYPE_SURFACE_PRIMARY:
+		/*
+		 * TODO: would be nice if the primary always had a handle of 1,
+		 * but for that we would need to change drm gem code a little,
+		 * so probably not worth it.  Note: The size is a actually
+		 * ignored here, we return a handle to the primary surface BO
+		 */
+		ret = qxl_get_handle_for_primary_fb(qdev, file_priv,
+						    &qxl_alloc->handle);
+		if (ret) {
+			DRM_ERROR("%s: failed to allocate handle for primary"
+				  "fb gem object %p\n", __func__,
+				  qdev->fbdev_qfb->obj);
+		}
+		break;
+
+#endif

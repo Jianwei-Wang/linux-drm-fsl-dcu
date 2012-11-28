@@ -6,6 +6,13 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	struct qxl_bo *bo;
 
 	bo = container_of(tbo, struct qxl_bo, tbo);
+
+	if (bo->type == QXL_GEM_DOMAIN_SURFACE) {
+		if (bo->surface_id) {
+			qxl_hw_surface_dealloc(bo->qdev, bo);
+			qxl_surface_id_dealloc(bo->qdev, bo);
+		}
+	}
 	mutex_lock(&bo->qdev->gem.mutex);
 	list_del_init(&bo->list);
 	mutex_unlock(&bo->qdev->gem.mutex);

@@ -249,30 +249,4 @@ out:
 	return r;
 }
 
-int qxl_driver_open(struct drm_device *dev, struct drm_file *file)
-{
-	struct qxl_file_private *fpriv;
 
-	fpriv = kmalloc(sizeof(*fpriv), GFP_KERNEL);
-	if (!fpriv)
-		return -ENOMEM;
-
-	file->driver_priv = fpriv;
-	INIT_LIST_HEAD(&fpriv->surface_list);
-	return 0;
-}
-
-void qxl_driver_preclose(struct drm_device *dev, struct drm_file *file)
-{
-	struct qxl_file_private *fpriv = file->driver_priv;
-	struct qxl_drv_surface *surf, *tmp;
-
-	list_for_each_entry_safe(surf, tmp, &fpriv->surface_list, fpriv_list)
-		qxl_surface_unreference(surf);
-}
-
-void qxl_driver_postclose(struct drm_device *dev, struct drm_file *file)
-{
-	struct qxl_file_private *fpriv = file->driver_priv;
-	kfree(fpriv);
-}

@@ -84,6 +84,8 @@ struct qxl_bo {
 	/* Constant after initialization */
 	struct qxl_device		*qdev;
 	struct drm_gem_object		gem_base;
+	struct qxl_surface surf;
+	uint32_t surface_id;
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
@@ -174,8 +176,6 @@ struct drm_qxl_release {
 	int type;
 	int bo_count;
 	struct qxl_bo *bos[QXL_MAX_RES];
-	int surf_count;
-	struct qxl_drv_surface *surfs[QXL_MAX_RES];
 };
 
 /* all information required for an image blit. used instead
@@ -224,20 +224,6 @@ int qxl_debugfs_add_files(struct qxl_device *rdev,
 int qxl_debugfs_fence_init(struct qxl_device *rdev);
 
 struct qxl_device;
-
-/* currently surfaces can't be shared between file privs */
-struct qxl_drv_surface {
-	struct kref refcount;
-	struct qxl_surface surf;
-	struct list_head fpriv_list;
-	struct qxl_bo *bo;
-	struct drm_file *file; /* owner */
-	uint32_t id;
-};
-
-struct qxl_file_private {
-	struct list_head surface_list;
-};
 
 struct qxl_device {
 	struct device			*dev;
@@ -346,10 +332,6 @@ extern int qxl_max_ioctl;
 
 int qxl_driver_load(struct drm_device *dev, unsigned long flags);
 int qxl_driver_unload(struct drm_device *dev);
-
-int qxl_driver_open(struct drm_device *dev, struct drm_file *file);
-void qxl_driver_preclose(struct drm_device *dev, struct drm_file *file);
-void qxl_driver_postclose(struct drm_device *dev, struct drm_file *file);
 
 int qxl_modeset_init(struct qxl_device *qdev);
 void qxl_modeset_fini(struct qxl_device *qdev);
@@ -468,8 +450,9 @@ void qxl_io_destroy_primary(struct qxl_device *qdev);
 void qxl_io_memslot_add(struct qxl_device *qdev, uint8_t id);
 void qxl_io_notify_oom(struct qxl_device *qdev);
 
-int qxl_io_update_area(struct qxl_device *qdev, struct qxl_drv_surface *surf,
-			const struct qxl_rect *area);
+int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
+		       const struct qxl_rect *area);
+
 void qxl_io_reset(struct qxl_device *qdev);
 void qxl_io_monitors_config(struct qxl_device *qdev);
 void qxl_ring_push(struct qxl_ring *ring, const void *new_elt);
@@ -520,9 +503,6 @@ void qxl_release_free(struct qxl_device *qdev,
 void qxl_release_add_res(struct qxl_device *qdev,
 			 struct drm_qxl_release *release,
 			 struct qxl_bo *bo);
-void qxl_release_add_surf(struct qxl_device *qdev,
-			  struct drm_qxl_release *release,
-			  struct qxl_drv_surface *surf);
 /* used by qxl_debugfs_release */
 struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id);
@@ -552,15 +532,14 @@ int qxl_debugfs_add_files(struct qxl_device *qdev,
 			  struct drm_info_list *files,
 			  unsigned nfiles);
 
-int qxl_surface_alloc(struct qxl_device *qdev,
-		      struct qxl_drv_surface **rsurf);
+int qxl_surface_id_alloc(struct qxl_device *qdev,
+			 struct qxl_bo *surf);
+void qxl_surface_id_dealloc(struct qxl_device *qdev,
+			    struct qxl_bo *surf);
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
-			 struct qxl_drv_surface *surf);
+			 struct qxl_bo *surf);
 int qxl_hw_surface_dealloc(struct qxl_device *qdev,
-			   struct qxl_drv_surface *surf);
-void
-qxl_surface_unreference(struct qxl_drv_surface *surf);
-
+			   struct qxl_bo *surf);
 struct qxl_drv_surface *
 qxl_surface_lookup(struct drm_device *dev, int surface_id);
 #endif

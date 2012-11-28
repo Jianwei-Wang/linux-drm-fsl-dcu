@@ -95,9 +95,6 @@ qxl_release_free(struct qxl_device *qdev,
 						- DRM_FILE_OFFSET);
 		qxl_bo_unref(&release->bos[i]);
 	}
-	for (i = 0 ; i < release->surf_count; ++i) {
-		qxl_surface_unreference(release->surfs[i]);
-	}
 	spin_lock(&qdev->release_idr_lock);
 	idr_remove(&qdev->release_idr, release->id);
 	spin_unlock(&qdev->release_idr_lock);
@@ -113,18 +110,6 @@ qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
 		return;
 	}
 	release->bos[release->bo_count++] = bo;
-}
-
-void
-qxl_release_add_surf(struct qxl_device *qdev, struct drm_qxl_release *release,
-		     struct qxl_drv_surface *surf)
-{
-	if (release->surf_count >= QXL_MAX_RES) {
-		DRM_ERROR("exceeded max resource on a drm_qxl_release item\n");
-		return;
-	}
-	kref_get(&surf->refcount);
-	release->surfs[release->surf_count++] = surf;
 }
 
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
