@@ -512,6 +512,10 @@ static int qxlfb_create_pinned_object(struct qxl_fbdev *qfbdev,
 	}
 	qbo = gem_to_qxl_bo(gobj);
 
+	qbo->surf.width = 1024;
+	qbo->surf.height = 768;
+	qbo->surf.stride = 4096;
+	qbo->surf.format = SPICE_SURFACE_FMT_32_xRGB;
 	ret = qxl_bo_reserve(qbo, false);
 	if (unlikely(ret != 0))
 		goto out_unref;
