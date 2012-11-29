@@ -1,6 +1,7 @@
 #include "linux/crc32.h"
 
 #include "qxl_drv.h"
+#include "qxl_object.h"
 #include "drm_crtc_helper.h"
 
 static void qxl_crtc_set_to_mode(struct qxl_device *qdev,
@@ -209,11 +210,127 @@ static void qxl_crtc_destroy(struct drm_crtc *crtc)
 	kfree(qxl_crtc);
 }
 
+static void
+push_cursor(struct qxl_device *qdev, struct qxl_bo *cursor_bo)
+{
+	qxl_push_cursor_ring(qdev, cursor_bo, QXL_CMD_CURSOR);
+}
+
+static void
+qxl_hide_cursor(struct qxl_device *qdev)
+{
+	struct qxl_bo *cmd_bo;
+	struct drm_qxl_release *release;
+	struct qxl_cursor_cmd *cmd;
+
+	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_CURSOR_CMD,
+				   &release, &cmd_bo);
+
+	cmd->type = QXL_CURSOR_HIDE;
+	push_cursor(qdev, cmd_bo);
+}
+
+static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
+			       struct drm_file *file_priv,
+			       uint32_t handle,
+			       uint32_t width,
+			       uint32_t height)
+{
+	struct drm_device *dev = crtc->dev;
+	struct qxl_device *qdev = dev->dev_private;
+	struct qxl_crtc *qcrtc = to_qxl_crtc(crtc);
+	struct drm_gem_object *obj;
+	struct qxl_cursor *cursor;
+	struct qxl_cursor_cmd *cmd;
+	struct qxl_bo *cursor_bo, *cmd_bo, *user_bo;
+	struct drm_qxl_release *release;
+	void *user_ptr;
+
+	int size = 64*64*4;
+	int ret = 0;
+	if (!handle) {
+		qxl_hide_cursor(qdev);
+		return 0;
+	}
+
+	obj = drm_gem_object_lookup(crtc->dev, file_priv, handle);
+	if (!obj) {
+		DRM_ERROR("cannot find cursor object\n");
+		return -ENOENT;
+	}
+
+	user_bo = gem_to_qxl_bo(obj);
+
+	ret = qxl_bo_kmap(user_bo, &user_ptr);
+
+	/* don't need to pin just copy it into a cursor cmd bo */
+	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_CURSOR_CMD,
+				   &release, &cmd_bo);
+
+	/* allocate and copy over the cursor bo */
+	
+	cursor = qxl_allocnf(qdev, sizeof(struct qxl_cursor) + size,
+			     release);
+
+	cursor_bo = release->bos[release->bo_count - 1];
+
+	cursor->header.unique = 0;
+	cursor->header.type = SPICE_CURSOR_TYPE_ALPHA;
+	cursor->header.width = 64;
+	cursor->header.height = 64;
+	cursor->header.hot_spot_x = 0;
+	cursor->header.hot_spot_y = 0;
+	cursor->data_size = size;
+	cursor->chunk.next_chunk = 0;
+	cursor->chunk.prev_chunk = 0;
+	cursor->chunk.data_size = size;
+
+	memcpy(cursor->chunk.data, user_ptr, size);
+
+	qxl_bo_kunmap(user_bo);
+
+	cmd->type = QXL_CURSOR_SET;
+	cmd->u.set.position.x = qcrtc->cur_x;
+	cmd->u.set.position.y = qcrtc->cur_y;
+
+	cmd->u.set.shape = qxl_bo_physical_address(qdev, cursor_bo, 0);
+	/* add a reloc */
+	cmd->u.set.visible = 1;
+	
+	push_cursor(qdev, cmd_bo);
+
+	drm_gem_object_unreference_unlocked(obj);
+
+	return ret;
+}
+
+static int qxl_crtc_cursor_move(struct drm_crtc *crtc,
+				int x, int y)
+{
+	struct drm_device *dev = crtc->dev;
+	struct qxl_device *qdev = dev->dev_private;
+	struct qxl_crtc *qcrtc = to_qxl_crtc(crtc);
+	struct qxl_bo *cmd_bo;
+	struct drm_qxl_release *release;
+	struct qxl_cursor_cmd *cmd;
+
+	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_CURSOR_CMD,
+				   &release, &cmd_bo);
+
+	qcrtc->cur_x = x;
+	qcrtc->cur_y = y;
+	cmd->type = QXL_CURSOR_MOVE;
+	cmd->u.position.x = qcrtc->cur_x;
+	cmd->u.position.y = qcrtc->cur_y;
+
+	push_cursor(qdev, cmd_bo);
+	return 0;
+}
+
+
 static const struct drm_crtc_funcs qxl_crtc_funcs = {
-	/* TODO
 	.cursor_set = qxl_crtc_cursor_set,
 	.cursor_move = qxl_crtc_cursor_move,
-	*/
 	.gamma_set = qxl_crtc_gamma_set,
 	.set_config = drm_crtc_helper_set_config,
 	.destroy = qxl_crtc_destroy,

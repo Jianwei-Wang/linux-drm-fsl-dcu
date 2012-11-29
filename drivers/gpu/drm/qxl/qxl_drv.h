@@ -120,6 +120,10 @@ struct qxl_gem {
 
 struct qxl_crtc {
 	struct drm_crtc base;
+	int cur_x;
+	int cur_y;
+//	int hot_x;
+//	int hot_y;
 };
 
 struct qxl_output {
