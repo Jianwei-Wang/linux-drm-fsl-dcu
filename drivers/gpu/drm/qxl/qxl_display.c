@@ -664,16 +664,18 @@ qxl_find_native_mode(struct qxl_device *qdev, struct drm_display_mode *mode,
 
 static int qxl_conn_get_modes(struct drm_connector *connector)
 {
-	int ret;
+	int ret = 0;
 	struct qxl_device *qdev = connector->dev->dev_private;
 
 	DRM_INFO("monitors_config=%p\n", qdev->monitors_config);
 	/* TODO: what should we do here? only show the configured modes for the
 	 * device, or allow the full list, or both? */
-	if (qdev->monitors_config && qdev->monitors_config->count)
+	if (qdev->monitors_config && qdev->monitors_config->count) {
 		ret = qxl_add_monitors_config_modes(connector);
-	else
-		ret = qxl_add_common_modes(connector);
+		if (ret < 0)
+			return ret;
+	}
+	ret += qxl_add_common_modes(connector);
 	return ret;
 }
 
