@@ -336,22 +336,21 @@ void qxl_io_destroy_primary(struct qxl_device *qdev)
 }
 
 void qxl_io_create_primary(struct qxl_device *qdev, unsigned width,
-			   unsigned height)
+			   unsigned height, struct qxl_bo *bo)
 {
 	struct qxl_surface_create *create;
-	int32_t stride = width * 4;
 
 	QXL_INFO(qdev, "%s: qdev %p, ram_header %p\n", __func__, qdev,
 		 qdev->ram_header);
 	create = &qdev->ram_header->create_surface;
-	create->format = SPICE_SURFACE_FMT_32_xRGB;
+	create->format = bo->surf.format;
 	create->width = width;
 	create->height = height;
-	create->stride = stride;
-	create->mem = qxl_bo_physical_address(qdev,
-					      qdev->surface0_bo, 0);
+	create->stride = bo->surf.stride;
+	create->mem = qxl_bo_physical_address(qdev, bo, 0);
+
 	QXL_INFO(qdev, "%s: mem = %llx, from %p\n", __func__, create->mem,
-		 qdev->surface0_bo->kptr);
+		 bo->kptr);
 
 	create->flags = 0;
 	create->type = QXL_SURF_TYPE_PRIMARY;

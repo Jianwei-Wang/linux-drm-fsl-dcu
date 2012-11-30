@@ -480,7 +480,7 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 		qxl_io_log(qdev, "create primary: %dx%d\n",
 			   mode->hdisplay + x, mode->vdisplay + y);
 		qxl_io_create_primary(qdev, mode->hdisplay + x,
-				      mode->vdisplay + y);
+				      mode->vdisplay + y, qdev->surface0_bo);
 	} else {
 		unsigned width = x + mode->hdisplay;
 		unsigned height = y + mode->vdisplay;
@@ -493,7 +493,7 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 			    "recreate primary: %dx%d (was %dx%d)\n",
 				   width, height, qdev->primary_width,
 				   qdev->primary_height);
-			qxl_io_create_primary(qdev, width, height);
+			qxl_io_create_primary(qdev, width, height, qdev->surface0_bo);
 		}
 	}
 	if (qdev->monitors_config->count == 0) {
