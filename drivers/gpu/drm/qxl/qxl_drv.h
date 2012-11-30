@@ -78,11 +78,9 @@ struct qxl_bo {
 	struct ttm_buffer_object	tbo;
 	struct ttm_bo_kmap_obj		kmap;
 	unsigned			pin_count;
-	void				*kptr;
-	u32				pitch;
+ 	void				*kptr;
 	int                             type;
 	/* Constant after initialization */
-	struct qxl_device		*qdev;
 	struct drm_gem_object		gem_base;
 	struct qxl_surface surf;
 	uint32_t surface_id;

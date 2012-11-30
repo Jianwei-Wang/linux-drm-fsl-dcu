@@ -4,18 +4,20 @@
 static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 {
 	struct qxl_bo *bo;
+	struct qxl_device *qdev;
 
 	bo = container_of(tbo, struct qxl_bo, tbo);
+	qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 
 	if (bo->type == QXL_GEM_DOMAIN_SURFACE) {
 		if (bo->surface_id) {
-			qxl_hw_surface_dealloc(bo->qdev, bo);
-			qxl_surface_id_dealloc(bo->qdev, bo);
+			qxl_hw_surface_dealloc(qdev, bo);
+			qxl_surface_id_dealloc(qdev, bo);
 		}
 	}
-	mutex_lock(&bo->qdev->gem.mutex);
+	mutex_lock(&qdev->gem.mutex);
 	list_del_init(&bo->list);
-	mutex_unlock(&bo->qdev->gem.mutex);
+	mutex_unlock(&qdev->gem.mutex);
 	drm_gem_object_release(&bo->gem_base);
 	kfree(bo);
 }
@@ -86,7 +88,6 @@ int qxl_bo_create(struct qxl_device *qdev,
 		return r;
 	}
 	bo->gem_base.driver_private = NULL;
-	bo->qdev = qdev;
 	bo->type = domain;
 	INIT_LIST_HEAD(&bo->list);
 
@@ -154,6 +155,7 @@ struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo)
 
 int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 {
+	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 	int r, i;
 
 	if (bo->pin_count) {
@@ -172,16 +174,17 @@ int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 			*gpu_addr = qxl_bo_gpu_offset(bo);
 	}
 	if (unlikely(r != 0))
-		dev_err(bo->qdev->dev, "%p pin failed\n", bo);
+		dev_err(qdev->dev, "%p pin failed\n", bo);
 	return r;
 }
 
 int qxl_bo_unpin(struct qxl_bo *bo)
 {
+	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 	int r, i;
 
 	if (!bo->pin_count) {
-		dev_warn(bo->qdev->dev, "%p unpin not necessary\n", bo);
+		dev_warn(qdev->dev, "%p unpin not necessary\n", bo);
 		return 0;
 	}
 	bo->pin_count--;
@@ -191,7 +194,7 @@ int qxl_bo_unpin(struct qxl_bo *bo)
 		bo->placements[i] &= ~TTM_PL_FLAG_NO_EVICT;
 	r = ttm_bo_validate(&bo->tbo, &bo->placement, false, false, false);
 	if (unlikely(r != 0))
-		dev_err(bo->qdev->dev, "%p validate failed for unpin\n", bo);
+		dev_err(qdev->dev, "%p validate failed for unpin\n", bo);
 	return r;
 }
 
@@ -207,9 +210,9 @@ void qxl_bo_force_delete(struct qxl_device *qdev)
 		dev_err(qdev->dev, "%p %p %lu %lu force free\n",
 			&bo->gem_base, bo, (unsigned long)bo->gem_base.size,
 			*((unsigned long *)&bo->gem_base.refcount));
-		mutex_lock(&bo->qdev->gem.mutex);
+		mutex_lock(&qdev->gem.mutex);
 		list_del_init(&bo->list);
-		mutex_unlock(&bo->qdev->gem.mutex);
+		mutex_unlock(&qdev->gem.mutex);
 		/* this should unref the ttm bo */
 		drm_gem_object_unreference(&bo->gem_base);
 		mutex_unlock(&qdev->ddev->struct_mutex);
