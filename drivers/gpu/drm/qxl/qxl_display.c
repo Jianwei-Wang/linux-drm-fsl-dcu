@@ -387,15 +387,22 @@ static const struct drm_framebuffer_funcs qxl_fb_funcs = {
  *	.create_handle = qxl_user_framebuffer_create_handle, */
 };
 
-void
+int
 qxl_framebuffer_init(struct drm_device *dev,
 		     struct qxl_framebuffer *qfb,
 		     struct drm_mode_fb_cmd2 *mode_cmd,
 		     struct drm_gem_object *obj)
 {
+	int ret;
+
 	qfb->obj = obj;
-	drm_framebuffer_init(dev, &qfb->base, &qxl_fb_funcs);
+	ret = drm_framebuffer_init(dev, &qfb->base, &qxl_fb_funcs);
+	if (ret) {
+		qfb->obj = NULL;
+		return ret;
+	}
 	drm_helper_mode_fill_fb_struct(&qfb->base, mode_cmd);
+	return 0;
 }
 
 static void qxl_crtc_dpms(struct drm_crtc *crtc, int mode)
@@ -463,7 +470,16 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct qxl_device *qdev = dev->dev_private;
 	struct qxl_mode *m = (void *)mode->private;
+	struct qxl_framebuffer *qfb;
+	struct qxl_bo *bo;
 
+	if (!crtc->fb) {
+		DRM_DEBUG_KMS("No FB bound\n");
+		return 0;
+	}
+       
+	qfb = to_qxl_framebuffer(crtc->fb);
+	bo = gem_to_qxl_bo(qfb->obj);
 	if (!m)
 		/* and do we care? */
 		DRM_DEBUG("%dx%d: not a native mode\n", x, y);
@@ -480,20 +496,20 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 		qxl_io_log(qdev, "create primary: %dx%d\n",
 			   mode->hdisplay + x, mode->vdisplay + y);
 		qxl_io_create_primary(qdev, mode->hdisplay + x,
-				      mode->vdisplay + y, qdev->surface0_bo);
+				      mode->vdisplay + y, bo);
 	} else {
 		unsigned width = x + mode->hdisplay;
 		unsigned height = y + mode->vdisplay;
-		if (width > qdev->primary_width ||
-		    height > qdev->primary_height) {
-			width = max(width, qdev->primary_width);
-			height = max(height, qdev->primary_height);
+		if (width > bo->surf.width ||
+		    height > bo->surf.height) {
+			width = max(width, bo->surf.width);
+			height = max(height, bo->surf.height);
 			qxl_io_destroy_primary(qdev);
 			qxl_io_log(qdev,
 			    "recreate primary: %dx%d (was %dx%d)\n",
-				   width, height, qdev->primary_width,
-				   qdev->primary_height);
-			qxl_io_create_primary(qdev, width, height, qdev->surface0_bo);
+				   width, height, bo->surf.width,
+				   bo->surf.height);
+			qxl_io_create_primary(qdev, width, height, bo);
 		}
 	}
 	if (qdev->monitors_config->count == 0) {
@@ -818,6 +834,7 @@ qxl_user_framebuffer_create(struct drm_device *dev,
 	struct drm_gem_object *obj;
 	struct qxl_framebuffer *qxl_fb;
 	struct qxl_device *qdev = dev->dev_private;
+	int ret;
 
 	obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
 
@@ -827,7 +844,13 @@ qxl_user_framebuffer_create(struct drm_device *dev,
 	if (qxl_fb == NULL)
 		return NULL;
 
-	qxl_framebuffer_init(dev, qxl_fb, mode_cmd, obj);
+	ret = qxl_framebuffer_init(dev, qxl_fb, mode_cmd, obj);
+	if (ret) {
+		kfree(qxl_fb);
+		drm_gem_object_unreference_unlocked(obj);
+		return NULL;
+	}
+
 	if (qdev->active_user_framebuffer) {
 		DRM_INFO("%s: active_user_framebuffer %p -> %p\n",
 			 __func__,

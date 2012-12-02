@@ -282,20 +282,18 @@ done:
 int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 			const struct qxl_rect *area)
 {
-	int surface_id = 0;
-	unsigned surface_width = qdev->primary_width;
-	unsigned surface_height = qdev->primary_height;
+	int surface_id;
+	uint32_t surface_width, surface_height;
 
-	if (surf) {
-		surface_id = surf->surface_id;
-		surface_width = surf->surf.width;
-		surface_height = surf->surf.height;
-	}
+	surface_id = surf->surface_id;
+	surface_width = surf->surf.width;
+	surface_height = surf->surf.height;
+
 	if (area->left < 0 || area->top < 0 ||
 	    area->right > surface_width || area->bottom > surface_height) {
 		qxl_io_log(qdev, "%s: not doing area update for "
-			   "%d, (%d,%d,%d,%d)\n", __func__, surface_id, area->left,
-			   area->top, area->right, area->bottom);
+			   "%d, (%d,%d,%d,%d) (%d,%d)\n", __func__, surface_id, area->left,
+			   area->top, area->right, area->bottom, surface_width, surface_height);
 		return -EINVAL;
 	}
 	mutex_lock(&qdev->update_area_mutex);
@@ -309,22 +307,6 @@ int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 void qxl_io_notify_oom(struct qxl_device *qdev)
 {
 	outb(0, qdev->io_base + QXL_IO_NOTIFY_OOM);
-}
-
-void qxl_io_update_screen(struct qxl_device *qdev)
-{
-	struct qxl_rect area;
-	u32 height, width;
-
-	height = qdev->fbdev_qfb->base.height;
-	width = qdev->fbdev_qfb->base.width;
-	QXL_INFO(qdev, "%s: bad bad bad %dx%d\n", __func__,
-		 width, height);
-	area.left = area.top = 0;
-	area.right = width;
-	area.bottom = height;
-
-	qxl_io_update_area(qdev, NULL, &area);
 }
 
 void qxl_io_destroy_primary(struct qxl_device *qdev)
@@ -356,8 +338,6 @@ void qxl_io_create_primary(struct qxl_device *qdev, unsigned width,
 	create->type = QXL_SURF_TYPE_PRIMARY;
 
 	qdev->primary_created = 1;
-	qdev->primary_width = width;
-	qdev->primary_height = height;
 
 	wait_for_io_cmd(qdev, 0, QXL_IO_CREATE_PRIMARY_ASYNC);
 }
@@ -450,7 +430,6 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 {
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
-
 	struct drm_qxl_release *release;
 
 	/* allocate releaseable and send commands */

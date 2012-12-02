@@ -106,7 +106,7 @@ qxl_debugfs_dumbppm(struct seq_file *m, void *data)
 		area.top = area.left = 0;
 		area.right = qdev->fbdev_qfb->base.width;
 		area.bottom = qdev->fbdev_qfb->base.height;
-		qxl_io_update_area(qdev, 0, &area);
+		qxl_io_update_area(qdev, gem_to_qxl_bo(qdev->fbdev_qfb->obj), &area);
 		ppm_save_qxl_fb(qdev->fbdev_qfb, m);
 	}
 	return 0;

@@ -47,6 +47,9 @@ struct qxl_fbdev {
 	struct list_head	fbdev_list;
 	struct qxl_device	*qdev;
 
+	void *shadow;
+	int size;
+
 	/* dirty memory logging */
 	struct {
 		spinlock_t lock;
@@ -116,7 +119,7 @@ static void qxl_fb_dirty_flush(struct fb_info *info)
 	image->cmap.green = NULL;
 	image->cmap.blue = NULL;
 	image->cmap.transp = NULL;
-	image->data = qdev->surface0_shadow + (x1 * 4) + (stride * y1);
+	image->data = qfbdev->shadow + (x1 * 4) + (stride * y1);
 
 	qxl_fb_image_init(&qxl_fb_image, qdev, info, NULL);
 	qxl_draw_opaque_fb(&qxl_fb_image, stride);
@@ -500,7 +503,7 @@ static int qxlfb_create_pinned_object(struct qxl_fbdev *qfbdev,
 	aligned_size = ALIGN(size, PAGE_SIZE);
 	/* TODO: unallocate and reallocate surface0 for real. Hack to just
 	 * have a large enough surface0 for 1024x768 Xorg 32bpp mode */
-	ret = qxl_gem_object_create(qdev, 1024*768*4 /* aligned_size */, 0,
+	ret = qxl_gem_object_create(qdev, aligned_size, 0,
 				    QXL_GEM_DOMAIN_VRAM,
 				    false, /* is discardable */
 				    false, /* is kernel (false means device) */
@@ -512,9 +515,9 @@ static int qxlfb_create_pinned_object(struct qxl_fbdev *qfbdev,
 	}
 	qbo = gem_to_qxl_bo(gobj);
 
-	qbo->surf.width = 1024;
-	qbo->surf.height = 768;
-	qbo->surf.stride = 4096;
+	qbo->surf.width = mode_cmd->width;
+	qbo->surf.height = mode_cmd->height;
+	qbo->surf.stride = mode_cmd->pitches[0];
 	qbo->surf.format = SPICE_SURFACE_FMT_32_xRGB;
 	ret = qxl_bo_reserve(qbo, false);
 	if (unlikely(ret != 0))
@@ -551,6 +554,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 	int size;
 	int bpp = sizes->surface_bpp;
 	int depth = sizes->surface_depth;
+	void *shadow;
 
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
@@ -559,19 +563,19 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(bpp, depth);
 
 	ret = qxlfb_create_pinned_object(qfbdev, &mode_cmd, &gobj);
-	qdev->surface0_bo = qbo = gem_to_qxl_bo(gobj);
+	qbo = gem_to_qxl_bo(gobj);
 	QXL_INFO(qdev, "%s: %dx%d %d\n", __func__, mode_cmd.width,
 		 mode_cmd.height, mode_cmd.pitches[0]);
-	qdev->surface0_shadow =
-		kmalloc(mode_cmd.pitches[0] * mode_cmd.height, GFP_KERNEL);
+
+	shadow = kmalloc(mode_cmd.pitches[0] * mode_cmd.height, GFP_KERNEL);
 	/* TODO: what's the usual response to memory allocation errors? */
-	BUG_ON(!qdev->surface0_shadow);
+	BUG_ON(!shadow);
 	QXL_INFO(qdev,
 	"surface0 at gpu offset %lld, mmap_offset %lld (virt %p, shadow %p)\n",
-		 qxl_bo_gpu_offset(qdev->surface0_bo),
-		 qxl_bo_mmap_offset(qdev->surface0_bo),
-		 qdev->surface0_bo->kptr,
-		 qdev->surface0_shadow);
+		 qxl_bo_gpu_offset(qbo),
+		 qxl_bo_mmap_offset(qbo),
+		 qbo->kptr,
+		 shadow);
 	size = mode_cmd.pitches[0] * mode_cmd.height;
 
 	info = framebuffer_alloc(0, device);
@@ -589,7 +593,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 	/* setup helper with fb data */
 	qfbdev->helper.fb = fb;
 	qfbdev->helper.fbdev = info;
-
+	qfbdev->shadow = shadow;
 	strcpy(info->fix.id, "qxldrmfb");
 
 	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->depth);
@@ -603,7 +607,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 	 */
 	info->fix.smem_start = qdev->vram_base; /* TODO - correct? */
 	info->fix.smem_len = gobj->size;
-	info->screen_base = qdev->surface0_shadow;
+	info->screen_base = qfbdev->shadow;
 	info->screen_size = gobj->size;
 
 	drm_fb_helper_fill_var(info, &qfbdev->helper, sizes->fb_width,
@@ -620,12 +624,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 
 	info->fix.mmio_start = 0;
 	info->fix.mmio_len = 0;
-	/* TODO: not correct - must be taken from pci */
-	info->pixmap.size = 64*1024;
-	info->pixmap.buf_align = 8;
-	info->pixmap.access_align = 32;
-	info->pixmap.flags = FB_PIXMAP_SYSTEM;
-	info->pixmap.scan_align = 1;
+
 	if (info->screen_base == NULL) {
 		ret = -ENOSPC;
 		goto out_unref;

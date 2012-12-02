@@ -82,6 +82,7 @@ struct qxl_bo {
 	int                             type;
 	/* Constant after initialization */
 	struct drm_gem_object		gem_base;
+	bool is_primary; /* is this now a primary surface */
 	struct qxl_surface surf;
 	uint32_t surface_id;
 };
@@ -247,8 +248,6 @@ struct qxl_device {
 
 	int io_base;
 	void *ram;
-	struct qxl_bo *surface0_bo;
-	void  *surface0_shadow;
 	struct qxl_mman		mman;
 	struct qxl_gem		gem;
 	struct qxl_mode_info mode_info;
@@ -271,8 +270,6 @@ struct qxl_device {
 	bool mode_set;
 
 	bool primary_created;
-	unsigned primary_width;
-	unsigned primary_height;
 
 	struct qxl_memslot	*mem_slots;
 	uint8_t		n_mem_slots;
@@ -315,16 +312,6 @@ struct qxl_device {
 	struct idr	surf_id_idr;
 	spinlock_t surf_id_idr_lock;	
 };
-
-static inline unsigned
-qxl_surface_width(struct qxl_device *qdev, unsigned surface_id) {
-	return surface_id == 0 ? qdev->primary_width : 0;
-}
-
-static inline unsigned
-qxl_surface_height(struct qxl_device *qdev, unsigned surface_id) {
-	return surface_id == 0 ? qdev->primary_height : 0;
-}
 
 /* forward declaration for QXL_INFO_IO */
 void qxl_io_log(struct qxl_device *qdev, const char *fmt, ...);
@@ -379,7 +366,7 @@ int qxl_get_handle_for_primary_fb(struct qxl_device *qdev,
 				  uint32_t *handle);
 
 /* qxl_display.c */
-void
+int
 qxl_framebuffer_init(struct drm_device *dev,
 		     struct qxl_framebuffer *rfb,
 		     struct drm_mode_fb_cmd2 *mode_cmd,
