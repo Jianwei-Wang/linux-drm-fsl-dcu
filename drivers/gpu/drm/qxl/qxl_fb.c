@@ -567,7 +567,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 	QXL_INFO(qdev, "%s: %dx%d %d\n", __func__, mode_cmd.width,
 		 mode_cmd.height, mode_cmd.pitches[0]);
 
-	shadow = kmalloc(mode_cmd.pitches[0] * mode_cmd.height, GFP_KERNEL);
+	shadow = vmalloc(mode_cmd.pitches[0] * mode_cmd.height);
 	/* TODO: what's the usual response to memory allocation errors? */
 	BUG_ON(!shadow);
 	QXL_INFO(qdev,
@@ -719,6 +719,7 @@ static int qxl_fbdev_destroy(struct drm_device *dev, struct qxl_fbdev *qfbdev)
 		qfb->obj = NULL;
 	}
 	drm_fb_helper_fini(&qfbdev->helper);
+	vfree(qfbdev->shadow);
 	drm_framebuffer_cleanup(&qfb->base);
 
 	return 0;
