@@ -24,11 +24,6 @@
 
 #define DRM_QXL_ALLOC_SURF  0x06
 
-enum {
-	QXL_SURF_ALLOC_TYPE_SURFACE,
-	QXL_SURF_ALLOC_TYPE_PRIMARY,
-};
-
 struct drm_qxl_alloc {
 	uint32_t size;
 	uint32_t handle; /* 0 is an invalid handle */
@@ -96,7 +91,6 @@ struct drm_qxl_clientcap {
 };
 
 struct drm_qxl_alloc_surf {
-	uint32_t type;
         uint32_t format;
         uint32_t width;
         uint32_t height;

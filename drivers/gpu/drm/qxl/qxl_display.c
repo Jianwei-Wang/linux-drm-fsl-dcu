@@ -471,13 +471,18 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 	struct qxl_device *qdev = dev->dev_private;
 	struct qxl_mode *m = (void *)mode->private;
 	struct qxl_framebuffer *qfb;
-	struct qxl_bo *bo;
-
+	struct qxl_bo *bo, *old_bo = NULL;
+	uint32_t width, height, base_offset;
+	bool recreate_primary = false;
 	if (!crtc->fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
 		return 0;
 	}
        
+	if (old_fb) {
+		qfb = to_qxl_framebuffer(old_fb);
+		old_bo = gem_to_qxl_bo(qfb->obj);
+	}
 	qfb = to_qxl_framebuffer(crtc->fb);
 	bo = gem_to_qxl_bo(qfb->obj);
 	if (!m)
@@ -492,26 +497,26 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 		  adjusted_mode->hdisplay,
 		  adjusted_mode->vdisplay);
 
-	if (!qdev->primary_created) {
-		qxl_io_log(qdev, "create primary: %dx%d\n",
-			   mode->hdisplay + x, mode->vdisplay + y);
-		qxl_io_create_primary(qdev, mode->hdisplay + x,
-				      mode->vdisplay + y, bo);
-	} else {
-		unsigned width = x + mode->hdisplay;
-		unsigned height = y + mode->vdisplay;
-		if (width > bo->surf.width ||
-		    height > bo->surf.height) {
-			width = max(width, bo->surf.width);
-			height = max(height, bo->surf.height);
-			qxl_io_destroy_primary(qdev);
-			qxl_io_log(qdev,
-			    "recreate primary: %dx%d (was %dx%d)\n",
-				   width, height, bo->surf.width,
-				   bo->surf.height);
-			qxl_io_create_primary(qdev, width, height, bo);
-		}
+	if (crtc->fb != old_fb)
+		recreate_primary = true;
+
+	width = mode->hdisplay;
+	height = mode->vdisplay;
+	base_offset = 0;
+
+	if (recreate_primary) {
+		qxl_io_destroy_primary(qdev);
+		qxl_io_log(qdev,
+			   "recreate primary: %dx%d (was %dx%d,%d,%d)\n",
+			   width, height, bo->surf.width,
+			   bo->surf.height, bo->surf.stride, bo->surf.format);
+		qxl_io_create_primary(qdev, width, height, base_offset, bo);
+		bo->is_primary = true;
 	}
+
+	if (old_bo)
+		old_bo->is_primary = false;
+		
 	if (qdev->monitors_config->count == 0) {
 		qxl_monitors_config_set_single(qdev, x, y,
 					       mode->hdisplay,
@@ -550,7 +555,7 @@ static const struct drm_crtc_helper_funcs qxl_crtc_helper_funcs = {
 	.dpms = qxl_crtc_dpms,
 	.mode_fixup = qxl_crtc_mode_fixup,
 	.mode_set = qxl_crtc_mode_set,
-	.mode_set_base = qxl_crtc_set_base,
+//	.mode_set_base = qxl_crtc_set_base,
 	.prepare = qxl_crtc_prepare,
 	.commit = qxl_crtc_commit,
 	.load_lut = qxl_crtc_load_lut,
@@ -894,6 +899,8 @@ int qxl_modeset_init(struct qxl_device *qdev)
 	qdev->ddev->mode_config.funcs = (void *)&qxl_mode_funcs;
 
 	/* modes will be validated against the framebuffer size */
+	qdev->ddev->mode_config.min_width = 320;
+	qdev->ddev->mode_config.min_height = 200;
 	qdev->ddev->mode_config.max_width = 8192;
 	qdev->ddev->mode_config.max_height = 8192;
 

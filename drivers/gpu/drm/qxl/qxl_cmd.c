@@ -285,7 +285,10 @@ int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 	int surface_id;
 	uint32_t surface_width, surface_height;
 
-	surface_id = surf->surface_id;
+	if (surf->is_primary)
+		surface_id = 0;
+	else
+		surface_id = surf->surface_id;
 	surface_width = surf->surf.width;
 	surface_height = surf->surf.height;
 
@@ -311,14 +314,14 @@ void qxl_io_notify_oom(struct qxl_device *qdev)
 
 void qxl_io_destroy_primary(struct qxl_device *qdev)
 {
-	if (!qdev->primary_created)
-		return;
+//	if (!qdev->primary_created)
+//		return;
 	wait_for_io_cmd(qdev, 0, QXL_IO_DESTROY_PRIMARY_ASYNC);
-	qdev->primary_created = 0;
+//	qdev->primary_created = 0;
 }
 
 void qxl_io_create_primary(struct qxl_device *qdev, unsigned width,
-			   unsigned height, struct qxl_bo *bo)
+			   unsigned height, unsigned offset, struct qxl_bo *bo)
 {
 	struct qxl_surface_create *create;
 
@@ -329,15 +332,13 @@ void qxl_io_create_primary(struct qxl_device *qdev, unsigned width,
 	create->width = width;
 	create->height = height;
 	create->stride = bo->surf.stride;
-	create->mem = qxl_bo_physical_address(qdev, bo, 0);
+	create->mem = qxl_bo_physical_address(qdev, bo, offset);
 
 	QXL_INFO(qdev, "%s: mem = %llx, from %p\n", __func__, create->mem,
 		 bo->kptr);
 
 	create->flags = 0;
 	create->type = QXL_SURF_TYPE_PRIMARY;
-
-	qdev->primary_created = 1;
 
 	wait_for_io_cmd(qdev, 0, QXL_IO_CREATE_PRIMARY_ASYNC);
 }
