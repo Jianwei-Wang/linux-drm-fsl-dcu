@@ -474,6 +474,8 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 	struct qxl_bo *bo, *old_bo = NULL;
 	uint32_t width, height, base_offset;
 	bool recreate_primary = false;
+	int ret;
+
 	if (!crtc->fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
 		return 0;
@@ -497,13 +499,21 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 		  adjusted_mode->hdisplay,
 		  adjusted_mode->vdisplay);
 
-	if (crtc->fb != old_fb)
-		recreate_primary = true;
+	recreate_primary = true;
 
 	width = mode->hdisplay;
 	height = mode->vdisplay;
 	base_offset = 0;
 
+	ret = qxl_bo_reserve(bo, false);
+	if (ret != 0)
+		return ret;
+	ret = qxl_bo_pin(bo, bo->type, NULL);
+	if (ret != 0) {
+		qxl_bo_unreserve(bo);
+		return -EINVAL;
+	}
+	qxl_bo_unreserve(bo);
 	if (recreate_primary) {
 		qxl_io_destroy_primary(qdev);
 		qxl_io_log(qdev,
@@ -514,8 +524,12 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 		bo->is_primary = true;
 	}
 
-	if (old_bo)
+	if (old_bo && old_bo != bo) {
 		old_bo->is_primary = false;
+		ret = qxl_bo_reserve(old_bo, false);
+		qxl_bo_unpin(old_bo);
+		qxl_bo_unreserve(old_bo);
+	}
 		
 	if (qdev->monitors_config->count == 0) {
 		qxl_monitors_config_set_single(qdev, x, y,

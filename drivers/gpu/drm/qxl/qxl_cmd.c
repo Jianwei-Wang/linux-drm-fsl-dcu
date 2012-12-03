@@ -337,7 +337,7 @@ void qxl_io_create_primary(struct qxl_device *qdev, unsigned width,
 	QXL_INFO(qdev, "%s: mem = %llx, from %p\n", __func__, create->mem,
 		 bo->kptr);
 
-	create->flags = 0;
+	create->flags = QXL_SURF_FLAG_KEEP_DATA;
 	create->type = QXL_SURF_TYPE_PRIMARY;
 
 	wait_for_io_cmd(qdev, 0, QXL_IO_CREATE_PRIMARY_ASYNC);
