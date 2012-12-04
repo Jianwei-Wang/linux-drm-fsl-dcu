@@ -393,21 +393,22 @@ int qxl_surface_id_alloc(struct qxl_device *qdev,
 	int idr_ret;
 
 again:
-	spin_lock(&qdev->surf_id_idr_lock);
 	if (idr_pre_get(&qdev->surf_id_idr, GFP_ATOMIC) == 0) {
 		DRM_ERROR("Out of memory for surf idr\n");
 		kfree(surf);
 		goto alloc_fail;
 	}
 
+	spin_lock(&qdev->surf_id_idr_lock);
 	idr_ret = idr_get_new_above(&qdev->surf_id_idr, surf, 1, &handle);
+	spin_unlock(&qdev->surf_id_idr_lock);
+
 	if (idr_ret == -EAGAIN)
 		goto again;
 
 	surf->surface_id = handle;
 	
  alloc_fail:
-	spin_unlock(&qdev->surf_id_idr_lock);
 	return 0;
 }
 
