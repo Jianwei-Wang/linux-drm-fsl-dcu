@@ -272,7 +272,6 @@ static int qxl_ttm_io_mem_reserve(struct ttm_bo_device *bdev,
 		mem->bus.offset = mem->start << PAGE_SHIFT;
 		break;
 	case TTM_PL_PRIV0:
-		qxl_io_log(qdev, "PRIV0 reservation\n");
 		mem->bus.is_iomem = true;
 		mem->bus.base = qdev->surfaceram_base;
 		mem->bus.offset = mem->start << PAGE_SHIFT;

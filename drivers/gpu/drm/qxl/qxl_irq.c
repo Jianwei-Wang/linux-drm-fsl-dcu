@@ -34,7 +34,6 @@ irqreturn_t qxl_irq_handler(DRM_IRQ_ARGS)
 		qxl_io_log(qdev, "QXL_INTERRUPT_CLIENT_MONITORS_CONFIG\n");
 		schedule_work(&qdev->client_monitors_config_work);
 	}
-	qxl_io_log(qdev, "%s: pending %x\n", __func__, pending);
 	qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;
 	outb(0, qdev->io_base + QXL_IO_UPDATE_IRQ);
 	return IRQ_HANDLED;

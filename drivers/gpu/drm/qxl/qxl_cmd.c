@@ -274,8 +274,6 @@ static void wait_for_io_cmd(struct qxl_device *qdev, uint8_t val, long port)
 		}
 	}
 done:
-	qxl_io_log(qdev, "%s: async %d completed after %d wakes\n",
-		   __func__, port, num_restart);
 	mutex_unlock(&qdev->async_io_mutex);
 }
 
