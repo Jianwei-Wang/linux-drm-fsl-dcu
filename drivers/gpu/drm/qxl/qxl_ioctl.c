@@ -132,12 +132,9 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			is_cursor = 0;
 			break;
 		case QXL_CMD_SURFACE:
-			release_type = QXL_RELEASE_SURFACE_CMD;
-			is_cursor = 0;
-			break;
 		case QXL_CMD_CURSOR:
-			release_type = QXL_RELEASE_CURSOR_CMD;
-			is_cursor = 1;
+			DRM_ERROR("Only draw commands in execbuffers\n");
+			return -EINVAL;
 			break;
 		default:
 			qxl_io_log(qdev,
