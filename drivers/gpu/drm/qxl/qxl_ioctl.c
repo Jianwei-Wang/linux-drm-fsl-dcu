@@ -232,18 +232,15 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 	    update_area->top >= update_area->bottom)
 		return -EINVAL;
 
-	if (update_area->handle) {
-		gobj = drm_gem_object_lookup(dev, file, update_area->handle);
-		if (gobj == NULL)
-			return -ENOENT;
+	gobj = drm_gem_object_lookup(dev, file, update_area->handle);
+	if (gobj == NULL)
+		return -ENOENT;
 
-		qobj = gem_to_qxl_bo(gobj);
-	}
+	qobj = gem_to_qxl_bo(gobj);
 	ret = qxl_io_update_area(qdev, qobj, &area);
 
 out:
-	if (gobj)
-		drm_gem_object_unreference_unlocked(gobj);
+	drm_gem_object_unreference_unlocked(gobj);
 	return ret;
 }
 
