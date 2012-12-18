@@ -541,8 +541,7 @@ struct ttm_bo_device {
 	/*
 	 * Protected by the vm lock.
 	 */
-	struct rb_root addr_space_rb;
-	struct drm_mm addr_space_mm;
+	struct drm_vma_offset_manager offset_manager;
 
 	/*
 	 * Protected by the global:lru lock.

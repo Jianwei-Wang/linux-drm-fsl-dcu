@@ -103,18 +103,11 @@ drm_gem_init(struct drm_device *dev)
 
 	dev->mm_private = mm;
 
-	if (drm_ht_create(&mm->offset_hash, 12)) {
+	if (drm_vma_offset_man_init(&mm->vma_manager, DRM_FILE_PAGE_OFFSET_START, DRM_FILE_PAGE_OFFSET_SIZE)) {
 		kfree(mm);
 		return -ENOMEM;
 	}
-
-	if (drm_mm_init(&mm->offset_manager, DRM_FILE_PAGE_OFFSET_START,
-			DRM_FILE_PAGE_OFFSET_SIZE)) {
-		drm_ht_remove(&mm->offset_hash);
-		kfree(mm);
-		return -ENOMEM;
-	}
-
+	  
 	return 0;
 }
 
@@ -123,8 +116,7 @@ drm_gem_destroy(struct drm_device *dev)
 {
 	struct drm_gem_mm *mm = dev->mm_private;
 
-	drm_mm_takedown(&mm->offset_manager);
-	drm_ht_remove(&mm->offset_hash);
+	drm_vma_offset_man_fini(&mm->vma_manager);
 	kfree(mm);
 	dev->mm_private = NULL;
 }
@@ -314,8 +306,7 @@ drm_gem_free_mmap_offset(struct drm_gem_object *obj)
 	struct drm_gem_mm *mm = dev->mm_private;
 	struct drm_map_list *list = &obj->map_list;
 
-	drm_ht_remove_item(&mm->offset_hash, &list->hash);
-	drm_mm_put_block(list->file_offset_node);
+	drm_vma_offset_destroy(&mm->vma_manager, &list->vma_offset);
 	kfree(list->map);
 	list->map = NULL;
 }
@@ -352,34 +343,13 @@ drm_gem_create_mmap_offset(struct drm_gem_object *obj)
 	map->size = obj->size;
 	map->handle = obj;
 
-	/* Get a DRM GEM mmap offset allocated... */
-	list->file_offset_node = drm_mm_search_free(&mm->offset_manager,
-			obj->size / PAGE_SIZE, 0, false);
-
-	if (!list->file_offset_node) {
-		DRM_ERROR("failed to allocate offset for bo %d\n", obj->name);
-		ret = -ENOSPC;
+	ret = drm_vma_offset_setup(&mm->vma_manager, &list->vma_offset,
+				   obj->size / PAGE_SIZE);
+	if (ret)
 		goto out_free_list;
-	}
-
-	list->file_offset_node = drm_mm_get_block(list->file_offset_node,
-			obj->size / PAGE_SIZE, 0);
-	if (!list->file_offset_node) {
-		ret = -ENOMEM;
-		goto out_free_list;
-	}
-
-	list->hash.key = list->file_offset_node->start;
-	ret = drm_ht_insert_item(&mm->offset_hash, &list->hash);
-	if (ret) {
-		DRM_ERROR("failed to add to map hash\n");
-		goto out_free_mm;
-	}
 
 	return 0;
 
-out_free_mm:
-	drm_mm_put_block(list->file_offset_node);
 out_free_list:
 	kfree(list->map);
 	list->map = NULL;
@@ -674,7 +644,8 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct drm_gem_mm *mm = dev->mm_private;
 	struct drm_local_map *map = NULL;
 	struct drm_gem_object *obj;
-	struct drm_hash_item *hash;
+	struct drm_vma_offset_node *offset_node;
+	struct drm_map_list *list;
 	int ret = 0;
 
 	if (drm_device_is_unplugged(dev))
@@ -682,12 +653,15 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	mutex_lock(&dev->struct_mutex);
 
-	if (drm_ht_find_item(&mm->offset_hash, vma->vm_pgoff, &hash)) {
+	offset_node = drm_vma_offset_lookup(&mm->vma_manager,
+					    vma->vm_pgoff, 1);
+	if (!offset_node) {
 		mutex_unlock(&dev->struct_mutex);
 		return drm_mmap(filp, vma);
 	}
 
-	map = drm_hash_entry(hash, struct drm_map_list, hash)->map;
+	list = container_of(offset_node, struct drm_map_list, vma_offset);
+	map = list->map;
 	if (!map ||
 	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN))) {
 		ret =  -EPERM;
