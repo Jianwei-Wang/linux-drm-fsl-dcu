@@ -29,7 +29,7 @@
 
 static unsigned int get_gem_mmap_offset(struct drm_gem_object *obj)
 {
-	return (unsigned int)drm_vma_node_offset_addr(&obj->map_list.vma_offset);
+	return (unsigned int)drm_vma_node_offset_addr(&obj->vma_offset);
 }
 
 static void drm_gem_cma_buf_destroy(struct drm_device *drm,
@@ -140,7 +140,7 @@ void drm_gem_cma_free_object(struct drm_gem_object *gem_obj)
 {
 	struct drm_gem_cma_object *cma_obj;
 
-	if (drm_vma_node_is_allocated(&obj->map_list.vma_offset))
+	if (drm_vma_node_is_allocated(&obj->vma_offset))
 		drm_gem_free_mmap_offset(gem_obj);
 
 	drm_gem_object_release(gem_obj);

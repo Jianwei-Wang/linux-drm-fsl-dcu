@@ -304,11 +304,8 @@ drm_gem_free_mmap_offset(struct drm_gem_object *obj)
 {
 	struct drm_device *dev = obj->dev;
 	struct drm_gem_mm *mm = dev->mm_private;
-	struct drm_map_list *list = &obj->map_list;
 
-	drm_vma_offset_destroy(&mm->vma_manager, &list->vma_offset);
-	kfree(list->map);
-	list->map = NULL;
+	drm_vma_offset_destroy(&mm->vma_manager, &obj->vma_offset);
 }
 EXPORT_SYMBOL(drm_gem_free_mmap_offset);
 
@@ -328,32 +325,10 @@ drm_gem_create_mmap_offset(struct drm_gem_object *obj)
 {
 	struct drm_device *dev = obj->dev;
 	struct drm_gem_mm *mm = dev->mm_private;
-	struct drm_map_list *list;
-	struct drm_local_map *map;
 	int ret;
 
-	/* Set the object up for mmap'ing */
-	list = &obj->map_list;
-	list->map = kzalloc(sizeof(struct drm_map_list), GFP_KERNEL);
-	if (!list->map)
-		return -ENOMEM;
-
-	map = list->map;
-	map->type = _DRM_GEM;
-	map->size = obj->size;
-	map->handle = obj;
-
-	ret = drm_vma_offset_setup(&mm->vma_manager, &list->vma_offset,
+	ret = drm_vma_offset_setup(&mm->vma_manager, &obj->vma_offset,
 				   obj->size / PAGE_SIZE);
-	if (ret)
-		goto out_free_list;
-
-	return 0;
-
-out_free_list:
-	kfree(list->map);
-	list->map = NULL;
-
 	return ret;
 }
 EXPORT_SYMBOL(drm_gem_create_mmap_offset);
@@ -642,10 +617,8 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct drm_file *priv = filp->private_data;
 	struct drm_device *dev = priv->minor->dev;
 	struct drm_gem_mm *mm = dev->mm_private;
-	struct drm_local_map *map = NULL;
 	struct drm_gem_object *obj;
 	struct drm_vma_offset_node *offset_node;
-	struct drm_map_list *list;
 	int ret = 0;
 
 	if (drm_device_is_unplugged(dev))
@@ -660,21 +633,14 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 		return drm_mmap(filp, vma);
 	}
 
-	list = container_of(offset_node, struct drm_map_list, vma_offset);
-	map = list->map;
-	if (!map ||
-	    ((map->flags & _DRM_RESTRICTED) && !capable(CAP_SYS_ADMIN))) {
-		ret =  -EPERM;
-		goto out_unlock;
-	}
+	obj = container_of(offset_node, struct drm_gem_object, vma_offset);
 
 	/* Check for valid size. */
-	if (map->size < vma->vm_end - vma->vm_start) {
+	if (obj->size < vma->vm_end - vma->vm_start) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
 
-	obj = map->handle;
 	if (!obj->dev->driver->gem_vm_ops) {
 		ret = -EINVAL;
 		goto out_unlock;
@@ -682,7 +648,7 @@ int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP;
 	vma->vm_ops = obj->dev->driver->gem_vm_ops;
-	vma->vm_private_data = map->handle;
+	vma->vm_private_data = (void *)obj;
 	vma->vm_page_prot =  pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 
 	/* Take a ref for this mapping of the object, so that the fault
