@@ -1426,7 +1426,7 @@ i915_gem_release_mmap(struct drm_i915_gem_object *obj)
 
 	if (obj->base.dev->dev_mapping)
 		unmap_mapping_range(obj->base.dev->dev_mapping,
-				    (loff_t)drm_vma_node_offset_addr(&obj->base.map_list.vma_offset),
+				    (loff_t)drm_vma_node_offset_addr(&obj->base.vma_offset),
 				    obj->base.size, 1);
 
 	obj->fault_mappable = false;
@@ -1514,7 +1514,7 @@ static int i915_gem_object_create_mmap_offset(struct drm_i915_gem_object *obj)
 	struct drm_i915_private *dev_priv = obj->base.dev->dev_private;
 	int ret;
 
-	if (drm_vma_node_is_allocated(&obj->base.map_list.vma_offset))
+	if (drm_vma_node_is_allocated(&obj->base.vma_offset))
 		return 0;
 
 	ret = drm_gem_create_mmap_offset(&obj->base);
@@ -1539,7 +1539,7 @@ static int i915_gem_object_create_mmap_offset(struct drm_i915_gem_object *obj)
 
 static void i915_gem_object_free_mmap_offset(struct drm_i915_gem_object *obj)
 {
-	if (!drm_vma_node_is_allocated(&obj->base.map_list.vma_offset))
+	if (!drm_vma_node_is_allocated(&obj->base.vma_offset))
 		return;
 
 	drm_gem_free_mmap_offset(&obj->base);
@@ -1580,7 +1580,7 @@ i915_gem_mmap_gtt(struct drm_file *file,
 	if (ret)
 		goto out;
 
-	*offset = drm_vma_node_offset_addr(&obj->base.map_list.vma_offset);
+	*offset = drm_vma_node_offset_addr(&obj->base.vma_offset);
 
 out:
 	drm_gem_object_unreference(&obj->base);

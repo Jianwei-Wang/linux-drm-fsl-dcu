@@ -38,7 +38,7 @@ void psb_gem_free_object(struct drm_gem_object *obj)
 	struct gtt_range *gtt = container_of(obj, struct gtt_range, gem);
 
 	/* Remove the list map if one is present */
-	if (drm_vma_node_is_allocated(&obj->map_list.vma_offset))
+	if (drm_vma_node_is_allocated(&obj->vma_offset))
 		drm_gem_free_mmap_offset(obj);
 	drm_gem_object_release(obj);
 
@@ -81,13 +81,13 @@ int psb_gem_dumb_map_gtt(struct drm_file *file, struct drm_device *dev,
 	/* What validation is needed here ? */
 
 	/* Make it mmapable */
-	if (!drm_vma_node_is_allocated(&obj->map_list.vma_offset)) {
+	if (!drm_vma_node_is_allocated(&obj->vma_offset)) {
 		ret = drm_gem_create_mmap_offset(obj);
 		if (ret)
 			goto out;
 	}
 	/* GEM should really work out the hash offsets for us */
-	*offset = drm_vma_node_offset_addr(&obj->map_list.vma_offset);
+	*offset = drm_vma_node_offset_addr(&obj->vma_offset);
 out:
 	drm_gem_object_unreference(obj);
 unlock:

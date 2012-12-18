@@ -580,7 +580,6 @@ struct drm_map_list {
 	struct drm_local_map *map;	/**< mapping */
 	uint64_t user_token;
 	struct drm_master *master;
-	struct drm_vma_offset_node vma_offset;
 };
 
 /**
@@ -636,7 +635,7 @@ struct drm_gem_object {
 	struct file *filp;
 
 	/* Mapping info for this object */
-	struct drm_map_list map_list;
+	struct drm_vma_offset_node vma_offset;
 
 	/**
 	 * Size of the object, in bytes.  Immutable over the object's

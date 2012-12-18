@@ -168,7 +168,7 @@ out:
 	exynos_drm_fini_buf(obj->dev, buf);
 	exynos_gem_obj->buffer = NULL;
 
-	if (drm_vma_node_is_allocated(&obj->map_list.vma_offset))
+	if (drm_vma_node_is_allocated(&obj->vma_offset))
 		drm_gem_free_mmap_offset(obj);
 
 	/* release file pointer to gem object. */
@@ -704,13 +704,13 @@ int exynos_drm_gem_dumb_map_offset(struct drm_file *file_priv,
 		goto unlock;
 	}
 
-	if (!drm_vma_node_is_allocated(&obj->map_list.vma_offset)) {
+	if (!drm_vma_node_is_allocated(&obj->vma_offset)) {
 		ret = drm_gem_create_mmap_offset(obj);
 		if (ret)
 			goto out;
 	}
 
-	*offset = drm_vma_node_offset_addr(&obj->map_list.vma_offset);
+	*offset = drm_vma_node_offset_addr(&obj->vma_offset);
 	DRM_DEBUG_KMS("offset = 0x%lx\n", (unsigned long)*offset);
 
 out:

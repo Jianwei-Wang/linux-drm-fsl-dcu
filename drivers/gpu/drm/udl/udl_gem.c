@@ -223,7 +223,7 @@ void udl_gem_free_object(struct drm_gem_object *gem_obj)
 	if (obj->pages)
 		udl_gem_put_pages(obj);
 
-	if (drm_vma_node_is_allocated(&gem_obj->map_list.vma_offset))
+	if (drm_vma_node_is_allocated(&gem_obj->vma_offset))
 		drm_gem_free_mmap_offset(gem_obj);
 }
 
@@ -247,13 +247,13 @@ int udl_gem_mmap(struct drm_file *file, struct drm_device *dev,
 	ret = udl_gem_get_pages(gobj, GFP_KERNEL);
 	if (ret)
 		goto out;
-	if (!drm_vma_node_is_allocated(&gobj->base.map_list.vma_offset)) {
+	if (!drm_vma_node_is_allocated(&gobj->base.vma_offset)) {
 		ret = drm_gem_create_mmap_offset(obj);
 		if (ret)
 			goto out;
 	}
 
-	*offset = drm_vma_node_offset_addr(&obj->map_list.vma_offset);
+	*offset = drm_vma_node_offset_addr(&obj->vma_offset);
 
 out:
 	drm_gem_object_unreference(&gobj->base);
