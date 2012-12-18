@@ -32,12 +32,12 @@
 #define _TTM_BO_API_H_
 
 #include <drm/drm_hashtab.h>
+#include <drm/drm_vma_offset_man.h>
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/wait.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
-#include <linux/rbtree.h>
 #include <linux/bitmap.h>
 
 struct ttm_bo_device;
@@ -254,13 +254,7 @@ struct ttm_buffer_object {
 	void *sync_obj;
 	unsigned long priv_flags;
 
-	/**
-	 * Members protected by the bdev::vm_lock
-	 */
-
-	struct rb_node vm_rb;
-	struct drm_mm_node *vm_node;
-
+	struct drm_vma_offset_node vma_offset;
 
 	/**
 	 * Special members that are protected by the reserve lock
