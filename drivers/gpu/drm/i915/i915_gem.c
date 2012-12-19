@@ -1424,11 +1424,8 @@ i915_gem_release_mmap(struct drm_i915_gem_object *obj)
 	if (!obj->fault_mappable)
 		return;
 
-	if (obj->base.dev->dev_mapping)
-		unmap_mapping_range(obj->base.dev->dev_mapping,
-				    (loff_t)drm_vma_node_offset_addr(&obj->base.vma_offset),
-				    obj->base.size, 1);
-
+	drm_vma_unmap_mapping(obj->base.dev->dev_mapping,
+			      &obj->base.vma_offset);
 	obj->fault_mappable = false;
 }
 

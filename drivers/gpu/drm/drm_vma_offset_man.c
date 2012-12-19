@@ -125,6 +125,17 @@ out_unlock:
 }
 EXPORT_SYMBOL(drm_vma_offset_setup);
 
+void drm_vma_unmap_mapping(struct address_space *dev_mapping,
+			   struct drm_vma_offset_node *node)
+{
+	if (dev_mapping && drm_vma_node_is_allocated(node)) {
+		unmap_mapping_range(dev_mapping,
+				    drm_vma_node_offset_addr(node),
+				    node->num_pages << PAGE_SHIFT, 1);
+	}
+}
+EXPORT_SYMBOL(drm_vma_unmap_mapping);
+
 int drm_vma_offset_man_init(struct drm_vma_offset_manager *man, uint64_t file_page_offset, uint64_t size)
 {
 	int ret;
