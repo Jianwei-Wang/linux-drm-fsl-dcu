@@ -266,7 +266,6 @@ int drm_fill_in_dev(struct drm_device *dev,
 	int retcode;
 
 	INIT_LIST_HEAD(&dev->filelist);
-	INIT_LIST_HEAD(&dev->ctxlist);
 	INIT_LIST_HEAD(&dev->vmalist);
 	INIT_LIST_HEAD(&dev->maplist);
 	INIT_LIST_HEAD(&dev->vblank_event_list);
