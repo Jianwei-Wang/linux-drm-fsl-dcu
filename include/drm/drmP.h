@@ -1428,6 +1428,8 @@ extern int drm_modeset_ctl(struct drm_device *dev, void *data,
 
 				/* AGP/GART support (drm_agpsupport.h) */
 extern struct drm_agp_head *drm_agp_init(struct drm_device *dev);
+void drm_agp_lastclose(struct drm_device *dev);
+
 extern int drm_agp_acquire(struct drm_device *dev);
 extern int drm_agp_acquire_ioctl(struct drm_device *dev, void *data,
 				 struct drm_file *file_priv);

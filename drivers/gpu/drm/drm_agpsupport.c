@@ -466,4 +466,24 @@ drm_agp_bind_pages(struct drm_device *dev,
 }
 EXPORT_SYMBOL(drm_agp_bind_pages);
 
+void drm_agp_lastclose(struct drm_device *dev)
+{
+	struct drm_agp_mem *entry, *tempe;
+
+	/* Remove AGP resources, but leave dev->agp
+	   intact until drv_cleanup is called. */
+	list_for_each_entry_safe(entry, tempe, &dev->agp->memory, head) {
+		if (entry->bound)
+			drm_unbind_agp(entry->memory);
+		drm_free_agp(entry->memory, entry->pages);
+		kfree(entry);
+	}
+	INIT_LIST_HEAD(&dev->agp->memory);
+
+	if (dev->agp->acquired)
+		drm_agp_release(dev);
+
+	dev->agp->acquired = 0;
+	dev->agp->enabled = 0;
+}
 #endif /* __OS_HAS_AGP */
