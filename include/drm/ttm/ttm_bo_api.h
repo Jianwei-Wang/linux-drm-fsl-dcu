@@ -200,7 +200,6 @@ struct ttm_buffer_object {
 	enum ttm_bo_type type;
 	void (*destroy) (struct ttm_buffer_object *);
 	unsigned long num_pages;
-	uint64_t addr_space_offset;
 	size_t acc_size;
 
 	/**
