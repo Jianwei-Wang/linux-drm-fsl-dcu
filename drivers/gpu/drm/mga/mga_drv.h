@@ -167,6 +167,7 @@ extern int mga_driver_load(struct drm_device *dev, unsigned long flags);
 extern int mga_driver_unload(struct drm_device *dev);
 extern void mga_driver_lastclose(struct drm_device *dev);
 extern int mga_driver_dma_quiescent(struct drm_device *dev);
+extern void mga_master_destroy(struct drm_device *dev, struct drm_master *master);
 
 extern int mga_do_wait_for_idle(drm_mga_private_t *dev_priv);
 

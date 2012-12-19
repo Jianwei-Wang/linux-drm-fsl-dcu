@@ -2069,6 +2069,8 @@ int radeon_driver_load(struct drm_device *dev, unsigned long flags)
 	drm_radeon_private_t *dev_priv;
 	int ret = 0;
 
+	drm_bufs_init_ioctls(dev->driver->ioctls);
+
 	dev_priv = kzalloc(sizeof(drm_radeon_private_t), GFP_KERNEL);
 	if (dev_priv == NULL)
 		return -ENOMEM;
@@ -2152,6 +2154,8 @@ void radeon_master_destroy(struct drm_device *dev, struct drm_master *master)
 {
 	struct drm_radeon_master_private *master_priv = master->driver_priv;
 
+	drm_bufs_master_destroy(master);
+
 	if (!master_priv)
 		return;
 
@@ -2194,6 +2198,8 @@ int radeon_driver_unload(struct drm_device *dev)
 	drm_radeon_private_t *dev_priv = dev->dev_private;
 
 	DRM_DEBUG("\n");
+
+	drm_bufs_put_dev(dev);
 
 	drm_rmmap(dev, dev_priv->mmio);
 

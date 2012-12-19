@@ -393,6 +393,8 @@ int mga_driver_load(struct drm_device *dev, unsigned long flags)
 	drm_mga_private_t *dev_priv;
 	int ret;
 
+	drm_bufs_init_ioctls(dev->driver->ioctls);
+
 	dev_priv = kzalloc(sizeof(drm_mga_private_t), GFP_KERNEL);
 	if (!dev_priv)
 		return -ENOMEM;
@@ -1134,6 +1136,7 @@ int mga_dma_buffers(struct drm_device *dev, void *data,
  */
 int mga_driver_unload(struct drm_device *dev)
 {
+	drm_bufs_put_dev(dev);
 	kfree(dev->dev_private);
 	dev->dev_private = NULL;
 
@@ -1152,4 +1155,9 @@ int mga_driver_dma_quiescent(struct drm_device *dev)
 {
 	drm_mga_private_t *dev_priv = dev->dev_private;
 	return mga_do_wait_for_idle(dev_priv);
+}
+
+void mga_master_destroy(struct drm_device *dev, struct drm_master *master)
+{
+	drm_bufs_master_destroy(master);
 }

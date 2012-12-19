@@ -101,7 +101,7 @@ again:
  *
  * Initialise the drm_device::ctx_idr
  */
-int drm_ctx_init(struct drm_device * dev)
+int drm_ctxbitmap_init(struct drm_device * dev)
 {
 	INIT_LIST_HEAD(&dev->ctxlist);
 	idr_init(&dev->ctx_idr);

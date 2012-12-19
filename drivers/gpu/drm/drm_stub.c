@@ -180,8 +180,6 @@ static void drm_master_destroy(struct kref *kref)
 	if (dev->driver->master_destroy)
 		dev->driver->master_destroy(dev, master);
 
-	drm_bufs_master_destroy(master);
-
 	if (master->unique) {
 		kfree(master->unique);
 		master->unique = NULL;
@@ -291,8 +289,8 @@ int drm_fill_in_dev(struct drm_device *dev,
 	dev->driver = driver;
 
 	drm_ctx_init_ioctls(dev->driver->ioctls);
-	drm_bufs_init_ioctls(dev->driver->ioctls);
 	drm_sg_init_ioctls(dev->driver->ioctls);
+
 	if (dev->driver->bus->agp_init) {
 		retcode = dev->driver->bus->agp_init(dev);
 		if (retcode)
@@ -477,8 +475,6 @@ void drm_put_dev(struct drm_device *dev)
 	}
 
 	drm_vblank_cleanup(dev);
-
-	drm_bufs_put_dev(dev);
 
 	drm_ht_remove(&dev->map_hash);
 

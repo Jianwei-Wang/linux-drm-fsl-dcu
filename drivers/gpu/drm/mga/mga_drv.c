@@ -70,6 +70,7 @@ static struct drm_driver driver = {
 	.get_vblank_counter = mga_get_vblank_counter,
 	.enable_vblank = mga_enable_vblank,
 	.disable_vblank = mga_disable_vblank,
+	.master_destroy = mga_master_destroy,
 	.irq_preinstall = mga_driver_irq_preinstall,
 	.irq_postinstall = mga_driver_irq_postinstall,
 	.irq_uninstall = mga_driver_irq_uninstall,

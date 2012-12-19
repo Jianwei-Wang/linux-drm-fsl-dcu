@@ -540,6 +540,8 @@ int savage_driver_load(struct drm_device *dev, unsigned long chipset)
 {
 	drm_savage_private_t *dev_priv;
 
+	drm_bufs_init_ioctls(dev->driver->ioctls);
+
 	dev_priv = kzalloc(sizeof(drm_savage_private_t), GFP_KERNEL);
 	if (dev_priv == NULL)
 		return -ENOMEM;
@@ -672,9 +674,15 @@ int savage_driver_unload(struct drm_device *dev)
 {
 	drm_savage_private_t *dev_priv = dev->dev_private;
 
+	drm_bufs_put_dev(dev);
 	kfree(dev_priv);
 
 	return 0;
+}
+
+void savage_master_destroy(struct drm_device *dev, struct drm_master *master)
+{
+	drm_bufs_master_destroy(master);
 }
 
 static int savage_do_init_bci(struct drm_device * dev, drm_savage_init_t * init)

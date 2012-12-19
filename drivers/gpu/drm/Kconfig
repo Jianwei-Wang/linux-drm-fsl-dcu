@@ -25,6 +25,10 @@ config DRM_USB
 	depends on USB_SUPPORT && USB_ARCH_HAS_HCD
 	select USB
 
+config DRM_BUFS
+	tristate
+	depends on DRM
+
 config DRM_KMS_HELPER
 	tristate
 	depends on DRM
@@ -96,6 +100,7 @@ config DRM_RADEON
         select DRM_TTM
 	select POWER_SUPPLY
 	select HWMON
+	select DRM_BUFS
 	help
 	  Choose this option if you have an ATI Radeon graphics card.  There
 	  are both PCI and AGP versions.  You don't need to choose this to
@@ -166,6 +171,7 @@ config DRM_I915_KMS
 config DRM_MGA
 	tristate "Matrox g200/g400"
 	depends on DRM && PCI
+	select DRM_BUFS
 	select FW_LOADER
 	help
 	  Choose this option if you have a Matrox G200, G400 or G450 graphics
@@ -191,6 +197,7 @@ config DRM_VIA
 config DRM_SAVAGE
 	tristate "Savage video cards"
 	depends on DRM && PCI
+	select DRM_BUFS
 	help
 	  Choose this option if you have a Savage3D/4/SuperSavage/Pro/Twister
 	  chipset. If M is selected the module will be called savage.

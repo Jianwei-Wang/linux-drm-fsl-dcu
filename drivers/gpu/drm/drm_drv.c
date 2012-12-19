@@ -160,38 +160,38 @@ static struct drm_ioctl_desc drm_ioctls[] = {
 int drm_lastclose(struct drm_device * dev)
 {
 	struct drm_vma_entry *vma, *vma_temp;
-
+	boolean modeset = drm_core_check_feature(dev, DRIVER_MODESET);
 	DRM_DEBUG("\n");
 
 	if (dev->driver->lastclose)
 		dev->driver->lastclose(dev);
 	DRM_DEBUG("driver lastclose completed\n");
 
-	if (dev->irq_enabled && !drm_core_check_feature(dev, DRIVER_MODESET))
-		drm_irq_uninstall(dev);
+	if (!modeset) {
+		if (dev->irq_enabled)
+			drm_irq_uninstall(dev);
 
-	mutex_lock(&dev->struct_mutex);
+		mutex_lock(&dev->struct_mutex);
 
-	/* Clear AGP information */
-	if (drm_core_has_AGP(dev) && dev->agp &&
-			!drm_core_check_feature(dev, DRIVER_MODESET)) {
-		drm_agp_lastclose(dev);
-	}
-	if (drm_core_check_feature(dev, DRIVER_SG) && dev->sg &&
-	    !drm_core_check_feature(dev, DRIVER_MODESET)) {
-		drm_sg_cleanup(dev->sg);
-		dev->sg = NULL;
-	}
+		/* Clear AGP information */
+		if (drm_core_has_AGP(dev) && dev->agp)
+			drm_agp_lastclose(dev);
+
+		if (drm_core_check_feature(dev, DRIVER_SG) && dev->sg) {
+			drm_sg_cleanup(dev->sg);
+			dev->sg = NULL;
+		}
+
+		if (drm_core_check_feature(dev, DRIVER_HAVE_DMA))
+			drm_dma_takedown(dev);
+	} else
+		mutex_lock(&dev->struct_mutex);
 
 	/* Clear vma list (only built for debugging) */
 	list_for_each_entry_safe(vma, vma_temp, &dev->vmalist, head) {
 		list_del(&vma->head);
 		kfree(vma);
 	}
-
-	if (drm_core_check_feature(dev, DRIVER_HAVE_DMA) &&
-	    !drm_core_check_feature(dev, DRIVER_MODESET))
-		drm_dma_takedown(dev);
 
 	dev->dev_mapping = NULL;
 	mutex_unlock(&dev->struct_mutex);

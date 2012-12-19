@@ -190,6 +190,7 @@ int drm_ht_remove_key(struct drm_open_hash *ht, unsigned long key)
 	}
 	return -EINVAL;
 }
+EXPORT_SYMBOL(drm_ht_remove_key);
 
 int drm_ht_remove_item(struct drm_open_hash *ht, struct drm_hash_item *item)
 {

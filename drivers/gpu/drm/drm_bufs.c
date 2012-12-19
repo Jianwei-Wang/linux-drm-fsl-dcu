@@ -380,7 +380,6 @@ int drm_addmap(struct drm_device * dev, resource_size_t offset,
 		*map_ptr = list->map;
 	return rc;
 }
-
 EXPORT_SYMBOL(drm_addmap);
 
 /**
@@ -1657,7 +1656,8 @@ void drm_bufs_init_ioctls(struct drm_ioctl_desc *ioctls)
 	DRM_IOCTL_DEF(DRM_IOCTL_INFO_BUFS, drm_infobufs, DRM_AUTH);
 	DRM_IOCTL_DEF(DRM_IOCTL_MAP_BUFS, drm_mapbufs, DRM_AUTH);
 	DRM_IOCTL_DEF(DRM_IOCTL_FREE_BUFS, drm_freebufs, DRM_AUTH);
-} 
+}
+EXPORT_SYMBOL(drm_bufs_init_ioctls);
 
 void drm_bufs_master_destroy(struct drm_master *master)
 {
@@ -1670,6 +1670,7 @@ void drm_bufs_master_destroy(struct drm_master *master)
 		}
 	}
 }
+EXPORT_SYMBOL(drm_bufs_master_destroy);
 
 void drm_bufs_put_dev(struct drm_device *dev)
 {
@@ -1678,3 +1679,4 @@ void drm_bufs_put_dev(struct drm_device *dev)
 	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head)
 		drm_rmmap(dev, r_list->map);
 }
+EXPORT_SYMBOL(drm_bufs_put_dev);

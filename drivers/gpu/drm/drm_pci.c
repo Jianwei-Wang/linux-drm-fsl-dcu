@@ -113,7 +113,7 @@ void __drm_pci_free(struct drm_device * dev, drm_dma_handle_t * dmah)
 				  dmah->busaddr);
 	}
 }
-
+EXPORT_SYMBOL(__drm_pci_free);
 /**
  * \brief Free a PCI consistent memory block
  */

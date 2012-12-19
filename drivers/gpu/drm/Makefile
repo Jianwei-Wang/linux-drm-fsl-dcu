@@ -4,8 +4,8 @@
 
 ccflags-y := -Iinclude/drm
 
-drm-y       :=	drm_auth.o drm_buffer.o drm_bufs.o drm_cache.o \
-		drm_context.o drm_dma.o \
+drm-y       :=	drm_auth.o drm_buffer.o drm_cache.o \
+		drm_context.o \
 		drm_drv.o drm_fops.o drm_gem.o drm_ioctl.o drm_irq.o \
 		drm_lock.o drm_memory.o drm_proc.o drm_stub.o drm_vm.o \
 		drm_agpsupport.o drm_scatter.o drm_pci.o \
@@ -17,6 +17,8 @@ drm-y       :=	drm_auth.o drm_buffer.o drm_bufs.o drm_cache.o \
 drm-$(CONFIG_COMPAT) += drm_ioc32.o
 drm-$(CONFIG_DRM_GEM_CMA_HELPER) += drm_gem_cma_helper.o
 drm-$(CONFIG_PCI) += ati_pcigart.o
+
+obj-$(CONFIG_DRM_BUFS) += drm_bufs.o drm_dma.o
 
 drm-usb-y   := drm_usb.o
 
