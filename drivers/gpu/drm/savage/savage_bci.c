@@ -23,6 +23,7 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <drm/drmP.h>
+#include <drm/drm_bufs.h>
 #include <drm/savage_drm.h>
 #include "savage_drv.h"
 

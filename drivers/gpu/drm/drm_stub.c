@@ -174,19 +174,13 @@ static void drm_master_destroy(struct kref *kref)
 	struct drm_master *master = container_of(kref, struct drm_master, refcount);
 	struct drm_magic_entry *pt, *next;
 	struct drm_device *dev = master->minor->dev;
-	struct drm_map_list *r_list, *list_temp;
 
 	list_del(&master->head);
 
 	if (dev->driver->master_destroy)
 		dev->driver->master_destroy(dev, master);
 
-	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head) {
-		if (r_list->master == master) {
-			drm_rmmap_locked(dev, r_list->map);
-			r_list = NULL;
-		}
-	}
+	drm_bufs_master_destroy(master);
 
 	if (master->unique) {
 		kfree(master->unique);
@@ -297,13 +291,14 @@ int drm_fill_in_dev(struct drm_device *dev,
 
 	dev->driver = driver;
 
+	drm_ctx_init_ioctls(dev->driver->ioctls);
+	drm_bufs_init_ioctls(dev->driver->ioctls);
+	drm_sg_init_ioctls(dev->driver->ioctls);
 	if (dev->driver->bus->agp_init) {
 		retcode = dev->driver->bus->agp_init(dev);
 		if (retcode)
 			goto error_out_unreg;
 	}
-
-
 
 	retcode = drm_ctxbitmap_init(dev);
 	if (retcode) {
@@ -454,7 +449,6 @@ static void drm_unplug_minor(struct drm_minor *minor)
 void drm_put_dev(struct drm_device *dev)
 {
 	struct drm_driver *driver;
-	struct drm_map_list *r_list, *list_temp;
 
 	DRM_DEBUG("\n");
 
@@ -485,8 +479,8 @@ void drm_put_dev(struct drm_device *dev)
 
 	drm_vblank_cleanup(dev);
 
-	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head)
-		drm_rmmap(dev, r_list->map);
+	drm_bufs_put_dev(dev);
+
 	drm_ht_remove(&dev->map_hash);
 
 	drm_ctxbitmap_cleanup(dev);

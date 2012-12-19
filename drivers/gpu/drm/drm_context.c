@@ -101,8 +101,9 @@ again:
  *
  * Initialise the drm_device::ctx_idr
  */
-int drm_ctxbitmap_init(struct drm_device * dev)
+int drm_ctx_init(struct drm_device * dev)
 {
+	INIT_LIST_HEAD(&dev->ctxlist);
 	idr_init(&dev->ctx_idr);
 	return 0;
 }
@@ -140,8 +141,8 @@ void drm_ctxbitmap_cleanup(struct drm_device * dev)
  * Gets the map from drm_device::ctx_idr with the handle specified and
  * returns its handle.
  */
-int drm_getsareactx(struct drm_device *dev, void *data,
-		    struct drm_file *file_priv)
+static int drm_getsareactx(struct drm_device *dev, void *data,
+			   struct drm_file *file_priv)
 {
 	struct drm_ctx_priv_map *request = data;
 	struct drm_local_map *map;
@@ -184,8 +185,8 @@ int drm_getsareactx(struct drm_device *dev, void *data,
  * Searches the mapping specified in \p arg and update the entry in
  * drm_device::ctx_idr with it.
  */
-int drm_setsareactx(struct drm_device *dev, void *data,
-		    struct drm_file *file_priv)
+static int drm_setsareactx(struct drm_device *dev, void *data,
+			   struct drm_file *file_priv)
 {
 	struct drm_ctx_priv_map *request = data;
 	struct drm_local_map *map = NULL;
@@ -286,8 +287,8 @@ static int drm_context_switch_complete(struct drm_device *dev,
  * \param arg user argument pointing to a drm_ctx_res structure.
  * \return zero on success or a negative number on failure.
  */
-int drm_resctx(struct drm_device *dev, void *data,
-	       struct drm_file *file_priv)
+static int drm_resctx(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv)
 {
 	struct drm_ctx_res *res = data;
 	struct drm_ctx ctx;
@@ -317,8 +318,8 @@ int drm_resctx(struct drm_device *dev, void *data,
  *
  * Get a new handle for the context and copy to userspace.
  */
-int drm_addctx(struct drm_device *dev, void *data,
-	       struct drm_file *file_priv)
+static int drm_addctx(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv)
 {
 	struct drm_ctx_list *ctx_entry;
 	struct drm_ctx *ctx = data;
@@ -353,7 +354,7 @@ int drm_addctx(struct drm_device *dev, void *data,
 	return 0;
 }
 
-int drm_modctx(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static int drm_modctx(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	/* This does nothing */
 	return 0;
@@ -368,7 +369,7 @@ int drm_modctx(struct drm_device *dev, void *data, struct drm_file *file_priv)
  * \param arg user argument pointing to a drm_ctx structure.
  * \return zero on success or a negative number on failure.
  */
-int drm_getctx(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static int drm_getctx(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	struct drm_ctx *ctx = data;
 
@@ -389,8 +390,8 @@ int drm_getctx(struct drm_device *dev, void *data, struct drm_file *file_priv)
  *
  * Calls context_switch().
  */
-int drm_switchctx(struct drm_device *dev, void *data,
-		  struct drm_file *file_priv)
+static int drm_switchctx(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv)
 {
 	struct drm_ctx *ctx = data;
 
@@ -409,8 +410,8 @@ int drm_switchctx(struct drm_device *dev, void *data,
  *
  * Calls context_switch_complete().
  */
-int drm_newctx(struct drm_device *dev, void *data,
-	       struct drm_file *file_priv)
+static int drm_newctx(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv)
 {
 	struct drm_ctx *ctx = data;
 
@@ -431,8 +432,8 @@ int drm_newctx(struct drm_device *dev, void *data,
  *
  * If not the special kernel context, calls ctxbitmap_free() to free the specified context.
  */
-int drm_rmctx(struct drm_device *dev, void *data,
-	      struct drm_file *file_priv)
+static int drm_rmctx(struct drm_device *dev, void *data,
+		     struct drm_file *file_priv)
 {
 	struct drm_ctx *ctx = data;
 
@@ -458,6 +459,48 @@ int drm_rmctx(struct drm_device *dev, void *data,
 	mutex_unlock(&dev->ctxlist_mutex);
 
 	return 0;
+}
+
+void drm_ctx_release(struct drm_device *dev, struct drm_file *file_priv)
+{
+	mutex_lock(&dev->ctxlist_mutex);
+	if (!list_empty(&dev->ctxlist)) {
+		struct drm_ctx_list *pos, *n;
+
+		list_for_each_entry_safe(pos, n, &dev->ctxlist, head) {
+			if (pos->tag == file_priv &&
+			    pos->handle != DRM_KERNEL_CONTEXT) {
+				if (dev->driver->context_dtor)
+					dev->driver->context_dtor(dev,
+								  pos->handle);
+
+				drm_ctxbitmap_free(dev, pos->handle);
+
+				list_del(&pos->head);
+				kfree(pos);
+				--dev->ctx_count;
+			}
+		}
+	}
+	mutex_unlock(&dev->ctxlist_mutex);
+}
+
+#define DRM_IOCTL_DEF(ioctl, _func, _flags) \
+	ioctls[DRM_IOCTL_NR(ioctl)] = (struct drm_ioctl_desc){.cmd = ioctl, .func = _func, .flags = _flags, .cmd_drv = 0}
+
+void drm_ctx_init_ioctls(struct drm_ioctl_desc *ioctls)
+{
+	DRM_IOCTL_DEF(DRM_IOCTL_SET_SAREA_CTX, drm_setsareactx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_GET_SAREA_CTX, drm_getsareactx, DRM_AUTH);
+
+	DRM_IOCTL_DEF(DRM_IOCTL_ADD_CTX, drm_addctx, DRM_AUTH|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_RM_CTX, drm_rmctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_MOD_CTX, drm_modctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_GET_CTX, drm_getctx, DRM_AUTH);
+	DRM_IOCTL_DEF(DRM_IOCTL_SWITCH_CTX, drm_switchctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_NEW_CTX, drm_newctx, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_RES_CTX, drm_resctx, DRM_AUTH);
+
 }
 
 /*@}*/

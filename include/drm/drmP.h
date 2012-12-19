@@ -1322,8 +1322,6 @@ extern int drm_getunique(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
 extern int drm_setunique(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
-extern int drm_getmap(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
 extern int drm_getclient(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv);
 extern int drm_getstats(struct drm_device *dev, void *data,
@@ -1336,29 +1334,11 @@ extern int drm_noop(struct drm_device *dev, void *data,
 		    struct drm_file *file_priv);
 
 				/* Context IOCTL support (drm_context.h) */
-extern int drm_resctx(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
-extern int drm_addctx(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
-extern int drm_modctx(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
-extern int drm_getctx(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
-extern int drm_switchctx(struct drm_device *dev, void *data,
-			 struct drm_file *file_priv);
-extern int drm_newctx(struct drm_device *dev, void *data,
-		      struct drm_file *file_priv);
-extern int drm_rmctx(struct drm_device *dev, void *data,
-		     struct drm_file *file_priv);
-
 extern int drm_ctxbitmap_init(struct drm_device *dev);
 extern void drm_ctxbitmap_cleanup(struct drm_device *dev);
 extern void drm_ctxbitmap_free(struct drm_device *dev, int ctx_handle);
-
-extern int drm_setsareactx(struct drm_device *dev, void *data,
-			   struct drm_file *file_priv);
-extern int drm_getsareactx(struct drm_device *dev, void *data,
-			   struct drm_file *file_priv);
+extern void drm_ctx_release(struct drm_device *dev, struct drm_file *file_priv);
+extern void drm_ctx_init_ioctls(struct drm_ioctl_desc *ioctls);
 
 				/* Authentication IOCTL support (drm_auth.h) */
 extern int drm_getmagic(struct drm_device *dev, void *data,
@@ -1388,28 +1368,11 @@ extern void drm_idlelock_release(struct drm_lock_data *lock_data);
 
 extern int drm_i_have_hw_lock(struct drm_device *dev, struct drm_file *file_priv);
 
-				/* Buffer management support (drm_bufs.h) */
-extern int drm_addbufs_agp(struct drm_device *dev, struct drm_buf_desc * request);
-extern int drm_addbufs_pci(struct drm_device *dev, struct drm_buf_desc * request);
-extern int drm_addmap(struct drm_device *dev, resource_size_t offset,
-		      unsigned int size, enum drm_map_type type,
-		      enum drm_map_flags flags, struct drm_local_map **map_ptr);
-extern int drm_addmap_ioctl(struct drm_device *dev, void *data,
-			    struct drm_file *file_priv);
-extern int drm_rmmap(struct drm_device *dev, struct drm_local_map *map);
-extern int drm_rmmap_locked(struct drm_device *dev, struct drm_local_map *map);
-extern int drm_rmmap_ioctl(struct drm_device *dev, void *data,
-			   struct drm_file *file_priv);
-extern int drm_addbufs(struct drm_device *dev, void *data,
-		       struct drm_file *file_priv);
-extern int drm_infobufs(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-extern int drm_markbufs(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-extern int drm_freebufs(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-extern int drm_mapbufs(struct drm_device *dev, void *data,
-		       struct drm_file *file_priv);
+/* drm_bufs code */
+void drm_bufs_init_ioctls(struct drm_ioctl_desc *ioctls);
+void drm_bufs_master_destroy(struct drm_master *master);
+void drm_bufs_put_dev(struct drm_device *dev);
+
 extern int drm_order(unsigned long size);
 
 				/* DMA support (drm_dma.h) */
@@ -1574,11 +1537,7 @@ extern int drm_vma_info(struct seq_file *m, void *data);
 
 				/* Scatter Gather Support (drm_scatter.h) */
 extern void drm_sg_cleanup(struct drm_sg_mem * entry);
-extern int drm_sg_alloc_ioctl(struct drm_device *dev, void *data,
-			struct drm_file *file_priv);
-extern int drm_sg_alloc(struct drm_device *dev, struct drm_scatter_gather * request);
-extern int drm_sg_free(struct drm_device *dev, void *data,
-		       struct drm_file *file_priv);
+void drm_sg_init_ioctls(struct drm_ioctl_desc *ioctls);
 
 			       /* ATI PCIGART support (ati_pcigart.h) */
 extern int drm_ati_pcigart_init(struct drm_device *dev,

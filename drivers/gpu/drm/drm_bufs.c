@@ -40,6 +40,8 @@
 #include <asm/shmparam.h>
 #include <drm/drmP.h>
 
+#include <drm/drm_bufs.h>
+
 static struct drm_map_list *drm_find_matching_map(struct drm_device *dev,
 						  struct drm_local_map *map)
 {
@@ -392,8 +394,8 @@ EXPORT_SYMBOL(drm_addmap);
  * \return zero on success or a negative value on error.
  *
  */
-int drm_addmap_ioctl(struct drm_device *dev, void *data,
-		     struct drm_file *file_priv)
+static int drm_addmap_ioctl(struct drm_device *dev, void *data,
+			    struct drm_file *file_priv)
 {
 	struct drm_map *map = data;
 	struct drm_map_list *maplist;
@@ -513,8 +515,8 @@ EXPORT_SYMBOL(drm_rmmap);
  * \param arg pointer to a struct drm_map structure.
  * \return zero on success or a negative value on error.
  */
-int drm_rmmap_ioctl(struct drm_device *dev, void *data,
-		    struct drm_file *file_priv)
+static int drm_rmmap_ioctl(struct drm_device *dev, void *data,
+			   struct drm_file *file_priv)
 {
 	struct drm_map *request = data;
 	struct drm_local_map *map = NULL;
@@ -1289,7 +1291,7 @@ static int drm_addbufs_fb(struct drm_device * dev, struct drm_buf_desc * request
  * addbufs_sg() or addbufs_pci() for AGP, scatter-gather or consistent
  * PCI memory respectively.
  */
-int drm_addbufs(struct drm_device *dev, void *data,
+static int drm_addbufs(struct drm_device *dev, void *data,
 		struct drm_file *file_priv)
 {
 	struct drm_buf_desc *request = data;
@@ -1330,8 +1332,8 @@ int drm_addbufs(struct drm_device *dev, void *data,
  * lock, preventing of allocating more buffers after this call. Information
  * about each requested buffer is then copied into user space.
  */
-int drm_infobufs(struct drm_device *dev, void *data,
-		 struct drm_file *file_priv)
+static int drm_infobufs(struct drm_device *dev, void *data,
+			struct drm_file *file_priv)
 {
 	struct drm_device_dma *dma = dev->dma;
 	struct drm_buf_info *request = data;
@@ -1409,8 +1411,8 @@ int drm_infobufs(struct drm_device *dev, void *data,
  *
  * \note This ioctl is deprecated and mostly never used.
  */
-int drm_markbufs(struct drm_device *dev, void *data,
-		 struct drm_file *file_priv)
+static int drm_markbufs(struct drm_device *dev, void *data,
+			struct drm_file *file_priv)
 {
 	struct drm_device_dma *dma = dev->dma;
 	struct drm_buf_desc *request = data;
@@ -1453,8 +1455,8 @@ int drm_markbufs(struct drm_device *dev, void *data,
  * Calls free_buffer() for each used buffer.
  * This function is primarily used for debugging.
  */
-int drm_freebufs(struct drm_device *dev, void *data,
-		 struct drm_file *file_priv)
+static int drm_freebufs(struct drm_device *dev, void *data,
+			struct drm_file *file_priv)
 {
 	struct drm_device_dma *dma = dev->dma;
 	struct drm_buf_free *request = data;
@@ -1503,8 +1505,8 @@ int drm_freebufs(struct drm_device *dev, void *data,
  * offset equal to 0, which drm_mmap() interpretes as PCI buffers and calls
  * drm_mmap_dma().
  */
-int drm_mapbufs(struct drm_device *dev, void *data,
-	        struct drm_file *file_priv)
+static int drm_mapbufs(struct drm_device *dev, void *data,
+		       struct drm_file *file_priv)
 {
 	struct drm_device_dma *dma = dev->dma;
 	int retcode = 0;
@@ -1591,24 +1593,88 @@ int drm_mapbufs(struct drm_device *dev, void *data,
 }
 
 /**
- * Compute size order.  Returns the exponent of the smaller power of two which
- * is greater or equal to given number.
+ * Get a mapping information.
  *
- * \param size size.
- * \return order.
+ * \param inode device inode.
+ * \param file_priv DRM file private.
+ * \param cmd command.
+ * \param arg user argument, pointing to a drm_map structure.
  *
- * \todo Can be made faster.
+ * \return zero on success or a negative number on failure.
+ *
+ * Searches for the mapping with the specified offset and copies its information
+ * into userspace
  */
-int drm_order(unsigned long size)
+static int drm_getmap(struct drm_device *dev, void *data,
+		      struct drm_file *file_priv)
 {
-	int order;
-	unsigned long tmp;
+	struct drm_map *map = data;
+	struct drm_map_list *r_list = NULL;
+	struct list_head *list;
+	int idx;
+	int i;
 
-	for (order = 0, tmp = size >> 1; tmp; tmp >>= 1, order++) ;
+	idx = map->offset;
+	if (idx < 0)
+		return -EINVAL;
 
-	if (size & (size - 1))
-		++order;
+	i = 0;
+	mutex_lock(&dev->struct_mutex);
+	list_for_each(list, &dev->maplist) {
+		if (i == idx) {
+			r_list = list_entry(list, struct drm_map_list, head);
+			break;
+		}
+		i++;
+	}
+	if (!r_list || !r_list->map) {
+		mutex_unlock(&dev->struct_mutex);
+		return -EINVAL;
+	}
 
-	return order;
+	map->offset = r_list->map->offset;
+	map->size = r_list->map->size;
+	map->type = r_list->map->type;
+	map->flags = r_list->map->flags;
+	map->handle = (void *)(unsigned long) r_list->user_token;
+	map->mtrr = r_list->map->mtrr;
+	mutex_unlock(&dev->struct_mutex);
+
+	return 0;
 }
-EXPORT_SYMBOL(drm_order);
+
+#define DRM_IOCTL_DEF(ioctl, _func, _flags) \
+	ioctls[DRM_IOCTL_NR(ioctl)] = (struct drm_ioctl_desc){.cmd = ioctl, .func = _func, .flags = _flags, .cmd_drv = 0}
+
+void drm_bufs_init_ioctls(struct drm_ioctl_desc *ioctls)
+{
+	DRM_IOCTL_DEF(DRM_IOCTL_GET_MAP, drm_getmap, DRM_UNLOCKED),
+	DRM_IOCTL_DEF(DRM_IOCTL_ADD_MAP, drm_addmap_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
+	DRM_IOCTL_DEF(DRM_IOCTL_RM_MAP, drm_rmmap_ioctl, DRM_AUTH),
+
+	DRM_IOCTL_DEF(DRM_IOCTL_ADD_BUFS, drm_addbufs, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_MARK_BUFS, drm_markbufs, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_INFO_BUFS, drm_infobufs, DRM_AUTH);
+	DRM_IOCTL_DEF(DRM_IOCTL_MAP_BUFS, drm_mapbufs, DRM_AUTH);
+	DRM_IOCTL_DEF(DRM_IOCTL_FREE_BUFS, drm_freebufs, DRM_AUTH);
+} 
+
+void drm_bufs_master_destroy(struct drm_master *master)
+{
+	struct drm_device *dev = master->minor->dev;
+	struct drm_map_list *r_list, *list_temp;
+	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head) {
+		if (r_list->master == master) {
+			drm_rmmap_locked(dev, r_list->map);
+			r_list = NULL;
+		}
+	}
+}
+
+void drm_bufs_put_dev(struct drm_device *dev)
+{
+	struct drm_map_list *r_list, *list_temp;
+
+	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head)
+		drm_rmmap(dev, r_list->map);
+}

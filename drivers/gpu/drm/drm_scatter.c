@@ -181,7 +181,7 @@ int drm_sg_alloc(struct drm_device *dev, struct drm_scatter_gather * request)
 	return -ENOMEM;
 }
 
-int drm_sg_alloc_ioctl(struct drm_device *dev, void *data,
+static int drm_sg_alloc_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv)
 {
 	struct drm_scatter_gather *request = data;
@@ -190,7 +190,7 @@ int drm_sg_alloc_ioctl(struct drm_device *dev, void *data,
 
 }
 
-int drm_sg_free(struct drm_device *dev, void *data,
+static int drm_sg_free(struct drm_device *dev, void *data,
 		struct drm_file *file_priv)
 {
 	struct drm_scatter_gather *request = data;
@@ -210,4 +210,13 @@ int drm_sg_free(struct drm_device *dev, void *data,
 	drm_sg_cleanup(entry);
 
 	return 0;
+}
+
+#define DRM_IOCTL_DEF(ioctl, _func, _flags) \
+	ioctls[DRM_IOCTL_NR(ioctl)] = (struct drm_ioctl_desc){.cmd = ioctl, .func = _func, .flags = _flags, .cmd_drv = 0}
+
+void drm_sg_init_ioctls(struct drm_ioctl_desc *ioctls)
+{
+	DRM_IOCTL_DEF(DRM_IOCTL_SG_ALLOC, drm_sg_alloc_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
+	DRM_IOCTL_DEF(DRM_IOCTL_SG_FREE, drm_sg_free, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY);
 }

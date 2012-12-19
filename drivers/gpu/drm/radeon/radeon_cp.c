@@ -32,6 +32,7 @@
 #include <linux/module.h>
 
 #include <drm/drmP.h>
+#include <drm/drm_bufs.h>
 #include <drm/radeon_drm.h>
 #include "radeon_drv.h"
 #include "r300_reg.h"
