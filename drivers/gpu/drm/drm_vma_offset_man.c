@@ -91,6 +91,7 @@ int drm_vma_offset_setup(struct drm_vma_offset_manager *man,
 {
 	int ret;
 
+	list_init(&node->flist);
 retry_pre_get:
 	ret = drm_mm_pre_get(&man->addr_space_mm);
 	if (unlikely(ret != 0))
@@ -158,3 +159,45 @@ void drm_vma_offset_man_fini(struct drm_vma_offset_manager *man)
 	write_unlock(&man->vm_lock);
 }
 EXPORT_SYMBOL(drm_vma_offset_man_fini);
+
+int drm_vma_offset_node_add_file(struct drm_vma_offset_node *node,
+				 struct file *filp)
+{
+	struct drm_vma_offset_node_per_file *fnode;
+
+	fnode = kmalloc(sizeof(*fnode), GFP_KERNEL);
+	if (!fnode)
+		return -ENOMEM;
+
+	fnode->filp = filp;
+	list_add(&fnode->lhead, &node->flist);
+	return 0;
+}
+EXPORT_SYMBOL(drm_vma_offset_node_add_file);
+
+void drm_vma_offset_node_remove_file(struct drm_vma_offset_node *node,
+			       struct file *filp)
+{
+	struct drm_vma_offset_node_per_file *fnode, *temp;
+
+	list_for_each_entry_safe(fnode, temp, &node->flist, lhead) {
+		if (fnode->filp == filp) {
+			list_del(&fnode->lhead);
+			kfree(fnode);
+			break;
+		}
+	}
+}
+EXPORT_SYMBOL(drm_vma_offset_node_remove_file);
+
+bool drm_vma_offset_node_valid_file(struct drm_vma_offset_node *node,
+				    struct file *filp)
+{
+	struct drm_vma_offset_node_per_file *fnode;
+	list_for_each_entry(fnode, &node->flist, lhead) {	
+		if (fnode->filp == filp)
+			return true;
+	}
+	return false;
+}
+EXPORT_SYMBOL(drm_vma_offset_node_valid_file);

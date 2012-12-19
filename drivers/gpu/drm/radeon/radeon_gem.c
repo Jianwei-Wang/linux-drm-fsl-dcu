@@ -146,6 +146,12 @@ int radeon_gem_object_open(struct drm_gem_object *obj, struct drm_file *file_pri
 	struct radeon_bo_va *bo_va;
 	int r;
 
+	/* allocate a file to bo */
+	r = drm_vma_offset_node_add_file(&rbo->tbo.vma_offset,
+					 file_priv->filp);
+	if (r)
+		return r;
+
 	if (rdev->family < CHIP_CAYMAN) {
 		return 0;
 	}
@@ -176,6 +182,7 @@ void radeon_gem_object_close(struct drm_gem_object *obj,
 	struct radeon_bo_va *bo_va;
 	int r;
 
+	drm_vma_offset_node_remove_file(&rbo->tbo.vma_offset, file_priv->filp);
 	if (rdev->family < CHIP_CAYMAN) {
 		return;
 	}

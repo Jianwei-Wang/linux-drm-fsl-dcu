@@ -218,7 +218,8 @@ static const struct vm_operations_struct ttm_bo_vm_ops = {
 	.close = ttm_bo_vm_close
 };
 
-static struct ttm_buffer_object *ttm_bo_vm_lookup(struct ttm_bo_device *bdev,
+static struct ttm_buffer_object *ttm_bo_vm_lookup(struct file *filp,
+						  struct ttm_bo_device *bdev,
 						  unsigned long dev_offset,
 						  unsigned long num_pages)
 {
@@ -236,10 +237,18 @@ static struct ttm_buffer_object *ttm_bo_vm_lookup(struct ttm_bo_device *bdev,
 	bo = container_of(node, struct ttm_buffer_object, vma_offset);
 	ttm_bo_reference(bo);
 
+	if (drm_vma_offset_node_valid_file(&bo->vma_offset, filp) == false) {
+		bo = NULL;
+		pr_err("Invalid buffer object for this file descriptor\n");
+		goto out;
+	}
+
 	if (!kref_get_unless_zero(&bo->kref)) {
 		bo = NULL;
 		pr_err("Could not find buffer object to map\n");
 	}
+
+out:
 	read_unlock(&bdev->vm_lock);
 	return bo;
 }
@@ -251,7 +260,7 @@ int ttm_bo_mmap(struct file *filp, struct vm_area_struct *vma,
 	struct ttm_buffer_object *bo;
 	int ret;
 
-	bo = ttm_bo_vm_lookup(bdev,
+	bo = ttm_bo_vm_lookup(filp, bdev,
 			      vma->vm_pgoff,
 			      (vma->vm_end - vma->vm_start) >> PAGE_SHIFT);
 	if (unlikely(bo == NULL))
@@ -313,7 +322,7 @@ ssize_t ttm_bo_io(struct ttm_bo_device *bdev, struct file *filp,
 	bool no_wait = false;
 	bool dummy;
 
-	bo = ttm_bo_vm_lookup(bdev, dev_offset, 1);
+	bo = ttm_bo_vm_lookup(filp, bdev, dev_offset, 1);
 	if (unlikely(bo == NULL))
 		return -EFAULT;
 

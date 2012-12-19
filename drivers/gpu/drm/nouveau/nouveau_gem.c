@@ -74,6 +74,11 @@ nouveau_gem_object_open(struct drm_gem_object *gem, struct drm_file *file_priv)
 	struct nouveau_vma *vma;
 	int ret;
 
+	ret = drm_vma_offset_node_add_file(&nvbo->bo.vma_offset,
+					   file_priv->filp);
+	if (ret)
+		return ret;
+
 	if (!cli->base.vm)
 		return 0;
 
@@ -110,6 +115,8 @@ nouveau_gem_object_close(struct drm_gem_object *gem, struct drm_file *file_priv)
 	struct nouveau_bo *nvbo = nouveau_gem_object(gem);
 	struct nouveau_vma *vma;
 	int ret;
+
+	drm_vma_offset_node_remove_file(&nvbo->bo.vma_offset, file_priv->filp);
 
 	if (!cli->base.vm)
 		return;

@@ -2,13 +2,23 @@
 #ifndef DRM_VMA_OFFSET_MAN
 #define DRM_VMA_OFFSET_MAN
 
+#include <linux/fs.h>
 #include <linux/mutex.h>
 #include <linux/rbtree.h>
 #include <drm/drm_mm.h>
 
-struct drm_mm_node;
+/* store a linked list of file privs this object is valid on,
+   the bust a move in mmap */
 
+struct drm_vma_offset_node_per_file {
+	struct list_head lhead;
+	struct file *filp;
+};
+
+/* you'd want a linked list of file privs per node */
 struct drm_vma_offset_node {
+	struct list_head flist;
+
 	struct drm_mm_node *vm_node;
 	struct rb_node vm_rb;
 	uint64_t num_pages;
@@ -58,4 +68,10 @@ static inline uint64_t drm_vma_node_offset_addr(struct drm_vma_offset_node *node
 	return ((uint64_t) node->vm_node->start) << PAGE_SHIFT;
 }
 
+int drm_vma_offset_node_add_file(struct drm_vma_offset_node *node,
+				    struct file *filp);
+void drm_vma_offset_node_remove_file(struct drm_vma_offset_node *node,
+				     struct file *filp);
+bool drm_vma_offset_node_valid_file(struct drm_vma_offset_node *node,
+				    struct file *filp);
 #endif
