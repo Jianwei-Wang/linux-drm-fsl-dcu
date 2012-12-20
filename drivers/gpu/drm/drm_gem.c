@@ -204,13 +204,9 @@ EXPORT_SYMBOL(drm_gem_object_alloc);
 static void
 drm_gem_remove_prime_handles(struct drm_gem_object *obj, struct drm_file *filp)
 {
-	if (obj->import_attach) {
+	if (obj->dma_buf) {
 		drm_prime_remove_buf_handle(&filp->prime,
-					    obj->import_attach->dmabuf);
-	}
-	if (obj->export_dma_buf) {
-		drm_prime_remove_buf_handle(&filp->prime,
-					    obj->export_dma_buf);
+					    obj->dma_buf);
 	}
 }
 

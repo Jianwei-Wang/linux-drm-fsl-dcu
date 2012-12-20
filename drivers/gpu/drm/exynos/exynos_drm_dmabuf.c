@@ -151,21 +151,7 @@ static void exynos_dmabuf_release(struct dma_buf *dmabuf)
 
 	DRM_DEBUG_PRIME("%s\n", __FILE__);
 
-	/*
-	 * exynos_dmabuf_release() call means that file object's
-	 * f_count is 0 and it calls drm_gem_object_handle_unreference()
-	 * to drop the references that these values had been increased
-	 * at drm_prime_handle_to_fd()
-	 */
-	if (exynos_gem_obj->base.export_dma_buf == dmabuf) {
-		exynos_gem_obj->base.export_dma_buf = NULL;
-
-		/*
-		 * drop this gem object refcount to release allocated buffer
-		 * and resources.
-		 */
-		drm_gem_object_unreference_unlocked(&exynos_gem_obj->base);
-	}
+	drm_gem_object_unreference_unlocked(&exynos_gem_obj->base);
 }
 
 static void *exynos_gem_dmabuf_kmap_atomic(struct dma_buf *dma_buf,

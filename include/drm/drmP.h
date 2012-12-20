@@ -669,8 +669,8 @@ struct drm_gem_object {
 
 	void *driver_private;
 
-	/* dma buf exported from this GEM object */
-	struct dma_buf *export_dma_buf;
+	/* dma buf attach to this GEM object */
+	struct dma_buf *dma_buf;
 
 	/* dma buf attachment backing this object */
 	struct dma_buf_attachment *import_attach;

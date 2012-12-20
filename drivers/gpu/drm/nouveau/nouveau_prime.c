@@ -57,10 +57,7 @@ static void nouveau_gem_dmabuf_release(struct dma_buf *dma_buf)
 {
 	struct nouveau_bo *nvbo = dma_buf->priv;
 
-	if (nvbo->gem->export_dma_buf == dma_buf) {
-		nvbo->gem->export_dma_buf = NULL;
-		drm_gem_object_unreference_unlocked(nvbo->gem);
-	}
+	drm_gem_object_unreference_unlocked(nvbo->gem);
 }
 
 static void *nouveau_gem_kmap_atomic(struct dma_buf *dma_buf, unsigned long page_num)

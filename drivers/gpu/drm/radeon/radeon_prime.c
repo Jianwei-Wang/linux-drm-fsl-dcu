@@ -58,11 +58,7 @@ static void radeon_gem_dmabuf_release(struct dma_buf *dma_buf)
 {
 	struct radeon_bo *bo = dma_buf->priv;
 
-	if (bo->gem_base.export_dma_buf == dma_buf) {
-		DRM_ERROR("unreference dmabuf %p\n", &bo->gem_base);
-		bo->gem_base.export_dma_buf = NULL;
-		drm_gem_object_unreference_unlocked(&bo->gem_base);
-	}
+	drm_gem_object_unreference_unlocked(&bo->gem_base);
 }
 
 static void *radeon_gem_kmap_atomic(struct dma_buf *dma_buf, unsigned long page_num)
