@@ -525,12 +525,15 @@ EXPORT_SYMBOL_GPL(dma_buf_vunmap);
 static int dma_buf_init_debugfs(void);
 static void dma_buf_uninit_debugfs(void);
 
-static void __init dma_buf_init(void)
+static int __init dma_buf_init(void)
 {
 	mutex_init(&db_list.lock);
 	INIT_LIST_HEAD(&db_list.head);
 	dma_buf_init_debugfs();
+	return 0;
 }
+
+subsys_initcall(dma_buf_init);
 
 static void __exit dma_buf_deinit(void)
 {
