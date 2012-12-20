@@ -560,7 +560,7 @@ static int dma_buf_describe(struct seq_file *s)
 	list_for_each_entry(buf_obj, &db_list.head, list_node) {
 		seq_printf(s, "\t");
 
-		seq_printf(s, "%08zu\t%08x\t%08x\t%08d\n",
+		seq_printf(s, "%08zu\t%08x\t%08x\t%08ld\n",
 				buf_obj->size, buf_obj->file->f_flags,
 				buf_obj->file->f_mode,
 				buf_obj->file->f_count.counter);
