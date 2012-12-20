@@ -115,10 +115,11 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	return 0;
 
 out_have_obj:
+	get_dma_buf(dmabuf);
+
 	/* we should have a buf handle for this case */
 	{
 		uint32_t exp_handle;
-		get_dma_buf(dmabuf);
 		ret = drm_prime_lookup_buf_handle(&file_priv->prime,
 						  dmabuf,
 						  &exp_handle);
