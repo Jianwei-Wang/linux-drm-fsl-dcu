@@ -98,9 +98,8 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 		/* normally the created dma-buf takes ownership of the ref,
 		 * but if that fails then drop the ref
 		 */
-		drm_gem_object_unreference_unlocked(obj);
-		mutex_unlock(&file_priv->prime.lock);
-		return PTR_ERR(buf);
+		ret = PTR_ERR(buf);
+		goto out;
 	}
 	obj->export_dma_buf = buf;
 
@@ -110,9 +109,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	ret = drm_prime_add_exported_buf_handle(&file_priv->prime,
 						obj->export_dma_buf, handle);
 	if (ret) {
-		drm_gem_object_unreference_unlocked(obj);
-		mutex_unlock(&file_priv->prime.lock);
-		return ret;
+		goto out;
 	}
 	*prime_fd = dma_buf_fd(buf, flags);
 	mutex_unlock(&file_priv->prime.lock);
@@ -129,15 +126,15 @@ out_have_obj:
 						  &exp_handle);
 		if (WARN_ON(ret == -ENOENT || exp_handle != handle)) {
 			dma_buf_put(dmabuf);
-			drm_gem_object_unreference_unlocked(obj);
-			mutex_unlock(&file_priv->prime.lock);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out;
 		}
 	}
 	*prime_fd = dma_buf_fd(dmabuf, flags);
+out:
 	drm_gem_object_unreference_unlocked(obj);
 	mutex_unlock(&file_priv->prime.lock);
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(drm_gem_prime_handle_to_fd);
 
