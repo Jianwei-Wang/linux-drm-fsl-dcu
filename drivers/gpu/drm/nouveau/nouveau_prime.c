@@ -32,7 +32,8 @@
 static struct sg_table *nouveau_gem_map_dma_buf(struct dma_buf_attachment *attachment,
 					  enum dma_data_direction dir)
 {
-	struct nouveau_bo *nvbo = attachment->dmabuf->priv;
+	struct drm_gem_object *obj = attachment->dmabuf->priv;
+	struct nouveau_bo *nvbo = nouveau_gem_object(obj);
 	struct drm_device *dev = nvbo->gem->dev;
 	int npages = nvbo->bo.num_pages;
 	struct sg_table *sg;
@@ -51,13 +52,6 @@ static void nouveau_gem_unmap_dma_buf(struct dma_buf_attachment *attachment,
 	dma_unmap_sg(attachment->dev, sg->sgl, sg->nents, dir);
 	sg_free_table(sg);
 	kfree(sg);
-}
-
-static void nouveau_gem_dmabuf_release(struct dma_buf *dma_buf)
-{
-	struct nouveau_bo *nvbo = dma_buf->priv;
-
-	drm_gem_object_unreference_unlocked(nvbo->gem);
 }
 
 static void *nouveau_gem_kmap_atomic(struct dma_buf *dma_buf, unsigned long page_num)
@@ -86,7 +80,8 @@ static int nouveau_gem_prime_mmap(struct dma_buf *dma_buf, struct vm_area_struct
 
 static void *nouveau_gem_prime_vmap(struct dma_buf *dma_buf)
 {
-	struct nouveau_bo *nvbo = dma_buf->priv;
+	struct drm_gem_object *obj = dma_buf->priv;
+	struct nouveau_bo *nvbo = nouveau_gem_object(obj);
 	struct drm_device *dev = nvbo->gem->dev;
 	int ret;
 
@@ -110,7 +105,8 @@ out_unlock:
 
 static void nouveau_gem_prime_vunmap(struct dma_buf *dma_buf, void *vaddr)
 {
-	struct nouveau_bo *nvbo = dma_buf->priv;
+	struct drm_gem_object *obj = dma_buf->priv;
+	struct nouveau_bo *nvbo = nouveau_gem_object(obj);
 	struct drm_device *dev = nvbo->gem->dev;
 
 	mutex_lock(&dev->struct_mutex);
@@ -124,7 +120,7 @@ static void nouveau_gem_prime_vunmap(struct dma_buf *dma_buf, void *vaddr)
 static const struct dma_buf_ops nouveau_dmabuf_ops =  {
 	.map_dma_buf = nouveau_gem_map_dma_buf,
 	.unmap_dma_buf = nouveau_gem_unmap_dma_buf,
-	.release = nouveau_gem_dmabuf_release,
+	.release = drm_gem_prime_release,
 	.kmap = nouveau_gem_kmap,
 	.kmap_atomic = nouveau_gem_kmap_atomic,
 	.kunmap = nouveau_gem_kunmap,
@@ -183,10 +179,12 @@ struct drm_gem_object *nouveau_gem_prime_import(struct drm_device *dev,
 	struct dma_buf_attachment *attach;
 	struct sg_table *sg;
 	struct nouveau_bo *nvbo;
+	struct drm_gem_object *obj;
 	int ret;
 
 	if (dma_buf->ops == &nouveau_dmabuf_ops) {
-		nvbo = dma_buf->priv;
+		obj = dma_buf->priv;
+		nvbo = nouveau_gem_object(obj);
 		if (nvbo->gem) {
 			if (nvbo->gem->dev == dev) {
 				drm_gem_object_reference(nvbo->gem);

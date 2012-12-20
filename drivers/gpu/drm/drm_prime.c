@@ -80,7 +80,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	if (!obj)
 		return -ENOENT;
 
-	mutex_lock(&file_priv->prime.lock);
+	mutex_lock(&dev->prime_lock);
 	/* re-export the original imported object */
 	if (obj->dma_buf)
 		goto out_have_obj;
@@ -98,6 +98,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	/* if we've exported this buffer the cheat and add it to the import list
 	 * so we get the correct handle back
 	 */
+	mutex_lock(&file_priv->prime.lock);
 	ret = drm_prime_add_exported_buf_handle(&file_priv->prime,
 						obj->dma_buf, handle);
 	if (ret) {
@@ -105,11 +106,14 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	}
 	*prime_fd = dma_buf_fd(buf, flags);
 	mutex_unlock(&file_priv->prime.lock);
+	mutex_unlock(&obj->dev->prime_lock);
+
 	return 0;
 
 out_have_obj:
 	get_dma_buf(obj->dma_buf);
 
+	mutex_lock(&file_priv->prime.lock);
 	/* we should have a buf handle for this case */
 	{
 		uint32_t exp_handle;
@@ -122,10 +126,12 @@ out_have_obj:
 			goto out;
 		}
 	}
+	mutex_unlock(&file_priv->prime.lock);
+
 	*prime_fd = dma_buf_fd(obj->dma_buf, flags);
 out:
 	drm_gem_object_unreference_unlocked(obj);
-	mutex_unlock(&file_priv->prime.lock);
+	mutex_unlock(&obj->dev->prime_lock);
 	return ret;
 }
 EXPORT_SYMBOL(drm_gem_prime_handle_to_fd);
@@ -141,10 +147,11 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 	if (IS_ERR(dma_buf))
 		return PTR_ERR(dma_buf);
 
+	mutex_lock(&dev->prime_lock);
 	mutex_lock(&file_priv->prime.lock);
-
 	ret = drm_prime_lookup_buf_handle(&file_priv->prime,
 			dma_buf, handle);
+	mutex_unlock(&file_priv->prime.lock);
 	if (!ret) {
 		ret = 0;
 		goto out_put;
@@ -162,14 +169,15 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 	if (ret)
 		goto out_put;
 
+	mutex_lock(&file_priv->prime.lock);
 	ret = drm_prime_add_imported_buf_handle(&file_priv->prime,
 						dma_buf, *handle);
+	mutex_unlock(&file_priv->prime.lock);
 	if (ret)
 		goto fail;
 
 	obj->dma_buf = dma_buf;
-
-	mutex_unlock(&file_priv->prime.lock);
+	mutex_unlock(&dev->prime_lock);
 	return 0;
 
 fail:
@@ -179,7 +187,7 @@ fail:
 	drm_gem_object_handle_unreference_unlocked(obj);
 out_put:
 	dma_buf_put(dma_buf);
-	mutex_unlock(&file_priv->prime.lock);
+	mutex_unlock(&dev->prime_lock);
 	return ret;
 }
 EXPORT_SYMBOL(drm_gem_prime_fd_to_handle);
@@ -290,11 +298,13 @@ int drm_prime_sg_to_page_addr_arrays(struct sg_table *sgt, struct page **pages,
 	return 0;
 }
 EXPORT_SYMBOL(drm_prime_sg_to_page_addr_arrays);
+
 /* helper function to cleanup a GEM/prime object */
 void drm_prime_gem_destroy(struct drm_gem_object *obj, struct sg_table *sg)
 {
 	struct dma_buf_attachment *attach;
 	struct dma_buf *dma_buf;
+
 	attach = obj->import_attach;
 	if (sg)
 		dma_buf_unmap_attachment(attach, sg, DMA_BIDIRECTIONAL);
@@ -381,3 +391,14 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv, str
 	mutex_unlock(&prime_fpriv->lock);
 }
 EXPORT_SYMBOL(drm_prime_remove_buf_handle);
+
+void drm_gem_prime_release(struct dma_buf *dma_buf)
+{
+	struct drm_gem_object *obj = dma_buf->priv;
+
+	mutex_lock(&obj->dev->prime_lock);
+	obj->dma_buf = NULL;
+	mutex_unlock(&obj->dev->prime_lock);
+	drm_gem_object_unreference_unlocked(obj);
+}
+EXPORT_SYMBOL(drm_gem_prime_release);

@@ -33,7 +33,7 @@
 static struct sg_table *radeon_gem_map_dma_buf(struct dma_buf_attachment *attachment,
 					       enum dma_data_direction dir)
 {
-	struct radeon_bo *bo = attachment->dmabuf->priv;
+	struct radeon_bo *bo = gem_to_radeon_bo(attachment->dmabuf->priv);
 	struct drm_device *dev = bo->rdev->ddev;
 	int npages = bo->tbo.num_pages;
 	struct sg_table *sg;
@@ -52,13 +52,6 @@ static void radeon_gem_unmap_dma_buf(struct dma_buf_attachment *attachment,
 	dma_unmap_sg(attachment->dev, sg->sgl, sg->nents, dir);
 	sg_free_table(sg);
 	kfree(sg);
-}
-
-static void radeon_gem_dmabuf_release(struct dma_buf *dma_buf)
-{
-	struct radeon_bo *bo = dma_buf->priv;
-
-	drm_gem_object_unreference_unlocked(&bo->gem_base);
 }
 
 static void *radeon_gem_kmap_atomic(struct dma_buf *dma_buf, unsigned long page_num)
@@ -87,7 +80,7 @@ static int radeon_gem_prime_mmap(struct dma_buf *dma_buf, struct vm_area_struct 
 
 static void *radeon_gem_prime_vmap(struct dma_buf *dma_buf)
 {
-	struct radeon_bo *bo = dma_buf->priv;
+	struct radeon_bo *bo = gem_to_radeon_bo(dma_buf->priv);
 	struct drm_device *dev = bo->rdev->ddev;
 	int ret;
 
@@ -111,7 +104,7 @@ out_unlock:
 
 static void radeon_gem_prime_vunmap(struct dma_buf *dma_buf, void *vaddr)
 {
-	struct radeon_bo *bo = dma_buf->priv;
+	struct radeon_bo *bo = gem_to_radeon_bo(dma_buf->priv);
 	struct drm_device *dev = bo->rdev->ddev;
 
 	mutex_lock(&dev->struct_mutex);
@@ -124,7 +117,7 @@ static void radeon_gem_prime_vunmap(struct dma_buf *dma_buf, void *vaddr)
 const static struct dma_buf_ops radeon_dmabuf_ops =  {
 	.map_dma_buf = radeon_gem_map_dma_buf,
 	.unmap_dma_buf = radeon_gem_unmap_dma_buf,
-	.release = radeon_gem_dmabuf_release,
+	.release = drm_gem_prime_release,
 	.kmap = radeon_gem_kmap,
 	.kmap_atomic = radeon_gem_kmap_atomic,
 	.kunmap = radeon_gem_kunmap,
@@ -175,7 +168,7 @@ struct dma_buf *radeon_gem_prime_export(struct drm_device *dev,
 		return ERR_PTR(ret);
 	}
 	radeon_bo_unreserve(bo);
-	return dma_buf_export(bo, &radeon_dmabuf_ops, obj->size, flags);
+	return dma_buf_export(obj, &radeon_dmabuf_ops, obj->size, flags);
 }
 
 struct drm_gem_object *radeon_gem_prime_import(struct drm_device *dev,
@@ -187,7 +180,7 @@ struct drm_gem_object *radeon_gem_prime_import(struct drm_device *dev,
 	int ret;
 
 	if (dma_buf->ops == &radeon_dmabuf_ops) {
-		bo = dma_buf->priv;
+		bo = gem_to_radeon_bo(dma_buf->priv);
 		if (bo->gem_base.dev == dev) {
 			drm_gem_object_reference(&bo->gem_base);
 			dma_buf_put(dma_buf);

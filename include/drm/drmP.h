@@ -418,8 +418,8 @@ struct drm_pending_event {
 	void (*destroy)(struct drm_pending_event *event);
 };
 
-/* initial implementaton using a linked list - todo hashtab */
 struct drm_prime_file_private {
+	/* the linked list of dma_buf/handle is protected by the lock */
 	struct list_head head;
 	struct mutex lock;
 };
@@ -670,6 +670,7 @@ struct drm_gem_object {
 	void *driver_private;
 
 	/* dma buf attach to this GEM object */
+	/* this is protected by the device prime_lock */
 	struct dma_buf *dma_buf;
 
 	/* dma buf attachment backing this object */
@@ -1194,6 +1195,15 @@ struct drm_device {
 	/*@{ */
 	spinlock_t object_name_lock;
 	struct idr object_name_idr;
+
+	/**
+	 * prime_lock - protects dma buf state of exported GEM objects
+	 *
+	 * Specifically obj->dma_buf, but this can be used by drivers for
+	 * other things.
+	 */
+	struct mutex prime_lock;
+
 	/*@} */
 	int switch_power_state;
 
@@ -1555,7 +1565,7 @@ extern int drm_prime_sg_to_page_addr_arrays(struct sg_table *sgt, struct page **
 					    dma_addr_t *addrs, int max_pages);
 extern struct sg_table *drm_prime_pages_to_sg(struct page **pages, int nr_pages);
 extern void drm_prime_gem_destroy(struct drm_gem_object *obj, struct sg_table *sg);
-
+extern void drm_gem_prime_release(struct dma_buf *dma_buf);
 
 void drm_prime_init_file_private(struct drm_prime_file_private *prime_fpriv);
 void drm_prime_destroy_file_private(struct drm_prime_file_private *prime_fpriv);

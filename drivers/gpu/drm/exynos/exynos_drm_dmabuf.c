@@ -76,7 +76,8 @@ static struct sg_table *
 					enum dma_data_direction dir)
 {
 	struct exynos_drm_dmabuf_attachment *exynos_attach = attach->priv;
-	struct exynos_drm_gem_obj *gem_obj = attach->dmabuf->priv;
+	struct drm_gem_object *gobj = attach->dmabuf->priv;
+	struct exynos_drm_gem_obj *gem_obj = to_exynos_gem_obj(gobj);
 	struct drm_device *dev = gem_obj->base.dev;
 	struct exynos_drm_gem_buf *buf;
 	struct scatterlist *rd, *wr;
@@ -145,15 +146,6 @@ static void exynos_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 	/* Nothing to do. */
 }
 
-static void exynos_dmabuf_release(struct dma_buf *dmabuf)
-{
-	struct exynos_drm_gem_obj *exynos_gem_obj = dmabuf->priv;
-
-	DRM_DEBUG_PRIME("%s\n", __FILE__);
-
-	drm_gem_object_unreference_unlocked(&exynos_gem_obj->base);
-}
-
 static void *exynos_gem_dmabuf_kmap_atomic(struct dma_buf *dma_buf,
 						unsigned long page_num)
 {
@@ -199,7 +191,7 @@ static struct dma_buf_ops exynos_dmabuf_ops = {
 	.kunmap			= exynos_gem_dmabuf_kunmap,
 	.kunmap_atomic		= exynos_gem_dmabuf_kunmap_atomic,
 	.mmap			= exynos_gem_dmabuf_mmap,
-	.release		= exynos_dmabuf_release,
+	.release		= drm_gem_prime_release,
 };
 
 struct dma_buf *exynos_dmabuf_prime_export(struct drm_device *drm_dev,
@@ -226,9 +218,8 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 	/* is this one of own objects? */
 	if (dma_buf->ops == &exynos_dmabuf_ops) {
 		struct drm_gem_object *obj;
-
-		exynos_gem_obj = dma_buf->priv;
-		obj = &exynos_gem_obj->base;
+		obj = dma_buf->priv;
+		exynos_gem_obj = to_exynos_gem_object(obj);
 
 		/* is it from our device? */
 		if (obj->dev == drm_dev) {

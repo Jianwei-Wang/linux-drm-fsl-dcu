@@ -94,7 +94,8 @@ drm_gem_init(struct drm_device *dev)
 
 	spin_lock_init(&dev->object_name_lock);
 	idr_init(&dev->object_name_idr);
-
+	mutex_init(&dev->prime_lock);
+	
 	mm = kzalloc(sizeof(struct drm_gem_mm), GFP_KERNEL);
 	if (!mm) {
 		DRM_ERROR("out of memory\n");
@@ -204,10 +205,12 @@ EXPORT_SYMBOL(drm_gem_object_alloc);
 static void
 drm_gem_remove_prime_handles(struct drm_gem_object *obj, struct drm_file *filp)
 {
+	mutex_lock(&obj->dev->prime_lock);
 	if (obj->dma_buf) {
 		drm_prime_remove_buf_handle(&filp->prime,
 					    obj->dma_buf);
 	}
+	mutex_unlock(&obj->dev->prime_lock);
 }
 
 /**
