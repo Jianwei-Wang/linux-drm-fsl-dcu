@@ -1279,12 +1279,34 @@ static bool i915_switcheroo_can_switch(struct pci_dev *pdev)
 	spin_unlock(&dev->count_lock);
 	return can_switch;
 }
+static void i915_switcheroo_reprobe(struct pci_dev *pdev)
+{
+	struct drm_device *dev = pci_get_drvdata(pdev);
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_connector *con;
+	struct intel_encoder *enc;
+	struct intel_dp *dp;
+
+	list_for_each_entry(con, &dev->mode_config.connector_list, head) {
+		if (con->connector_type == DRM_MODE_CONNECTOR_eDP) {
+			enc = intel_attached_encoder(con);
+			dp = container_of(enc, struct intel_dp, base);
+	
+			if (dp->delayed_detect) {
+				DRM_DEBUG_KMS("have delayed eDP detect\n");
+				intel_dp_finish_detect(dev, dp, con);
+				dp->delayed_detect = false;
+			}
+		}
+	}
+}
 
 static const struct vga_switcheroo_client_ops i915_switcheroo_ops = {
 	.set_gpu_state = i915_switcheroo_set_state,
-	.reprobe = NULL,
+	.reprobe = i915_switcheroo_reprobe,
 	.can_switch = i915_switcheroo_can_switch,
 };
+
 
 static int i915_load_modeset_init(struct drm_device *dev)
 {

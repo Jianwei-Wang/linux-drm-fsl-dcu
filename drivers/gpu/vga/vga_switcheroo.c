@@ -56,6 +56,9 @@ struct vgasr_priv {
 	struct list_head clients;
 
 	struct vga_switcheroo_handler *handler;
+
+	struct mutex ddc_lock;
+	struct pci_dev *old_ddc_owner;
 };
 
 #define ID_BIT_AUDIO		0x100
@@ -69,6 +72,7 @@ static void vga_switcheroo_debugfs_fini(struct vgasr_priv *priv);
 /* only one switcheroo per system */
 static struct vgasr_priv vgasr_priv = {
 	.clients = LIST_HEAD_INIT(vgasr_priv.clients),
+	.ddc_lock = __MUTEX_INITIALIZER(vgasr_priv.ddc_lock),
 };
 
 static BLOCKING_NOTIFIER_HEAD(vga_switcheroo_notifier_list);
@@ -252,6 +256,19 @@ struct pci_dev *vga_switcheroo_get_active_client(void)
 }
 EXPORT_SYMBOL(vga_switcheroo_get_active_client);
 
+int vga_switcheroo_get_client_mux_active(struct pci_dev *pdev)
+{
+	struct vga_switcheroo_client *client;
+
+	client = find_client_from_pci(&vgasr_priv.clients, pdev);
+	if (!client)
+		return VGA_SWITCHEROO_NOT_FOUND;
+	if (!vgasr_priv.active)
+		return VGA_SWITCHEROO_INIT;
+	return client->active ? VGA_SWITCHEROO_ON : VGA_SWITCHEROO_OFF;
+}
+EXPORT_SYMBOL(vga_switcheroo_get_client_mux_active);
+
 int vga_switcheroo_get_client_state(struct pci_dev *pdev)
 {
 	struct vga_switcheroo_client *client;
@@ -300,8 +317,9 @@ void vga_switcheroo_client_fb_set(struct pci_dev *pdev,
 }
 EXPORT_SYMBOL(vga_switcheroo_client_fb_set);
 
-int vga_switcheroo_switch_ddc(struct pci_dev *pdev)
+int vga_switcheroo_lock_ddc(struct pci_dev *pdev)
 {
+	struct vga_switcheroo_client *client;
 	int ret = 0;
 	int id;
 
@@ -313,6 +331,18 @@ int vga_switcheroo_switch_ddc(struct pci_dev *pdev)
 	}
 
 	if (vgasr_priv.handler->switch_ddc) {
+		mutex_lock(&vgasr_priv.ddc_lock);
+
+		client = find_active_client(&vgasr_priv.clients);
+		if (!client) {
+			mutex_unlock(&vgasr_priv.ddc_lock);
+			ret = -ENODEV;
+			goto out;
+		}
+		vgasr_priv.old_ddc_owner = client->pdev;
+		if (client->pdev == pdev)
+			goto out;
+
 		id = vgasr_priv.handler->get_client_id(pdev);
 		ret = vgasr_priv.handler->switch_ddc(id);
 	}
@@ -321,7 +351,32 @@ out:
 	mutex_unlock(&vgasr_mutex);
 	return ret;
 }
-EXPORT_SYMBOL(vga_switcheroo_switch_ddc);
+EXPORT_SYMBOL(vga_switcheroo_lock_ddc);
+
+int vga_switcheroo_unlock_ddc(struct pci_dev *pdev)
+{
+	int ret = 0;
+	int id;
+	mutex_lock(&vgasr_mutex);
+
+	if (!vgasr_priv.handler) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	if (vgasr_priv.handler->switch_ddc) {
+		if (vgasr_priv.old_ddc_owner != pdev) {
+			id = vgasr_priv.handler->get_client_id(vgasr_priv.old_ddc_owner);
+			ret = vgasr_priv.handler->switch_ddc(id);
+		}
+		vgasr_priv.old_ddc_owner = NULL;
+		mutex_unlock(&vgasr_priv.ddc_lock);
+	}
+out:
+	mutex_unlock(&vgasr_mutex);
+	return ret;
+}
+EXPORT_SYMBOL(vga_switcheroo_unlock_ddc);
 
 static int vga_switcheroo_show(struct seq_file *m, void *v)
 {

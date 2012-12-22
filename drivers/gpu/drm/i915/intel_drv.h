@@ -360,6 +360,7 @@ struct intel_dp {
 	bool want_panel_vdd;
 	struct edid *edid; /* cached EDID for eDP */
 	int edid_mode_count;
+	bool delayed_detect;
 };
 
 static inline struct drm_crtc *
@@ -578,5 +579,8 @@ extern bool intel_ddi_get_hw_state(struct intel_encoder *encoder,
 extern void intel_ddi_mode_set(struct drm_encoder *encoder,
 				struct drm_display_mode *mode,
 				struct drm_display_mode *adjusted_mode);
+
+void intel_dp_finish_detect(struct drm_device *dev, struct intel_dp *intel_dp,
+			struct intel_connector *conn);
 
 #endif /* __INTEL_DRV_H__ */

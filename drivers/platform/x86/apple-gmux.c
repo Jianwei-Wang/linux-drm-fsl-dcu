@@ -273,6 +273,7 @@ static const struct backlight_ops gmux_bl_ops = {
 
 static int gmux_switch_ddc(enum vga_switcheroo_client_id id)
 {
+	printk("switching gmux ddc %d\n", id);
 	if (id == VGA_SWITCHEROO_IGD)
 		gmux_write8(apple_gmux_data, GMUX_PORT_SWITCH_DDC, 1);
 	else

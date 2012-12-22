@@ -38,6 +38,8 @@
 #include "i915_drm.h"
 #include "i915_drv.h"
 
+#include <linux/vga_switcheroo.h>
+
 #define DP_LINK_STATUS_SIZE	6
 #define DP_LINK_CHECK_TIMEOUT	(10 * 1000)
 
@@ -665,9 +667,6 @@ intel_dp_i2c_init(struct intel_dp *intel_dp,
 	intel_dp->adapter.algo_data = &intel_dp->algo;
 	intel_dp->adapter.dev.parent = &intel_connector->base.kdev;
 
-	ironlake_edp_panel_vdd_on(intel_dp);
-	ret = i2c_dp_aux_add_bus(&intel_dp->adapter);
-	ironlake_edp_panel_vdd_off(intel_dp, false);
 	return ret;
 }
 
@@ -2625,18 +2624,35 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 
 		DRM_DEBUG_KMS("backlight on delay %d, off delay %d\n",
 			      intel_dp->backlight_on_delay, intel_dp->backlight_off_delay);
-		if (force_bl_on)
-			ironlake_edp_backlight_on(intel_dp);
 	}
 
+	if (vga_switcheroo_get_client_mux_active(dev->pdev) == VGA_SWITCHEROO_OFF)
+	{
+		DRM_DEBUG_KMS("no mux ownership delay detecting eDP\n");
+		intel_dp->delayed_detect = true;
+		return;
+	}
 	intel_dp_i2c_init(intel_dp, intel_connector, name);
+	intel_dp_finish_detect(dev, intel_dp, intel_connector);
+}
 
+void intel_dp_finish_detect(struct drm_device *dev, struct intel_dp *intel_dp,
+			struct intel_connector *intel_connector)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_connector *connector = &intel_connector->base;
+	int ret;
+	ironlake_edp_panel_vdd_on(intel_dp);
+	ret = i2c_dp_aux_add_bus(&intel_dp->adapter);
+	ironlake_edp_panel_vdd_off(intel_dp, false);
 	if (is_edp(intel_dp)) {
 		bool ret;
 		struct edid *edid;
 
 		ironlake_edp_panel_vdd_on(intel_dp);
+		vga_switcheroo_lock_ddc(dev->pdev);
 		ret = intel_dp_get_dpcd(intel_dp);
+		vga_switcheroo_unlock_ddc(dev->pdev);
 		ironlake_edp_panel_vdd_off(intel_dp, false);
 
 		if (ret) {
@@ -2665,14 +2681,14 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 		ironlake_edp_panel_vdd_off(intel_dp, false);
 	}
 
-	intel_encoder->hot_plug = intel_dp_hot_plug;
+	intel_dp->base.hot_plug = intel_dp_hot_plug;
 
 	if (is_edp(intel_dp)) {
-		dev_priv->int_edp_connector = connector;
+		dev_priv->int_edp_connector = &intel_connector->base;
 		intel_panel_setup_backlight(dev);
 	}
 
-	intel_dp_add_properties(intel_dp, connector);
+	intel_dp_add_properties(intel_dp, &intel_connector->base);
 
 	/* For G4X desktop chip, PEG_BAND_GAP_DATA 3:0 must first be written
 	 * 0xd.  Failure to do so will result in spurious interrupts being
@@ -2683,3 +2699,4 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 		I915_WRITE(PEG_BAND_GAP_DATA, (temp & ~0xf) | 0xd);
 	}
 }
+

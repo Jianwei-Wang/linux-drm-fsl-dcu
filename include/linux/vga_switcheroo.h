@@ -65,7 +65,8 @@ int vga_switcheroo_register_audio_client(struct pci_dev *pdev,
 void vga_switcheroo_client_fb_set(struct pci_dev *dev,
 				  struct fb_info *info);
 
-int vga_switcheroo_switch_ddc(struct pci_dev *pdev);
+int vga_switcheroo_lock_ddc(struct pci_dev *pdev);
+int vga_switcheroo_unlock_ddc(struct pci_dev *pdev);
 
 int vga_switcheroo_register_handler(struct vga_switcheroo_handler *handler);
 void vga_switcheroo_unregister_handler(void);
@@ -74,6 +75,7 @@ int vga_switcheroo_process_delayed_switch(void);
 
 struct pci_dev *vga_switcheroo_get_active_client(void);
 int vga_switcheroo_get_client_state(struct pci_dev *dev);
+int vga_switcheroo_get_client_mux_active(struct pci_dev *dev);
 
 #else
 
@@ -94,6 +96,7 @@ static inline int vga_switcheroo_process_delayed_switch(void) { return 0; }
 static inline struct pci_dev *vga_switcheroo_get_active_client(void) { return NULL; }
 static inline int vga_switcheroo_get_client_state(struct pci_dev *dev) { return VGA_SWITCHEROO_ON; }
 
+static inline int vga_switcheroo_get_client_mux_active(struct pci_dev *dev) { return 0; }
 
 #endif
 #endif /* _LINUX_VGA_SWITCHEROO_H_ */

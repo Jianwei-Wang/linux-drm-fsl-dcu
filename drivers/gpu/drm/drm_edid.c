@@ -83,8 +83,6 @@ struct detailed_mode_closure {
 #define LEVEL_GTF2	2
 #define LEVEL_CVT	3
 
-static DEFINE_MUTEX(drm_edid_mutex);
-
 static struct edid_quirk {
 	char vendor[4];
 	int product_id;
@@ -420,24 +418,14 @@ struct edid *drm_get_edid(struct drm_connector *connector,
 			  struct i2c_adapter *adapter)
 {
 	struct edid *edid = NULL;
-	struct pci_dev *pdev = connector->dev->pdev;
-	struct pci_dev *active_pdev = NULL;
 
-	mutex_lock(&drm_edid_mutex);
-
-	if (pdev) {
-		active_pdev = vga_switcheroo_get_active_client();
-		if (active_pdev != pdev)
-			vga_switcheroo_switch_ddc(pdev);
-	}
+	vga_switcheroo_lock_ddc(connector->dev->pdev);
 
 	if (drm_probe_ddc(adapter))
 		edid = (struct edid *)drm_do_get_edid(connector, adapter);
 
-	if (active_pdev && active_pdev != pdev)
-		vga_switcheroo_switch_ddc(active_pdev);
+	vga_switcheroo_unlock_ddc(connector->dev->pdev);
 
-	mutex_unlock(&drm_edid_mutex);
 	return edid;
 }
 EXPORT_SYMBOL(drm_get_edid);
