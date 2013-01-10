@@ -68,6 +68,14 @@ enum {
 	QXL_INTERRUPT_IO_CMD |\
 	QXL_INTERRUPT_CLIENT_MONITORS_CONFIG)
 /* TODO QXL_INTERRUPT_CLIENT */
+/* fences are kinda messy with qxl since we there is no strict linear ordering
+   with releases AFAIK. */
+struct qxl_fence {
+	struct qxl_device *qdev;
+	int num_releases;
+	int num_alloc_releases;
+	uint32_t *release_ids;
+};
 
 struct qxl_bo {
 	/* Protected by gem.mutex */
