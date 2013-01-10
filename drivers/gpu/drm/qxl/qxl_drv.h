@@ -88,30 +88,6 @@ struct qxl_bo {
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
-
-struct qxl_fence_driver {
-	atomic_t seq;
-	uint32_t last_seq;
-	wait_queue_head_t queue;
-	rwlock_t lock;
-	struct list_head created;
-	struct list_head emited;
-	struct list_head signaled;
-};
-
-struct qxl_fence {
-	struct qxl_device *qdev;
-	struct kref kref;
-	struct list_head list;
-	uint32_t seq;
-	unsigned long timeout;
-	bool emited;
-	bool signaled;
-};
-
-int qxl_fence_driver_init(struct qxl_device *qdev);
-void qxl_fence_driver_fini(struct qxl_device *qdev);
-
 struct qxl_gem {
 	struct mutex		mutex;
 	struct list_head	objects;
