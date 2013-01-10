@@ -394,6 +394,33 @@ static int qxl_bo_move(struct ttm_buffer_object *bo,
 	return ttm_bo_move_memcpy(bo, evict, no_wait_reserve, no_wait_gpu, new_mem);
 }
 
+
+static int qxl_sync_obj_wait(void *sync_obj, void *sync_arg,
+			     bool lazy, bool interruptible)
+{
+	return 0;
+}
+
+static int qxl_sync_obj_flush(void *sync_obj, void *sync_arg)
+{
+	return 0;
+}
+
+static void qxl_sync_obj_unref(void **sync_obj)
+{
+
+}
+
+static void *qxl_sync_obj_ref(void *sync_obj)
+{
+	return NULL;
+}
+
+static bool qxl_sync_obj_signaled(void *sync_obj, void *sync_arg)
+{
+	return false;
+}
+
 static struct ttm_bo_driver qxl_bo_driver = {
 	.ttm_tt_create = &qxl_ttm_tt_create,
 	.ttm_tt_populate = &qxl_ttm_tt_populate,
@@ -405,7 +432,14 @@ static struct ttm_bo_driver qxl_bo_driver = {
 	.verify_access = &qxl_verify_access,
 	.io_mem_reserve = &qxl_ttm_io_mem_reserve,
 	.io_mem_free = &qxl_ttm_io_mem_free,
+	.sync_obj_signaled = &qxl_sync_obj_signaled,
+	.sync_obj_wait = &qxl_sync_obj_wait,
+	.sync_obj_flush = &qxl_sync_obj_flush,
+	.sync_obj_unref = &qxl_sync_obj_unref,
+	.sync_obj_ref = &qxl_sync_obj_ref,
 };
+
+
 
 int qxl_ttm_init(struct qxl_device *qdev)
 {
