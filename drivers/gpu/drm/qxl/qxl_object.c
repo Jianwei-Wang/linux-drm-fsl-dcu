@@ -15,6 +15,7 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 			qxl_surface_id_dealloc(qdev, bo);
 		}
 	}
+	qxl_fence_fini(&bo->fence);
 	mutex_lock(&qdev->gem.mutex);
 	list_del_init(&bo->list);
 	mutex_unlock(&qdev->gem.mutex);
@@ -89,6 +90,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	}
 	bo->gem_base.driver_private = NULL;
 	bo->type = domain;
+	qxl_fence_init(qdev, &bo->fence);
 	INIT_LIST_HEAD(&bo->list);
 
 	qxl_ttm_placement_from_domain(bo, domain);

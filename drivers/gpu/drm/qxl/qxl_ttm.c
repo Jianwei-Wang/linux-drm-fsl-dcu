@@ -398,26 +398,41 @@ static int qxl_bo_move(struct ttm_buffer_object *bo,
 static int qxl_sync_obj_wait(void *sync_obj, void *sync_arg,
 			     bool lazy, bool interruptible)
 {
+	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
+
+	if (qfence->num_releases == 0)
+		return 0;
+
+	qxl_garbage_collect(qfence->qdev);
+
+	if (qfence->num_releases == 0)
+		return 0;
+	
 	return 0;
 }
 
 static int qxl_sync_obj_flush(void *sync_obj, void *sync_arg)
 {
+	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
 	return 0;
 }
 
 static void qxl_sync_obj_unref(void **sync_obj)
 {
-
 }
 
 static void *qxl_sync_obj_ref(void *sync_obj)
 {
-	return NULL;
+	return sync_obj;
 }
 
 static bool qxl_sync_obj_signaled(void *sync_obj, void *sync_arg)
 {
+	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
+
+	if (qfence->num_releases == 0)
+		return true;
+
 	return false;
 }
 

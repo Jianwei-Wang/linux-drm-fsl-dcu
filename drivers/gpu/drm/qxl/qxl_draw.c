@@ -126,6 +126,20 @@ void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 	return ret;
 }
 
+int qxl_fence_releaseable(struct qxl_device *qdev,
+			  struct drm_qxl_release *release)
+{
+	int i, ret;
+	for (i = 0; i < release->bo_count; i++) {
+		if (!release->bos[i]->tbo.sync_obj)
+			release->bos[i]->tbo.sync_obj = &release->bos[i]->fence;
+		ret = qxl_fence_add_release(&release->bos[i]->fence, release->id);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static struct qxl_drawable *
 make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 	      const struct qxl_rect *rect,

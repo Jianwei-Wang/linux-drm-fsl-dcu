@@ -93,6 +93,7 @@ struct qxl_bo {
 	bool is_primary; /* is this now a primary surface */
 	struct qxl_surface surf;
 	uint32_t surface_id;
+	struct qxl_fence fence; /* per bo fence  - list of releases */
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
@@ -442,6 +443,8 @@ void qxl_bo_add_resource(struct qxl_bo *main_bo, struct qxl_bo *resource);
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 			   int type, struct drm_qxl_release **release,
 			   struct qxl_bo **bo);
+int qxl_fence_releaseable(struct qxl_device *qdev,
+			  struct drm_qxl_release *release);
 void
 qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo,
 		      uint32_t type);
@@ -516,4 +519,11 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 			   struct qxl_bo *surf);
 struct qxl_drv_surface *
 qxl_surface_lookup(struct drm_device *dev, int surface_id);
+
+/* qxl_fence.c */
+int qxl_fence_add_release(struct qxl_fence *qfence, uint32_t rel_id);
+int qxl_fence_remove_release(struct qxl_fence *qfence, uint32_t rel_id);
+int qxl_fence_init(struct qxl_device *qdev, struct qxl_fence *qfence);
+void qxl_fence_fini(struct qxl_fence *qfence);
+
 #endif

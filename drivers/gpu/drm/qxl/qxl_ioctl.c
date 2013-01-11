@@ -202,6 +202,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			if (reloc_dst_bo != cmd_bo)
 				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
 		}
+		qxl_fence_releaseable(qdev, release);
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
 		if (is_cursor)
