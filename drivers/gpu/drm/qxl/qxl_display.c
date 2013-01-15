@@ -227,6 +227,8 @@ qxl_hide_cursor(struct qxl_device *qdev)
 				   &release, &cmd_bo);
 
 	cmd->type = QXL_CURSOR_HIDE;
+
+	qxl_fence_releaseable(qdev, release);
 	push_cursor(qdev, cmd_bo);
 }
 
@@ -261,7 +263,18 @@ static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
 
 	user_bo = gem_to_qxl_bo(obj);
 
+	ret = qxl_bo_reserve(user_bo, false);
+	if (ret)
+		return ret;
+
+	ret = qxl_bo_pin(user_bo, QXL_GEM_DOMAIN_CPU, NULL);
+	if (ret) {
+		qxl_bo_unreserve(user_bo);
+		return ret;
+	}
 	ret = qxl_bo_kmap(user_bo, &user_ptr);
+
+	DRM_INFO("cursor set %d %08x\n", handle, ((uint32_t *)user_ptr)[1]);
 
 	/* don't need to pin just copy it into a cursor cmd bo */
 	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_CURSOR_CMD,
@@ -288,15 +301,17 @@ static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
 	memcpy(cursor->chunk.data, user_ptr, size);
 
 	qxl_bo_kunmap(user_bo);
-
+	qxl_bo_unpin(user_bo);
+	qxl_bo_unreserve(user_bo);
 	cmd->type = QXL_CURSOR_SET;
 	cmd->u.set.position.x = qcrtc->cur_x;
 	cmd->u.set.position.y = qcrtc->cur_y;
 
 	cmd->u.set.shape = qxl_bo_physical_address(qdev, cursor_bo, 0);
-	/* add a reloc */
+
 	cmd->u.set.visible = 1;
 	
+	qxl_fence_releaseable(qdev, release);
 	push_cursor(qdev, cmd_bo);
 
 	drm_gem_object_unreference_unlocked(obj);
@@ -323,6 +338,7 @@ static int qxl_crtc_cursor_move(struct drm_crtc *crtc,
 	cmd->u.position.x = qcrtc->cur_x;
 	cmd->u.position.y = qcrtc->cur_y;
 
+	qxl_fence_releaseable(qdev, release);
 	push_cursor(qdev, cmd_bo);
 	return 0;
 }
