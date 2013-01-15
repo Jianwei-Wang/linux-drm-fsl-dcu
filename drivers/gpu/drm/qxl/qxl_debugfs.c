@@ -398,6 +398,21 @@ qxl_debugfs_set_monitor_820_620(struct seq_file *m, void *data)
 	return qxl_debugfs_set_monitors_config(m, 820, 620);
 }
 
+static int
+qxl_debugfs_buffers_info(struct seq_file *m, void *data)
+{
+	struct drm_info_node *node = (struct drm_info_node *) m->private;
+	struct qxl_device *qdev = node->minor->dev->dev_private;
+	struct qxl_bo *bo;
+
+	list_for_each_entry(bo, &qdev->gem.objects, list) {
+		seq_printf(m, "size %d, pc %d, sync obj %p, num releases %d\n",
+			   bo->gem_base.size, bo->pin_count,
+			   bo->tbo.sync_obj, bo->fence.num_releases);
+	}
+	return 0;
+}
+
 static struct drm_info_list qxl_debugfs_list[] = {
 	{ "dumbppm", qxl_debugfs_dumbppm, 0, NULL },
 	{ "release", qxl_debugfs_release, 0, NULL },
@@ -420,6 +435,7 @@ static struct drm_info_list qxl_debugfs_list[] = {
 	{ "fb_enable", qxl_debugfs_fb_enable, 0, NULL },
 	{ "fb_disable", qxl_debugfs_fb_disable, 0, NULL },
 	{ "irq_received", qxl_debugfs_irq_received, 0, NULL },
+	{ "qxl_buffers", qxl_debugfs_buffers_info, 0, NULL },
 };
 #define NOUVEAU_DEBUGFS_ENTRIES ARRAY_SIZE(qxl_debugfs_list)
 
