@@ -47,7 +47,7 @@ static DEFINE_PCI_DEVICE_TABLE(pciidlist) = {
 static struct drm_driver qxl_driver;
 static struct pci_driver qxl_pci_driver;
 
-static int __devinit
+static int
 qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	if (pdev->revision < 4) {

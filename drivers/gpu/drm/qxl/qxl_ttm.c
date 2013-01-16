@@ -383,7 +383,7 @@ static void qxl_move_null(struct ttm_buffer_object *bo,
 
 static int qxl_bo_move(struct ttm_buffer_object *bo,
 		       bool evict, bool interruptible,
-		       bool no_wait_reserve, bool no_wait_gpu,
+		       bool no_wait_gpu,
 		       struct ttm_mem_reg *new_mem)
 {
 	struct ttm_mem_reg *old_mem = &bo->mem;
@@ -391,11 +391,11 @@ static int qxl_bo_move(struct ttm_buffer_object *bo,
 		qxl_move_null(bo, new_mem);
 		return 0;
 	}
-	return ttm_bo_move_memcpy(bo, evict, no_wait_reserve, no_wait_gpu, new_mem);
+	return ttm_bo_move_memcpy(bo, evict, no_wait_gpu, new_mem);
 }
 
 
-static int qxl_sync_obj_wait(void *sync_obj, void *sync_arg,
+static int qxl_sync_obj_wait(void *sync_obj,
 			     bool lazy, bool interruptible)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
@@ -411,7 +411,7 @@ static int qxl_sync_obj_wait(void *sync_obj, void *sync_arg,
 	return 0;
 }
 
-static int qxl_sync_obj_flush(void *sync_obj, void *sync_arg)
+static int qxl_sync_obj_flush(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
 	return 0;
@@ -426,7 +426,7 @@ static void *qxl_sync_obj_ref(void *sync_obj)
 	return sync_obj;
 }
 
-static bool qxl_sync_obj_signaled(void *sync_obj, void *sync_arg)
+static bool qxl_sync_obj_signaled(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
 

@@ -97,7 +97,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	/* Kernel allocation are uninterruptible */
 	/* TODO radeon has a vram_mutex here */
 	r = ttm_bo_init(&qdev->mman.bdev, &bo->tbo, size, type,
-			&bo->placement, 0, 0, !kernel, NULL, size,
+			&bo->placement, 0, !kernel, NULL, size,
 			NULL, &qxl_ttm_bo_destroy);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS)
@@ -169,7 +169,7 @@ int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 	qxl_ttm_placement_from_domain(bo, domain);
 	for (i = 0; i < bo->placement.num_placement; i++)
 		bo->placements[i] |= TTM_PL_FLAG_NO_EVICT;
-	r = ttm_bo_validate(&bo->tbo, &bo->placement, false, false, false);
+	r = ttm_bo_validate(&bo->tbo, &bo->placement, false, false);
 	if (likely(r == 0)) {
 		bo->pin_count = 1;
 		if (gpu_addr != NULL)
@@ -194,7 +194,7 @@ int qxl_bo_unpin(struct qxl_bo *bo)
 		return 0;
 	for (i = 0; i < bo->placement.num_placement; i++)
 		bo->placements[i] &= ~TTM_PL_FLAG_NO_EVICT;
-	r = ttm_bo_validate(&bo->tbo, &bo->placement, false, false, false);
+	r = ttm_bo_validate(&bo->tbo, &bo->placement, false, false);
 	if (unlikely(r != 0))
 		dev_err(qdev->dev, "%p validate failed for unpin\n", bo);
 	return r;
