@@ -218,7 +218,7 @@ static struct qxl_bo *qxl_create_pinned_bo(struct qxl_device *qdev,
 	int ret;
 
 	ret = qxl_bo_create(qdev, size, false /* not kernel - device */,
-			   QXL_GEM_DOMAIN_VRAM, &bo);
+			    QXL_GEM_DOMAIN_VRAM, NULL, &bo);
 	if (ret) {
 		DRM_ERROR("failed to allocate VRAM BO\n");
 		return NULL;
@@ -416,6 +416,7 @@ void qxl_surface_id_dealloc(struct qxl_device *qdev,
 	spin_lock(&qdev->surf_id_idr_lock);
 	idr_remove(&qdev->surf_id_idr, surf->surface_id);
 	spin_unlock(&qdev->surf_id_idr_lock);
+	surf->surface_id = 0;
 }
 
 
@@ -426,11 +427,15 @@ push_surface(struct qxl_device *qdev, struct qxl_bo *cmd_bo)
 }
 
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
-			 struct qxl_bo *surf)
+			 struct qxl_bo *surf,
+			 struct ttm_mem_reg *new_mem)
 {
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
 	struct drm_qxl_release *release;
+
+	if (surf->hw_surf_alloc)
+		return 0;
 
 	/* allocate releaseable and send commands */
 	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
@@ -441,11 +446,20 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	cmd->u.surface_create.width = surf->surf.width;
 	cmd->u.surface_create.height = surf->surf.height;
 	cmd->u.surface_create.stride = surf->surf.stride;
-	cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf, 0);
+	if (new_mem) {
+		int slot_id = surf->type == QXL_GEM_DOMAIN_VRAM ? qdev->main_mem_slot : qdev->surfaces_mem_slot;
+		struct qxl_memslot *slot = &(qdev->mem_slots[slot_id]);
+
+		/* TODO - need to hold one of the locks to read tbo.offset */
+		cmd->u.surface_create.data = slot->high_bits;
+
+		cmd->u.surface_create.data |= (new_mem->start << PAGE_SHIFT) + surf->tbo.bdev->man[new_mem->mem_type].gpu_offset;
+	} else
+		cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf, 0);
 	cmd->surface_id = surf->surface_id;
 
 	push_surface(qdev, cmd_bo);
-
+	surf->hw_surf_alloc = true;
 	return 0;
 }
 
@@ -456,6 +470,9 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	struct qxl_bo *cmd_bo;
 	struct drm_qxl_release *release;
 
+	if (!surf->hw_surf_alloc)
+		return 0;
+
 	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
 				   &release, &cmd_bo);
 	
@@ -463,5 +480,6 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	cmd->surface_id = surf->surface_id;
 
 	push_surface(qdev, cmd_bo);
+	surf->hw_surf_alloc = false;
 	return 0;
 }

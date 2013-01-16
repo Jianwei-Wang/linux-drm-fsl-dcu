@@ -436,6 +436,30 @@ static bool qxl_sync_obj_signaled(void *sync_obj)
 	return false;
 }
 
+static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
+			       struct ttm_mem_reg *new_mem)
+{
+	struct qxl_bo *qbo;
+	struct qxl_device *qdev;
+	int ret;
+	if (!qxl_ttm_bo_is_qxl_bo(bo)) 
+		return;
+	qbo = container_of(bo, struct qxl_bo, tbo);
+	qdev = qbo->gem_base.dev->dev_private;
+	if (new_mem && new_mem->mem_type == TTM_PL_PRIV0) {
+		/* if we are getting put into surface memory,
+		   then we need a surface id */
+		ret = qxl_surface_id_alloc(qdev, qbo);
+		ret = qxl_hw_surface_alloc(qdev, qbo, new_mem);
+	}
+
+	if (bo->mem.mem_type == TTM_PL_PRIV0 && qbo->surface_id) {
+		/* nuke the surface id at the hw */
+		qxl_hw_surface_dealloc(qdev, qbo);
+		qxl_surface_id_dealloc(qdev, qbo);
+	}
+}
+
 static struct ttm_bo_driver qxl_bo_driver = {
 	.ttm_tt_create = &qxl_ttm_tt_create,
 	.ttm_tt_populate = &qxl_ttm_tt_populate,
@@ -452,6 +476,7 @@ static struct ttm_bo_driver qxl_bo_driver = {
 	.sync_obj_flush = &qxl_sync_obj_flush,
 	.sync_obj_unref = &qxl_sync_obj_unref,
 	.sync_obj_ref = &qxl_sync_obj_ref,
+	.move_notify = &qxl_bo_move_notify,
 };
 
 

@@ -274,7 +274,7 @@ qxl_debugfs_bo_test(struct seq_file *m, void *data)
 	int ret;
 
 	ret = qxl_bo_create(qdev, 8192, false /* not kernel, device */,
-			    QXL_GEM_DOMAIN_VRAM, &bo);
+			    QXL_GEM_DOMAIN_VRAM, NULL, &bo);
 	if (unlikely(ret != 0)) {
 		seq_printf(m, "failed to create bo of 8192 bytes\n");
 		return 0;

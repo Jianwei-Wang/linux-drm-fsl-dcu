@@ -18,7 +18,7 @@ int qxl_mode_dumb_create(struct drm_file *file_priv,
 
 	r = qxl_gem_object_create_with_handle(qdev, file_priv,
 					      QXL_GEM_DOMAIN_VRAM,
-					      args->size, &qobj,
+					      args->size, NULL, &qobj,
 					      &handle);
 	DRM_INFO("%s: width %d, height %d, bpp %d, pitch %d, size %lld, %s\n",
 		 __func__, args->width, args->height, args->bpp,

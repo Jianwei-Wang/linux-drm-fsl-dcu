@@ -20,9 +20,10 @@ void qxl_gem_object_free(struct drm_gem_object *gobj)
 }
 
 int qxl_gem_object_create(struct qxl_device *qdev, int size,
-				int alignment, int initial_domain,
-				bool discardable, bool kernel,
-				struct drm_gem_object **obj)
+			  int alignment, int initial_domain,
+			  bool discardable, bool kernel,
+			  struct qxl_surface *surf,
+			  struct drm_gem_object **obj)
 {
 	struct qxl_bo *qbo;
 	int r;
@@ -31,7 +32,7 @@ int qxl_gem_object_create(struct qxl_device *qdev, int size,
 	/* At least align on page size */
 	if (alignment < PAGE_SIZE)
 		alignment = PAGE_SIZE;
-	r = qxl_bo_create(qdev, size, kernel, initial_domain, &qbo);
+	r = qxl_bo_create(qdev, size, kernel, initial_domain, surf, &qbo);
 	if (r) {
 		if (r != -ERESTARTSYS)
 			DRM_ERROR(
@@ -52,6 +53,7 @@ int qxl_gem_object_create_with_handle(struct qxl_device *qdev,
 				      struct drm_file *file_priv,
 				      u32 domain,
 				      size_t size,
+				      struct qxl_surface *surf,
 				      struct qxl_bo **qobj,
 				      uint32_t *handle)
 {
@@ -63,7 +65,7 @@ int qxl_gem_object_create_with_handle(struct qxl_device *qdev,
 
 	r = qxl_gem_object_create(qdev, size, 0,
 				  domain,
-				  false, false,
+				  false, false, surf,
 				  &gobj);
 	if (r)
 		return -ENOMEM;

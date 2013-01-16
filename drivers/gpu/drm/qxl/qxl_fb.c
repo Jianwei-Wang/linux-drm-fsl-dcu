@@ -507,6 +507,7 @@ static int qxlfb_create_pinned_object(struct qxl_fbdev *qfbdev,
 				    QXL_GEM_DOMAIN_VRAM,
 				    false, /* is discardable */
 				    false, /* is kernel (false means device) */
+				    NULL,
 				    &gobj);
 	if (ret) {
 		pr_err("failed to allocate framebuffer (%d)\n",

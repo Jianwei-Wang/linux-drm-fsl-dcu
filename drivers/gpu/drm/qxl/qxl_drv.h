@@ -91,6 +91,7 @@ struct qxl_bo {
 	/* Constant after initialization */
 	struct drm_gem_object		gem_base;
 	bool is_primary; /* is this now a primary surface */
+	bool hw_surf_alloc;
 	struct qxl_surface surf;
 	uint32_t surface_id;
 	struct qxl_fence fence; /* per bo fence  - list of releases */
@@ -367,9 +368,10 @@ void qxl_alloc_client_monitors_config(struct qxl_device *qdev, unsigned count);
 int qxl_gem_init(struct qxl_device *qdev);
 void qxl_gem_fini(struct qxl_device *qdev);
 int qxl_gem_object_create(struct qxl_device *qdev, int size,
-				int alignment, int initial_domain,
-				bool discardable, bool kernel,
-				struct drm_gem_object **obj);
+			  int alignment, int initial_domain,
+			  bool discardable, bool kernel,
+			  struct qxl_surface *surf,
+			  struct drm_gem_object **obj);
 int qxl_gem_object_pin(struct drm_gem_object *obj, uint32_t pin_domain,
 			  uint64_t *gpu_addr);
 void qxl_gem_object_unpin(struct drm_gem_object *obj);
@@ -377,6 +379,7 @@ int qxl_gem_object_create_with_handle(struct qxl_device *qdev,
 				      struct drm_file *file_priv,
 				      u32 domain,
 				      size_t size,
+				      struct qxl_surface *surf,
 				      struct qxl_bo **qobj,
 				      uint32_t *handle);
 int qxl_gem_object_init(struct drm_gem_object *obj);
@@ -514,7 +517,8 @@ int qxl_surface_id_alloc(struct qxl_device *qdev,
 void qxl_surface_id_dealloc(struct qxl_device *qdev,
 			    struct qxl_bo *surf);
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
-			 struct qxl_bo *surf);
+			 struct qxl_bo *surf,
+			 struct ttm_mem_reg *mem);
 int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 			   struct qxl_bo *surf);
 struct qxl_drv_surface *

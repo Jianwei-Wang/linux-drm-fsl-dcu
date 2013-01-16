@@ -912,7 +912,7 @@ int qxl_modeset_init(struct qxl_device *qdev)
 	drm_mode_config_init(qdev->ddev);
 	ret = qxl_gem_object_create(qdev, monitors_config_size, 0,
 				    QXL_GEM_DOMAIN_VRAM,
-				    false, false, &gobj);
+				    false, false, NULL, &gobj);
 	if (ret) {
 		DRM_ERROR("%s: failed to create gem ret=%d\n", __func__, ret);
 		return -ENOMEM;

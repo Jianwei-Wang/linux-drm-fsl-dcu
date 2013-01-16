@@ -9,12 +9,6 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	bo = container_of(tbo, struct qxl_bo, tbo);
 	qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 
-	if (bo->type == QXL_GEM_DOMAIN_SURFACE) {
-		if (bo->surface_id) {
-			qxl_hw_surface_dealloc(qdev, bo);
-			qxl_surface_id_dealloc(qdev, bo);
-		}
-	}
 	qxl_fence_fini(&bo->fence);
 	mutex_lock(&qdev->gem.mutex);
 	list_del_init(&bo->list);
@@ -53,6 +47,7 @@ void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain)
 
 int qxl_bo_create(struct qxl_device *qdev,
 		  unsigned long size, bool kernel, u32 domain,
+		  struct qxl_surface *surf,
 		  struct qxl_bo **bo_ptr)
 {
 	struct qxl_bo *bo;
@@ -92,6 +87,10 @@ int qxl_bo_create(struct qxl_device *qdev,
 	bo->type = domain;
 	qxl_fence_init(qdev, &bo->fence);
 	INIT_LIST_HEAD(&bo->list);
+
+	if (surf) {
+		bo->surf = *surf;
+	}
 
 	qxl_ttm_placement_from_domain(bo, domain);
 	/* Kernel allocation are uninterruptible */

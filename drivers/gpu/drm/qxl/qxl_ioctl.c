@@ -28,6 +28,7 @@ int qxl_alloc_ioctl(struct drm_device *dev, void *data,
 		ret = qxl_gem_object_create_with_handle(qdev, file_priv,
 							domain,
 							qxl_alloc->size,
+							NULL,
 							&qobj, &handle);
 		if (ret) {
 			DRM_ERROR("%s: failed to create gem ret=%d\n",
@@ -238,7 +239,23 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 		return -ENOENT;
 
 	qobj = gem_to_qxl_bo(gobj);
+
+	ret = qxl_bo_reserve(qobj, false);
+	if (ret)
+		goto out;
+
+	if (!qobj->pin_count) {
+		ret = ttm_bo_validate(&qobj->tbo, &qobj->placement,
+				      true, false);
+		if (unlikely(ret))
+			goto out;
+	}
+
+	if (!qobj->surface_id)
+		DRM_ERROR("got update area for surface with no id %d\n", update_area->handle);
 	ret = qxl_io_update_area(qdev, qobj, &area);
+
+	qxl_bo_unreserve(qobj);
 
 out:
 	drm_gem_object_unreference_unlocked(gobj);
@@ -291,39 +308,30 @@ static int qxl_alloc_surf_ioctl(struct drm_device *dev, void *data,
 	int handle;
 	int ret;
 	int size, actual_stride;
+	struct qxl_surface surf;
 	
 	/* work out size allocate bo with handle */
 	actual_stride = param->stride < 0 ? -param->stride : param->stride;
 	size = actual_stride * param->height + actual_stride;
 
+	surf.format = param->format;
+	surf.width = param->width;
+	surf.height = param->height;
+	surf.stride = param->stride;
+	surf.data = 0;
+
 	ret = qxl_gem_object_create_with_handle(qdev, file,
 						QXL_GEM_DOMAIN_SURFACE,
 						size,
+						&surf,
 						&qobj, &handle);
 	if (ret) {
 		DRM_ERROR("%s: failed to create gem ret=%d\n",
 			  __func__, ret);
 		return -ENOMEM;
 	}
-
-	ret = qxl_surface_id_alloc(qdev, qobj);
-	if (ret)
-		goto fail;
-
-	qobj->surf.format = param->format;
-	qobj->surf.width = param->width;
-	qobj->surf.height = param->height;
-	qobj->surf.stride = param->stride;
-
-	ret = qxl_hw_surface_alloc(qdev, qobj);
-	if (ret)
-		goto fail_surf;
-	param->handle = handle;
-	return ret;
-fail_surf:
-	qxl_surface_id_dealloc(qdev, qobj);
-fail:
-	drm_gem_object_handle_unreference_unlocked(&qobj->gem_base);
+	else
+		param->handle = handle;
 	return ret;
 }
 
