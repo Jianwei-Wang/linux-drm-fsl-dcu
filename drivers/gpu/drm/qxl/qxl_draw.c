@@ -184,32 +184,32 @@ make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 }
 
 /* TODO: bo per command is wasteful. add an offset */
-void
-qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type)
+int
+qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type, bool interruptible)
 {
 	struct qxl_command cmd;
 
 	cmd.type = type;
 	cmd.data = qxl_bo_physical_address(qdev, bo, 0);
 
-	qxl_ring_push(qdev->command_ring, &cmd);
+	return qxl_ring_push(qdev->command_ring, &cmd, interruptible);
 }
 
-void
-qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type)
+int
+qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type, bool interruptible)
 {
 	struct qxl_command cmd;
 
 	cmd.type = type;
 	cmd.data = qxl_bo_physical_address(qdev, bo, 0);
 
-	qxl_ring_push(qdev->cursor_ring, &cmd);
+	return qxl_ring_push(qdev->cursor_ring, &cmd, interruptible);
 }
 
 static void
 push_drawable(struct qxl_device *qdev, struct qxl_bo *drawable_bo)
 {
-	qxl_push_command_ring(qdev, drawable_bo, QXL_CMD_DRAW);
+	qxl_push_command_ring(qdev, drawable_bo, QXL_CMD_DRAW, false);
 }
 
 static struct qxl_palette *qxl_palette_create_1bit(

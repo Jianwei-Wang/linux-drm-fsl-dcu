@@ -67,12 +67,12 @@ static int qxl_check_idle(struct qxl_ring *ring)
 	return ret;
 }
 	
-void qxl_ring_push(struct qxl_ring *ring,
-		   const void *new_elt)
+int qxl_ring_push(struct qxl_ring *ring,
+		  const void *new_elt, bool interruptible)
 {
 	struct qxl_ring_header *header = &(ring->ring->header);
 	uint8_t *elt;
-	int idx;
+	int idx, ret;
 	unsigned long flags;
 	spin_lock_irqsave(&ring->lock, flags);
 	if (header->prod - header->cons == header->num_items) {
@@ -82,10 +82,20 @@ void qxl_ring_push(struct qxl_ring *ring,
 		if (in_atomic()) {
 			while (!qxl_check_header(ring))
 				udelay(1);
-			
-		} else
-			wait_event_interruptible(*ring->push_event,
-						 qxl_check_header(ring));
+		} else {
+		retry:
+			if (interruptible) {
+				ret = wait_event_interruptible(*ring->push_event,
+							       qxl_check_header(ring));
+				if (ret)
+					return ret;
+			} else {
+				wait_event(*ring->push_event,
+					   qxl_check_header(ring));
+			}
+
+		}	
+
 		spin_lock_irqsave(&ring->lock, flags);
 	}
 
@@ -102,6 +112,7 @@ void qxl_ring_push(struct qxl_ring *ring,
 		outb(0, ring->prod_notify);
 
 	spin_unlock_irqrestore(&ring->lock, flags);
+	return 0;
 }
 
 bool qxl_ring_pop(struct qxl_ring *ring,
@@ -423,7 +434,7 @@ void qxl_surface_id_dealloc(struct qxl_device *qdev,
 static void
 push_surface(struct qxl_device *qdev, struct qxl_bo *cmd_bo)
 {
-	qxl_push_command_ring(qdev, cmd_bo, QXL_CMD_SURFACE);
+	qxl_push_command_ring(qdev, cmd_bo, QXL_CMD_SURFACE, false);
 }
 
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
@@ -457,8 +468,9 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	} else
 		cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf, 0);
 	cmd->surface_id = surf->surface_id;
-
+	qxl_release_add_res(qdev, release, qxl_bo_ref(surf));
 	push_surface(qdev, cmd_bo);
+	qxl_fence_releaseable(qdev, release);
 	surf->hw_surf_alloc = true;
 	return 0;
 }

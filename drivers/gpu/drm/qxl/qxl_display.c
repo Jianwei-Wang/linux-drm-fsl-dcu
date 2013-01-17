@@ -213,7 +213,7 @@ static void qxl_crtc_destroy(struct drm_crtc *crtc)
 static void
 push_cursor(struct qxl_device *qdev, struct qxl_bo *cursor_bo)
 {
-	qxl_push_cursor_ring(qdev, cursor_bo, QXL_CMD_CURSOR);
+	qxl_push_cursor_ring(qdev, cursor_bo, QXL_CMD_CURSOR, false);
 }
 
 static void

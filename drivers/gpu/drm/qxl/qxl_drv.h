@@ -442,7 +442,7 @@ int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 
 void qxl_io_reset(struct qxl_device *qdev);
 void qxl_io_monitors_config(struct qxl_device *qdev);
-void qxl_ring_push(struct qxl_ring *ring, const void *new_elt);
+int qxl_ring_push(struct qxl_ring *ring, const void *new_elt, bool interruptible);
 
 
 /*
@@ -457,12 +457,12 @@ void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 			   struct qxl_bo **bo);
 int qxl_fence_releaseable(struct qxl_device *qdev,
 			  struct drm_qxl_release *release);
-void
+int
 qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo,
-		      uint32_t type);
-void
+		      uint32_t type, bool interruptible);
+int
 qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo,
-		     uint32_t type);
+		     uint32_t type, bool interruptible);
 
 /* qxl drawing commands */
 

@@ -218,9 +218,14 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
 		if (is_cursor)
-			qxl_push_cursor_ring(qdev, cmd_bo, user_cmd.type);
+			ret = qxl_push_cursor_ring(qdev, cmd_bo, user_cmd.type, true);
 		else
-			qxl_push_command_ring(qdev, cmd_bo, user_cmd.type);
+			ret = qxl_push_command_ring(qdev, cmd_bo, user_cmd.type, true);
+		if (ret == -ERESTARTSYS) {
+			qxl_release_free(qdev, release);
+			qxl_bo_list_unreserve(&reloc_list, true);
+			return ret;
+		}
 	}
 	qxl_bo_list_unreserve(&reloc_list, 0);
 	return 0;
