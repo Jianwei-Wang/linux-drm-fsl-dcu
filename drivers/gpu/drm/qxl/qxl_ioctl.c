@@ -114,7 +114,10 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	struct qxl_bo *reloc_dst_bo;
 	struct drm_qxl_reloc reloc;
 	void *fb_cmd;
-	int i;
+	int i, ret;
+	struct qxl_reloc_list reloc_list;
+
+	INIT_LIST_HEAD(&reloc_list.bos);
 
 	for (cmd_num = 0; cmd_num < execbuffer->commands_num; ++cmd_num) {
 		struct drm_qxl_release *release;
@@ -171,18 +174,26 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				   reloc.src_offset, reloc.dst_handle,
 				   reloc.dst_offset);
 #endif
+			/* add the bos to the list of bos to validate -
+			   need to validate first then process relocs? */
 			reloc_dst_bo =
 				qxlhw_handle_to_bo(qdev, file_priv,
 						   reloc.dst_handle, cmd_bo);
 			if (!reloc_dst_bo)
 				return -EINVAL;
 
+			ret = qxl_bo_list_add(&reloc_list, reloc_dst_bo);
+
+			/* reserve and validate the reloc dst bo */
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.src_handle > 0) {
 				reloc_src_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
 							   reloc.src_handle, cmd_bo);
 				if (!reloc_src_bo)
 					return -EINVAL;
+
+				/* reserve and validate the reloc src bo */
+				ret = qxl_bo_list_add(&reloc_list, reloc_src_bo);
 			} else
 				reloc_src_bo = NULL;
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
@@ -211,6 +222,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		else
 			qxl_push_command_ring(qdev, cmd_bo, user_cmd.type);
 	}
+	qxl_bo_list_unreserve(&reloc_list, 0);
 	return 0;
 }
 

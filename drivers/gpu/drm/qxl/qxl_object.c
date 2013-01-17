@@ -229,3 +229,44 @@ void qxl_bo_fini(struct qxl_device *qdev)
 {
 	qxl_ttm_fini(qdev);
 }
+
+void qxl_bo_list_unreserve(struct qxl_reloc_list *reloc_list, bool failed)
+{
+	struct qxl_bo_list *entry, *sf;
+
+	list_for_each_entry_safe(entry, sf, &reloc_list->bos, lhead) {
+		qxl_bo_unreserve(entry->bo);
+		list_del(&entry->lhead);
+		kfree(entry);
+	}
+}
+
+int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
+{
+	struct qxl_bo_list *entry;
+	int ret;
+
+	list_for_each_entry(entry, &reloc_list->bos, lhead) {
+		if (entry->bo == bo)
+			return 0;
+	}
+		
+	entry = kmalloc(sizeof(struct qxl_bo_list), GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+
+	entry->bo = bo;
+	list_add(&entry->lhead, &reloc_list->bos);
+
+	ret = qxl_bo_reserve(bo, false);
+	if (ret)
+		return ret;
+
+	if (!bo->pin_count) {
+		ret = ttm_bo_validate(&bo->tbo, &bo->placement,
+				      true, false);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}

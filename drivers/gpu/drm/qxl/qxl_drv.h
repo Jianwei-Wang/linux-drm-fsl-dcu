@@ -103,6 +103,15 @@ struct qxl_gem {
 	struct list_head	objects;
 };
 
+struct qxl_bo_list {
+	struct list_head lhead;
+	struct qxl_bo *bo;
+};
+
+struct qxl_reloc_list {
+	struct list_head bos;
+};
+
 struct qxl_crtc {
 	struct drm_crtc base;
 	int cur_x;
