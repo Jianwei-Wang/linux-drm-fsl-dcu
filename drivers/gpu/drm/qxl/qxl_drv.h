@@ -168,7 +168,7 @@ enum {
 
 /* drm_ prefix to differentiate from qxl_release_info in
  * spice-protocol/qxl_dev.h */
-#define QXL_MAX_RES 64
+#define QXL_MAX_RES 96
 struct drm_qxl_release {
 	int id;
 	int type;
