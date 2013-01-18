@@ -400,7 +400,8 @@ int qxl_surface_id_alloc(struct qxl_device *qdev,
 {
 	uint32_t handle = -ENOMEM;
 	int idr_ret;
-
+	int count = 0;
+	int nuke_count = 0;
 again:
 	if (idr_pre_get(&qdev->surf_id_idr, GFP_ATOMIC) == 0) {
 		DRM_ERROR("Out of memory for surf idr\n");
@@ -415,8 +416,34 @@ again:
 	if (idr_ret == -EAGAIN)
 		goto again;
 
+	if (handle >= qdev->rom->n_surfaces) {
+		int res;
+
+		spin_lock(&qdev->surf_id_idr_lock);
+		idr_remove(&qdev->surf_id_idr, handle);
+		spin_unlock(&qdev->surf_id_idr_lock);
+		/* deallocate some surfaces */
+		if (count == 1)
+			qxl_garbage_collect(qdev);
+		else if (count < 4) {
+			qxl_io_notify_oom(qdev);
+			res = qxl_garbage_collect(qdev);
+			if (res == 0)
+				mdelay(10);
+		} else {
+			struct qxl_bo *nukebo;
+			/* dust off and nuke */
+
+			if (nuke_count > 14)
+				nuke_count = 0;
+			res = qxl_bo_create(qdev, (1024*1024*4*nuke_count), true, QXL_GEM_DOMAIN_SURFACE,
+					    NULL, &nukebo);
+			if (!res)
+				qxl_bo_unref(&nukebo);
+		}
+		goto again;
+	}
 	surf->surface_id = handle;
-	
  alloc_fail:
 	return 0;
 }
