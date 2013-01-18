@@ -446,12 +446,6 @@ static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
 		return;
 	qbo = container_of(bo, struct qxl_bo, tbo);
 	qdev = qbo->gem_base.dev->dev_private;
-	if (new_mem && new_mem->mem_type == TTM_PL_PRIV0 && qbo->surf.stride != 0) {
-		/* if we are getting put into surface memory,
-		   then we need a surface id */
-		ret = qxl_surface_id_alloc(qdev, qbo);
-		ret = qxl_hw_surface_alloc(qdev, qbo, new_mem);
-	}
 
 	if (bo->mem.mem_type == TTM_PL_PRIV0 && qbo->surface_id) {
 		/* nuke the surface id at the hw */

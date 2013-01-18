@@ -268,10 +268,14 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 			goto out;
 	}
 
+	ret = qxl_bo_check_id(qdev, qobj);
+	if (ret)
+		goto out2;
 	if (!qobj->surface_id)
 		DRM_ERROR("got update area for surface with no id %d\n", update_area->handle);
 	ret = qxl_io_update_area(qdev, qobj, &area);
 
+out2:
 	qxl_bo_unreserve(qobj);
 
 out:

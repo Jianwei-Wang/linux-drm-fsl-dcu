@@ -530,6 +530,9 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 			 struct ttm_mem_reg *mem);
 int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 			   struct qxl_bo *surf);
+
+int qxl_bo_check_id(struct qxl_device *qdev, struct qxl_bo *bo);
+
 struct qxl_drv_surface *
 qxl_surface_lookup(struct drm_device *dev, int surface_id);
 

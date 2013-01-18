@@ -230,6 +230,23 @@ void qxl_bo_fini(struct qxl_device *qdev)
 	qxl_ttm_fini(qdev);
 }
 
+int qxl_bo_check_id(struct qxl_device *qdev, struct qxl_bo *bo)
+{
+	int ret;
+	if (bo->type == QXL_GEM_DOMAIN_SURFACE && bo->surface_id == 0) {
+		/* allocate a surface id for this surface now */
+		ret = qxl_surface_id_alloc(qdev, bo);
+		
+		if (ret)
+			return ret;
+
+		ret = qxl_hw_surface_alloc(qdev, bo, NULL);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 void qxl_bo_list_unreserve(struct qxl_reloc_list *reloc_list, bool failed)
 {
 	struct qxl_bo_list *entry, *sf;
@@ -268,5 +285,10 @@ int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
 		if (ret)
 			return ret;
 	}
+
+	/* allocate a surface for reserved + validated buffers */
+	ret = qxl_bo_check_id(bo->gem_base.dev->dev_private, bo);
+	if (ret)
+		return ret;
 	return 0;
 }
