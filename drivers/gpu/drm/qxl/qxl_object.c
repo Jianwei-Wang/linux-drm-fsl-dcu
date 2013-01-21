@@ -62,7 +62,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	else
 		type = ttm_bo_type_device;
 	*bo_ptr = NULL;
-	bo = kzalloc(sizeof(struct qxl_bo), GFP_KERNEL);
+	bo = kmalloc(sizeof(struct qxl_bo), GFP_KERNEL);
 	if (bo == NULL)
 		return -ENOMEM;
 	if ((size & (PAGE_SIZE - 1)) != 0) {
@@ -85,6 +85,8 @@ int qxl_bo_create(struct qxl_device *qdev,
 	}
 	bo->gem_base.driver_private = NULL;
 	bo->type = domain;
+	bo->pin_count = 0;
+	bo->surface_id = 0;
 	qxl_fence_init(qdev, &bo->fence);
 	INIT_LIST_HEAD(&bo->list);
 
