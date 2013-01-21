@@ -289,12 +289,26 @@ done:
 	mutex_unlock(&qdev->async_io_mutex);
 }
 
+static int wait_for_io_cmd_user(struct qxl_device *qdev, uint8_t val, long port)
+{
+	int irq_num = atomic_read(&qdev->irq_received_io_cmd);
+	long addr = qdev->io_base + port;
+	int ret;
+
+	mutex_lock(&qdev->async_io_mutex);
+	outb(val, addr);
+	ret = wait_event_interruptible(qdev->io_cmd_event,
+				       atomic_read(&qdev->irq_received_io_cmd) > irq_num);
+	mutex_unlock(&qdev->async_io_mutex);
+	return ret;
+}
+
 int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 			const struct qxl_rect *area)
 {
 	int surface_id;
 	uint32_t surface_width, surface_height;
-
+	int ret;
 	if (surf->is_primary)
 		surface_id = 0;
 	else
@@ -312,9 +326,9 @@ int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 	mutex_lock(&qdev->update_area_mutex);
 	qdev->ram_header->update_area = *area;
 	qdev->ram_header->update_surface = surface_id;
-	wait_for_io_cmd(qdev, 0, QXL_IO_UPDATE_AREA_ASYNC);
+	ret = wait_for_io_cmd_user(qdev, 0, QXL_IO_UPDATE_AREA_ASYNC);
 	mutex_unlock(&qdev->update_area_mutex);
-	return 0;
+	return ret;
 }
 
 void qxl_io_notify_oom(struct qxl_device *qdev)
