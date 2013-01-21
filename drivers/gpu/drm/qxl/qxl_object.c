@@ -62,7 +62,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	else
 		type = ttm_bo_type_device;
 	*bo_ptr = NULL;
-	bo = kmalloc(sizeof(struct qxl_bo), GFP_KERNEL);
+	bo = kzalloc(sizeof(struct qxl_bo), GFP_KERNEL);
 	if (bo == NULL)
 		return -ENOMEM;
 	if ((size & (PAGE_SIZE - 1)) != 0) {
