@@ -123,7 +123,6 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		struct drm_qxl_release *release;
 		struct qxl_bo *cmd_bo;
 		int release_type;
-		int is_cursor;
 		struct drm_qxl_command *commands =
 			(struct drm_qxl_command *)execbuffer->commands;
 
@@ -133,7 +132,6 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		switch (user_cmd.type) {
 		case QXL_CMD_DRAW:
 			release_type = QXL_RELEASE_DRAWABLE;
-			is_cursor = 0;
 			break;
 		case QXL_CMD_SURFACE:
 		case QXL_CMD_CURSOR:
@@ -217,10 +215,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		qxl_fence_releaseable(qdev, release);
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
-		if (is_cursor)
-			ret = qxl_push_cursor_ring(qdev, cmd_bo, user_cmd.type, true);
-		else
-			ret = qxl_push_command_ring(qdev, cmd_bo, user_cmd.type, true);
+		ret = qxl_push_command_ring(qdev, cmd_bo, user_cmd.type, true);
 		if (ret == -ERESTARTSYS) {
 			qxl_release_free(qdev, release);
 			qxl_bo_list_unreserve(&reloc_list, true);
