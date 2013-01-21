@@ -3,6 +3,8 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+static int qxl_reap_surface_id(struct qxl_device *qdev, int max_to_reap);
+
 struct ring {
 	struct qxl_ring_header      header;
 	uint8_t                     elements[0];
@@ -83,7 +85,6 @@ int qxl_ring_push(struct qxl_ring *ring,
 			while (!qxl_check_header(ring))
 				udelay(1);
 		} else {
-		retry:
 			if (interruptible) {
 				ret = wait_event_interruptible(*ring->push_event,
 							       qxl_check_header(ring));
@@ -401,7 +402,6 @@ int qxl_surface_id_alloc(struct qxl_device *qdev,
 	uint32_t handle = -ENOMEM;
 	int idr_ret;
 	int count = 0;
-	int nuke_count = 0;
 again:
 	if (idr_pre_get(&qdev->surf_id_idr, GFP_ATOMIC) == 0) {
 		DRM_ERROR("Out of memory for surf idr\n");
@@ -431,19 +431,15 @@ again:
 			if (res == 0)
 				mdelay(10);
 		} else {
-			struct qxl_bo *nukebo;
-			/* dust off and nuke */
-
-			if (nuke_count > 14)
-				nuke_count = 0;
-			res = qxl_bo_create(qdev, (1024*1024*4*nuke_count), true, QXL_GEM_DOMAIN_SURFACE,
-					    NULL, &nukebo);
-			if (!res)
-				qxl_bo_unref(&nukebo);
+			qxl_reap_surface_id(qdev, 20);
 		}
 		goto again;
 	}
 	surf->surface_id = handle;
+
+	spin_lock(&qdev->surf_id_idr_lock);
+	qdev->last_alloced_surf_id = handle;
+	spin_unlock(&qdev->surf_id_idr_lock);
  alloc_fail:
 	return 0;
 }
@@ -520,5 +516,84 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 
 	push_surface(qdev, cmd_bo);
 	surf->hw_surf_alloc = false;
+	return 0;
+}
+
+void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf)
+{
+	struct qxl_rect rect;
+
+	/* if we are evicting, we need to make sure the surface is up
+	   to date */
+	rect.left = 0;
+	rect.right = surf->surf.width;
+	rect.top = 0;
+	rect.bottom = surf->surf.height;
+	qxl_io_update_area(qdev, surf, &rect);
+
+	/* nuke the surface id at the hw */
+	qxl_hw_surface_dealloc(qdev, surf);
+	qxl_surface_id_dealloc(qdev, surf);
+}
+
+static int qxl_reap_surf(struct qxl_device *qdev, struct qxl_bo *surf, bool stall)
+{
+	int ret;
+
+	ret = qxl_bo_reserve(surf, true);
+	if (ret == -EBUSY)
+		return -EBUSY;
+
+	if (surf->fence.num_releases > 0 && stall == false) {
+		qxl_bo_unreserve(surf);
+		return -EBUSY;
+	}
+
+	spin_lock(&surf->tbo.bdev->fence_lock);
+	ret = ttm_bo_wait(&surf->tbo, true, true, !stall);
+	spin_unlock(&surf->tbo.bdev->fence_lock);
+	if (ret == -EBUSY) {
+		qxl_bo_unreserve(surf);
+		return 0;
+	}
+
+	qxl_surface_evict(qdev, surf);
+	qxl_bo_unreserve(surf);
+	return 0;
+}
+
+static int qxl_reap_surface_id(struct qxl_device *qdev, int max_to_reap)
+{
+	int num_reaped = 0;
+	int i, ret;
+	bool stall = false;
+	int start = 0;
+again:
+
+	spin_lock(&qdev->surf_id_idr_lock);
+	if (qdev->last_alloced_surf_id + 1 + 2 * max_to_reap > 1024)
+		start = 0;
+	else
+		start = qdev->last_alloced_surf_id + 1;
+	spin_unlock(&qdev->surf_id_idr_lock);
+
+	for (i = start; i < start + 2 * max_to_reap; i++) {
+		void *objptr;
+
+		spin_lock(&qdev->surf_id_idr_lock);
+		objptr = idr_find(&qdev->surf_id_idr, i);
+		spin_unlock(&qdev->surf_id_idr_lock);
+
+		if (!objptr)
+			continue;
+
+		ret = qxl_reap_surf(qdev, objptr, stall);
+		if (ret == 0)
+			num_reaped++;
+	}
+	if (num_reaped == 0 && stall == false) {
+		stall = true;
+		goto again;
+	}
 	return 0;
 }
