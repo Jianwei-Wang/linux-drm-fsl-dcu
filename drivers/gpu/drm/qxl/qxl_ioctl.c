@@ -59,10 +59,12 @@ static void
 apply_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 	    struct qxl_bo *src, uint64_t src_off)
 {
-	qxl_bo_kmap(dst, NULL);
-	*(uint64_t *)(dst->kptr + dst_off) = qxl_bo_physical_address(qdev,
+	void *reloc_page;
+
+	reloc_page = qxl_bo_kmap_atomic_page(qdev, dst, dst_off & PAGE_MASK);
+	*(uint64_t *)(reloc_page + (dst_off & ~PAGE_MASK)) = qxl_bo_physical_address(qdev,
 								     src, src_off);
-	qxl_bo_kunmap(dst);
+	qxl_bo_kunmap_atomic_page(qdev, dst, reloc_page);
 }
 
 static void
@@ -70,12 +72,13 @@ apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 		 struct qxl_bo *src)
 {
 	uint32_t id = 0;
+	void *reloc_page;
 
-	qxl_bo_kmap(dst, NULL);
+	reloc_page = qxl_bo_kmap_atomic_page(qdev, dst, dst_off & PAGE_MASK);
 	if (src && !src->is_primary)
 		id = src->surface_id;
-	*(uint32_t *)(dst->kptr + dst_off) = id;
-	qxl_bo_kunmap(dst);
+	*(uint32_t *)(reloc_page + (dst_off & ~PAGE_MASK)) = id;
+	qxl_bo_kunmap_atomic_page(qdev, dst, reloc_page);
 }
 
 /* return holding the reference to this object */
