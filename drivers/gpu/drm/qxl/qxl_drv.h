@@ -278,6 +278,7 @@ struct qxl_device {
 	struct idr	release_idr;
 	spinlock_t release_idr_lock;
 	struct mutex	async_io_mutex;
+	int last_sent_io_cmd, last_sent_val, last_sent_port;
 
 	/* framebuffer. workqueue to avoid bo allocation in interrupt context */
 	struct workqueue_struct *fb_workqueue;
