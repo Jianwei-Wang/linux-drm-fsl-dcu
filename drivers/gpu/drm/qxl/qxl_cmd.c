@@ -473,13 +473,6 @@ void qxl_surface_id_dealloc(struct qxl_device *qdev,
 	surf->surface_id = 0;
 }
 
-
-static void
-push_surface(struct qxl_device *qdev, struct qxl_bo *cmd_bo)
-{
-	qxl_push_command_ring(qdev, cmd_bo, QXL_CMD_SURFACE, false);
-}
-
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
 			 struct qxl_bo *surf,
 			 struct ttm_mem_reg *new_mem)
@@ -517,7 +510,7 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	cmd->surface_id = surf->surface_id;
 	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, cmd);
 	qxl_release_add_res(qdev, release, qxl_bo_ref(surf));
-	push_surface(qdev, cmd_bo);
+	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 	qxl_fence_releaseable(qdev, release);
 	qxl_bo_unreserve(cmd_bo);
 
@@ -546,7 +539,7 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	cmd->surface_id = surf->surface_id;
 	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, cmd);
 
-	push_surface(qdev, cmd_bo);
+	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 
 	qxl_fence_releaseable(qdev, release);
 	qxl_bo_unreserve(cmd_bo);

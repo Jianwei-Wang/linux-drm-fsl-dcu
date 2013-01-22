@@ -173,6 +173,7 @@ struct drm_qxl_release {
 	int id;
 	int type;
 	int bo_count;
+	uint32_t release_offset;
 	struct qxl_bo *bos[QXL_MAX_RES];
 };
 
@@ -469,6 +470,9 @@ int qxl_fence_releaseable(struct qxl_device *qdev,
 int
 qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo,
 		      uint32_t type, bool interruptible);
+int
+qxl_push_command_ring_release(struct qxl_device *qdev, struct drm_qxl_release *release,
+			      uint32_t type, bool interruptible);
 int
 qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo,
 		     uint32_t type, bool interruptible);

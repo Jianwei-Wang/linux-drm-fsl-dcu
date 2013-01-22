@@ -40,6 +40,7 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 	}
 	release->type = type;
 	release->bo_count = 0;
+	release->release_offset = 0;
 again:
 	if (idr_pre_get(&qdev->release_idr, GFP_KERNEL) == 0) {
 		DRM_ERROR("Out of memory for release idr\n");

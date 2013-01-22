@@ -236,7 +236,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		qxl_bo_unreserve(cmd_bo);
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
-		ret = qxl_push_command_ring(qdev, cmd_bo, user_cmd.type, true);
+		ret = qxl_push_command_ring_release(qdev, release, user_cmd.type, true);
 		if (ret == -ERESTARTSYS) {
 			qxl_release_free(qdev, release);
 			qxl_bo_list_unreserve(&reloc_list, true);

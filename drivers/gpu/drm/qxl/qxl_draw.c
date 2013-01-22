@@ -89,6 +89,18 @@ make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 
 /* TODO: bo per command is wasteful. add an offset */
 int
+qxl_push_command_ring_release(struct qxl_device *qdev, struct drm_qxl_release *release,
+			      uint32_t type, bool interruptible)
+{
+	struct qxl_command cmd;
+
+	cmd.type = type;
+	cmd.data = qxl_bo_physical_address(qdev, release->bos[0], release->release_offset);
+
+	return qxl_ring_push(qdev->command_ring, &cmd, interruptible);
+}
+
+int
 qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type, bool interruptible)
 {
 	struct qxl_command cmd;
