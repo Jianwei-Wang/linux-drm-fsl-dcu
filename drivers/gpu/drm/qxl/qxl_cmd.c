@@ -157,25 +157,6 @@ void qxl_ring_wait_idle(struct qxl_ring *ring)
 	spin_unlock_irqrestore(&ring->lock, flags);
 }
 
-struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
-						   uint64_t id)
-{
-	struct drm_qxl_release *release;
-
-	spin_lock(&qdev->release_idr_lock);
-	release = idr_find(&qdev->release_idr, id);
-	spin_unlock(&qdev->release_idr_lock);
-	if (!release) {
-		DRM_ERROR("failed to find id in release_idr\n");
-		return NULL;
-	}
-	if (release->bo_count < 1) {
-		DRM_ERROR("read a released resource with 0 bos\n");
-		return NULL;
-	}
-	return release;
-}
-
 int qxl_garbage_collect(struct qxl_device *qdev)
 {
 	struct drm_qxl_release *release;
