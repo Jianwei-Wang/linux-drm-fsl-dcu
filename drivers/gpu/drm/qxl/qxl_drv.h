@@ -308,6 +308,10 @@ struct qxl_device {
 	struct idr	surf_id_idr;
 	spinlock_t surf_id_idr_lock;
 	int last_alloced_surf_id;
+
+	struct io_mapping *vram_mapping;
+	struct io_mapping *surface_mapping;
+
 };
 
 /* forward declaration for QXL_INFO_IO */

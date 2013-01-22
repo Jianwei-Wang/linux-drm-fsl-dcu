@@ -1,6 +1,7 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+#include <linux/io-mapping.h>
 static void qxl_dump_mode(struct qxl_device *qdev, void *p)
 {
 	struct qxl_mode *m = p;
@@ -91,6 +92,8 @@ int qxl_device_init(struct qxl_device *qdev,
 	qdev->surfaceram_size = pci_resource_len(pdev, 1);
 	qdev->io_base = pci_resource_start(pdev, 3);
 
+	qdev->vram_mapping = io_mapping_create_wc(qdev->vram_base, pci_resource_len(pdev, 0));
+	qdev->surface_mapping = io_mapping_create_wc(qdev->surfaceram_base, qdev->surfaceram_size);
 	DRM_INFO("qxl: vram %p-%p(%dM %dk), surface %p-%p(%dM %dk)\n",
 		 (void *)qdev->vram_base, (void *)pci_resource_end(pdev, 0),
 		 (int)pci_resource_len(pdev, 0) / 1024 / 1024,
@@ -193,6 +196,8 @@ void qxl_device_fini(struct qxl_device *qdev)
 	qxl_ring_free(qdev->cursor_ring);
 	qxl_ring_free(qdev->release_ring);
 	qxl_bo_fini(qdev);
+	io_mapping_free(qdev->surface_mapping);
+	io_mapping_free(qdev->vram_mapping);
 	iounmap(qdev->ram_header);
 	iounmap(qdev->rom);
 	qdev->rom = NULL;
