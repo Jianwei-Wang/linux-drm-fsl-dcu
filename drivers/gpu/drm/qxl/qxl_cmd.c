@@ -179,7 +179,7 @@ struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 int qxl_garbage_collect(struct qxl_device *qdev)
 {
 	struct drm_qxl_release *release;
-	uint64_t id;
+	uint64_t id, next_id;
 	int i = 0;
 	int ret;
 	union qxl_release_info *info;
@@ -193,13 +193,19 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 				break;
 			bo = release->bos[0];
 
-			ret = qxl_bo_kmap(bo, (void **)&info);
+			ret = qxl_bo_reserve(bo, false);
 			if (ret) {
-				DRM_ERROR("failed to map release\n");
-				return -EINVAL;
+				DRM_ERROR("failed to reserve release\n");
+				return ret;
 			}
+
+			info = qxl_bo_kmap_atomic_page(qdev, bo, 0);
+			next_id = info->next;
+			qxl_bo_kunmap_atomic_page(qdev, bo, info);
+
+			qxl_bo_unreserve(bo);
 			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
-				 info->next);
+				next_id);
 
 			switch (release->type) {
 			case QXL_RELEASE_DRAWABLE:
@@ -210,8 +216,8 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 				DRM_ERROR("unexpected release type\n");
 				break;
 			}
-			id = info->next;
-			qxl_bo_kunmap(bo);
+			id = next_id;
+
 			qxl_release_free(qdev, release);
 			++i;
 		}
@@ -500,13 +506,17 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
 	struct drm_qxl_release *release;
+	int ret;
 
 	if (surf->hw_surf_alloc)
 		return 0;
 
-	/* allocate releaseable and send commands */
-	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
-				   &release, &cmd_bo);
+	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
+					 &release, &cmd_bo);
+	if (ret)
+		return ret;
+
+	cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, 0);
 	
 	cmd->type = QXL_SURFACE_CMD_CREATE;
 	cmd->u.surface_create.format = surf->surf.format;
@@ -524,9 +534,12 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	} else
 		cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf, 0);
 	cmd->surface_id = surf->surface_id;
+	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, cmd);
 	qxl_release_add_res(qdev, release, qxl_bo_ref(surf));
 	push_surface(qdev, cmd_bo);
 	qxl_fence_releaseable(qdev, release);
+	qxl_bo_unreserve(cmd_bo);
+
 	surf->hw_surf_alloc = true;
 	return 0;
 }
@@ -537,17 +550,25 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
 	struct drm_qxl_release *release;
+	int ret;
 
 	if (!surf->hw_surf_alloc)
 		return 0;
 
-	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
-				   &release, &cmd_bo);
-	
+	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
+					 &release, &cmd_bo);
+	if (ret)
+		return ret;
+
+	cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, 0);
 	cmd->type = QXL_SURFACE_CMD_DESTROY;
 	cmd->surface_id = surf->surface_id;
+	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, cmd);
 
 	push_surface(qdev, cmd_bo);
+
+	qxl_fence_releaseable(qdev, release);
+	qxl_bo_unreserve(cmd_bo);
 	surf->hw_surf_alloc = false;
 	return 0;
 }

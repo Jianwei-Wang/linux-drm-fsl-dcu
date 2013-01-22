@@ -83,12 +83,13 @@ apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 
 /* return holding the reference to this object */
 struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
-		struct drm_file *file_priv, uint64_t handle,
-		struct qxl_bo *handle_0_bo)
+				  struct drm_file *file_priv, uint64_t handle,
+				  struct qxl_reloc_list *reloc_list,
+				  struct qxl_bo *handle_0_bo)
 {
 	struct drm_gem_object *gobj;
 	struct qxl_bo *qobj;
-
+	int ret;
 	if (handle == 0)
 		return handle_0_bo;
 	gobj = drm_gem_object_lookup(qdev->ddev, file_priv, handle);
@@ -97,6 +98,12 @@ struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 		return NULL;
 	}
 	qobj = gem_to_qxl_bo(gobj);
+
+	ret = qxl_bo_list_add(reloc_list, qobj);
+	if (ret) {
+		drm_gem_object_unreference_unlocked(gobj);
+		return NULL;
+	}
 	return qobj;
 }
 
@@ -119,6 +126,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	void *fb_cmd;
 	int i, ret;
 	struct qxl_reloc_list reloc_list;
+	int unwritten;
 
 	INIT_LIST_HEAD(&reloc_list.bos);
 
@@ -149,15 +157,27 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				   QXL_CMD_CURSOR);
 			return -EFAULT;
 		}
-		fb_cmd = qxl_alloc_releasable(qdev,
-					      sizeof(union qxl_release_info) +
-					      user_cmd.command_size,
-					      release_type,
-					      &release,
-					      &cmd_bo);
-		if (DRM_COPY_FROM_USER(fb_cmd + sizeof(union qxl_release_info),
-					(void *)user_cmd.command,
-					user_cmd.command_size))
+
+		if (user_cmd.command_size > PAGE_SIZE - sizeof(union qxl_release_info))
+			return -EINVAL;
+
+		ret = qxl_alloc_release_reserved(qdev,
+						 sizeof(union qxl_release_info) +
+						 user_cmd.command_size,
+						 release_type,
+						 &release,
+						 &cmd_bo);
+		if (ret)
+			return ret;
+
+		fb_cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, 0);
+		unwritten = __copy_from_user_inatomic_nocache(fb_cmd + sizeof(union qxl_release_info), (void *)(unsigned long)user_cmd.command, user_cmd.command_size);
+//		if (DRM_COPY_FROM_USER(fb_cmd + sizeof(union qxl_release_info),
+//					(void *)user_cmd.command,
+//					user_cmd.command_size))
+//			return -EFAULT;
+		qxl_bo_kunmap_atomic_page(qdev, cmd_bo, fb_cmd);
+		if (unwritten)
 			return -EFAULT;
 #if 0
 		qxl_io_log(qdev, "%s: type %d, size %d, #relocs %d\n",
@@ -179,22 +199,18 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			   need to validate first then process relocs? */
 			reloc_dst_bo =
 				qxlhw_handle_to_bo(qdev, file_priv,
-						   reloc.dst_handle, cmd_bo);
+						   reloc.dst_handle, &reloc_list, cmd_bo);
 			if (!reloc_dst_bo)
 				return -EINVAL;
-
-			ret = qxl_bo_list_add(&reloc_list, reloc_dst_bo);
 
 			/* reserve and validate the reloc dst bo */
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.src_handle > 0) {
 				reloc_src_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
-							   reloc.src_handle, cmd_bo);
+							   reloc.src_handle, &reloc_list, cmd_bo);
 				if (!reloc_src_bo)
 					return -EINVAL;
 
-				/* reserve and validate the reloc src bo */
-				ret = qxl_bo_list_add(&reloc_list, reloc_src_bo);
 			} else
 				reloc_src_bo = NULL;
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
@@ -216,6 +232,8 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
 		}
 		qxl_fence_releaseable(qdev, release);
+
+		qxl_bo_unreserve(cmd_bo);
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
 		ret = qxl_push_command_ring(qdev, cmd_bo, user_cmd.type, true);

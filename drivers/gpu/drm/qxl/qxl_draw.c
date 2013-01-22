@@ -113,6 +113,41 @@ qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
 	release->bos[release->bo_count++] = bo;
 }
 
+int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
+			       int type, struct drm_qxl_release **release,
+			       struct qxl_bo **rbo)
+{
+	struct qxl_bo *bo;
+	int idr_ret;
+	void *ptr;
+	int ret;
+
+	idr_ret = qxl_release_alloc(qdev, type, release);
+
+	qxl_garbage_collect(qdev);
+	ret = qxl_bo_create(qdev, size, false, QXL_GEM_DOMAIN_VRAM, NULL,
+			    &bo);
+	if (ret)
+		return ret;
+	ret = qxl_bo_reserve(bo, false);
+	if (ret)
+		goto out_unref;
+
+	*rbo = bo;
+
+	ptr = qxl_bo_kmap_atomic_page(qdev, bo, 0);
+	((union qxl_release_info *)ptr)->id = idr_ret;	
+	qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
+
+	qxl_release_add_res(qdev, *release, bo);
+
+
+	return 0;
+out_unref:
+	qxl_bo_unref(&bo);
+	return ret;
+}
+
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 			   int type, struct drm_qxl_release **release,
 			   struct qxl_bo **bo)

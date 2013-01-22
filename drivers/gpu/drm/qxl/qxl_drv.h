@@ -461,6 +461,9 @@ void qxl_bo_add_resource(struct qxl_bo *main_bo, struct qxl_bo *resource);
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 			   int type, struct drm_qxl_release **release,
 			   struct qxl_bo **bo);
+int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
+			       int type, struct drm_qxl_release **release,
+			       struct qxl_bo **rbo);
 int qxl_fence_releaseable(struct qxl_device *qdev,
 			  struct drm_qxl_release *release);
 int
