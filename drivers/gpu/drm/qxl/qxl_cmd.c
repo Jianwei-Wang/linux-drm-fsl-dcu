@@ -276,8 +276,12 @@ static void wait_for_io_cmd(struct qxl_device *qdev, uint8_t val, long port)
 	mutex_lock(&qdev->async_io_mutex);
 
 	if (qdev->last_sent_io_cmd > irq_num) {
+	restart:
 		ret = wait_event_interruptible(qdev->io_cmd_event,
 					       atomic_read(&qdev->irq_received_io_cmd) > irq_num);
+		if (ret == -ERESTARTSYS)
+			goto restart;
+			
 	}
 	outb(val, addr);
 	qdev->last_sent_io_cmd = irq_num + 1;
