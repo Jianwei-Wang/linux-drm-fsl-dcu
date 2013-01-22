@@ -22,7 +22,15 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+/*
+ * drawable cmd cache - allocate a bunch of VRAM pages, suballocate
+ * into 256 byte chunks for now - gives 16 cmds per page.
+ *
+ * use an ida to index into the chunks?
+ */
 /* manage releaseables */
+/* stack them 16 high for now -drawable object is 191 */
+#define RELEASES_PER_BO (4096 / 256)
 
 uint64_t
 qxl_release_alloc(struct qxl_device *qdev, int type,
@@ -92,6 +100,15 @@ qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
 	release->bos[release->bo_count++] = bo;
 }
 
+int qxl_release_bo_alloc(struct qxl_device *qdev,
+			 struct qxl_bo **bo)
+{
+	int ret;
+	ret = qxl_bo_create(qdev, PAGE_SIZE, false, QXL_GEM_DOMAIN_VRAM, NULL,
+			    bo);
+	return ret;
+}
+
 int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 			       int type, struct drm_qxl_release **release,
 			       struct qxl_bo **rbo)
@@ -100,22 +117,53 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 	int idr_ret;
 	void *ptr;
 	int ret;
+	union qxl_release_info *info;
+	int cur_idx;
+
+	if (type == QXL_RELEASE_DRAWABLE)
+		cur_idx = 0;
+	else if (type == QXL_RELEASE_SURFACE_CMD)
+		cur_idx = 1;
+	else {
+		DRM_ERROR("got illegal type: %d\n", type);
+		return -EINVAL;
+	}
 
 	idr_ret = qxl_release_alloc(qdev, type, release);
 
 	qxl_garbage_collect(qdev);
-	ret = qxl_bo_create(qdev, size, false, QXL_GEM_DOMAIN_VRAM, NULL,
-			    &bo);
-	if (ret)
-		return ret;
+
+	mutex_lock(&qdev->release_mutex);
+	if (qdev->current_release_bo_offset[cur_idx] + 1 >= RELEASES_PER_BO) {
+		qxl_bo_unref(&qdev->current_release_bo[cur_idx]);
+		qdev->current_release_bo_offset[cur_idx] = 0;
+		qdev->current_release_bo[cur_idx] = NULL;
+	}
+	if (!qdev->current_release_bo[cur_idx]) {
+		ret = qxl_release_bo_alloc(qdev, &qdev->current_release_bo[cur_idx]);
+		if (ret) {
+			mutex_unlock(&qdev->release_mutex);
+			return ret;
+		}
+	}
+
+	bo = qxl_bo_ref(qdev->current_release_bo[cur_idx]);
 	ret = qxl_bo_reserve(bo, false);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&qdev->release_mutex);
 		goto out_unref;
+	}
+
+	(*release)->release_offset = qdev->current_release_bo_offset[cur_idx] * 256;
+	qdev->current_release_bo_offset[cur_idx]++;
 
 	*rbo = bo;
 
+	mutex_unlock(&qdev->release_mutex);	
+
 	ptr = qxl_bo_kmap_atomic_page(qdev, bo, 0);
-	((union qxl_release_info *)ptr)->id = idr_ret;	
+	info = ptr + (*release)->release_offset;
+	info->id = idr_ret;	
 	qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 
 	qxl_release_add_res(qdev, *release, bo);

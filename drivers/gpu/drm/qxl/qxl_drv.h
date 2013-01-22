@@ -313,6 +313,10 @@ struct qxl_device {
 	struct io_mapping *vram_mapping;
 	struct io_mapping *surface_mapping;
 
+	/* */
+	struct mutex release_mutex;
+	struct qxl_bo *current_release_bo[2];
+	int current_release_bo_offset[2];
 };
 
 /* forward declaration for QXL_INFO_IO */
