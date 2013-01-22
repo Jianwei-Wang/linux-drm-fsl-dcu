@@ -84,14 +84,12 @@ apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 /* return holding the reference to this object */
 struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 				  struct drm_file *file_priv, uint64_t handle,
-				  struct qxl_reloc_list *reloc_list,
-				  struct qxl_bo *handle_0_bo)
+				  struct qxl_reloc_list *reloc_list)
 {
 	struct drm_gem_object *gobj;
 	struct qxl_bo *qobj;
 	int ret;
-	if (handle == 0)
-		return handle_0_bo;
+
 	gobj = drm_gem_object_lookup(qdev->ddev, file_priv, handle);
 	if (!gobj) {
 		DRM_ERROR("bad bo handle %lld\n", handle);
@@ -127,7 +125,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	int i, ret;
 	struct qxl_reloc_list reloc_list;
 	int unwritten;
-
+	uint32_t reloc_dst_offset;
 	INIT_LIST_HEAD(&reloc_list.bos);
 
 	for (cmd_num = 0; cmd_num < execbuffer->commands_num; ++cmd_num) {
@@ -170,8 +168,8 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		if (ret)
 			return ret;
 
-		fb_cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, 0);
-		unwritten = __copy_from_user_inatomic_nocache(fb_cmd + sizeof(union qxl_release_info), (void *)(unsigned long)user_cmd.command, user_cmd.command_size);
+		fb_cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, (release->release_offset & PAGE_SIZE));
+		unwritten = __copy_from_user_inatomic_nocache(fb_cmd + sizeof(union qxl_release_info) + (release->release_offset & ~PAGE_SIZE), (void *)(unsigned long)user_cmd.command, user_cmd.command_size);
 //		if (DRM_COPY_FROM_USER(fb_cmd + sizeof(union qxl_release_info),
 //					(void *)user_cmd.command,
 //					user_cmd.command_size))
@@ -197,27 +195,31 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 #endif
 			/* add the bos to the list of bos to validate -
 			   need to validate first then process relocs? */
-			reloc_dst_bo =
-				qxlhw_handle_to_bo(qdev, file_priv,
-						   reloc.dst_handle, &reloc_list, cmd_bo);
-			if (!reloc_dst_bo)
-				return -EINVAL;
+			if (reloc.dst_handle) {
+				reloc_dst_bo = qxlhw_handle_to_bo(qdev, file_priv,
+								  reloc.dst_handle, &reloc_list);
+				if (!reloc_dst_bo)
+					return -EINVAL;
+				reloc_dst_offset = 0;
+			} else {
+				reloc_dst_bo = cmd_bo;
+				reloc_dst_offset = release->release_offset;
+			}
 
 			/* reserve and validate the reloc dst bo */
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.src_handle > 0) {
 				reloc_src_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
-							   reloc.src_handle, &reloc_list, cmd_bo);
+							   reloc.src_handle, &reloc_list);
 				if (!reloc_src_bo)
 					return -EINVAL;
-
 			} else
 				reloc_src_bo = NULL;
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
-				apply_reloc(qdev, reloc_dst_bo, reloc.dst_offset,
+				apply_reloc(qdev, reloc_dst_bo, reloc_dst_offset + reloc.dst_offset,
 					    reloc_src_bo, reloc.src_offset);
 			} else if (reloc.reloc_type == QXL_RELOC_TYPE_SURF) {
-				apply_surf_reloc(qdev, reloc_dst_bo, reloc.dst_offset, reloc_src_bo);
+				apply_surf_reloc(qdev, reloc_dst_bo, reloc_dst_offset + reloc.dst_offset, reloc_src_bo);
 			} else {
 				DRM_ERROR("unknown reloc type %d\n", reloc.reloc_type);
 				return -EINVAL;

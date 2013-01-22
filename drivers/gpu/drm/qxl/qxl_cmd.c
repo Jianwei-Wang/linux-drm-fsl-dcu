@@ -164,6 +164,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	int i = 0;
 	int ret;
 	union qxl_release_info *info;
+	void *ptr;
 	struct qxl_bo *bo;
 
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
@@ -179,10 +180,11 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 				DRM_ERROR("failed to reserve release\n");
 				return ret;
 			}
-
-			info = qxl_bo_kmap_atomic_page(qdev, bo, 0);
+			
+			ptr = qxl_bo_kmap_atomic_page(qdev, bo, release->release_offset & PAGE_SIZE);
+			info = ptr + (release->release_offset & ~PAGE_SIZE);
 			next_id = info->next;
-			qxl_bo_kunmap_atomic_page(qdev, bo, info);
+			qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 
 			qxl_bo_unreserve(bo);
 			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
@@ -480,6 +482,7 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
 	struct drm_qxl_release *release;
+	void *ptr;
 	int ret;
 
 	if (surf->hw_surf_alloc)
@@ -490,7 +493,8 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	if (ret)
 		return ret;
 
-	cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, 0);
+	ptr = qxl_bo_kmap_atomic_page(qdev, cmd_bo, (release->release_offset & PAGE_SIZE));
+	cmd = ptr + (release->release_offset & ~PAGE_SIZE);
 	
 	cmd->type = QXL_SURFACE_CMD_CREATE;
 	cmd->u.surface_create.format = surf->surf.format;
@@ -508,7 +512,7 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	} else
 		cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf, 0);
 	cmd->surface_id = surf->surface_id;
-	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, cmd);
+	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, ptr);
 	qxl_release_add_res(qdev, release, qxl_bo_ref(surf));
 	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 	qxl_fence_releaseable(qdev, release);
@@ -525,6 +529,7 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	struct qxl_bo *cmd_bo;
 	struct drm_qxl_release *release;
 	int ret;
+	void *ptr;
 
 	if (!surf->hw_surf_alloc)
 		return 0;
@@ -534,10 +539,11 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	if (ret)
 		return ret;
 
-	cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, 0);
+	ptr = qxl_bo_kmap_atomic_page(qdev, cmd_bo, (release->release_offset & PAGE_SIZE));
+	cmd = ptr + (release->release_offset & ~PAGE_SIZE);
 	cmd->type = QXL_SURFACE_CMD_DESTROY;
 	cmd->surface_id = surf->surface_id;
-	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, cmd);
+	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, ptr);
 
 	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 
