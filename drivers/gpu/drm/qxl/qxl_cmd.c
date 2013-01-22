@@ -447,7 +447,7 @@ again:
 
 	if (handle >= qdev->rom->n_surfaces) {
 		int res;
-
+		count++;
 		spin_lock(&qdev->surf_id_idr_lock);
 		idr_remove(&qdev->surf_id_idr, handle);
 		spin_unlock(&qdev->surf_id_idr_lock);
