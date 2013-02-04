@@ -74,6 +74,9 @@ apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 	uint32_t id = 0;
 	void *reloc_page;
 
+	if (src->hw_surf_alloc == false) {
+		DRM_ERROR("got hw surface alloc false surf\n");
+	}
 	if (src && !src->is_primary)
 		id = src->surface_id;
 

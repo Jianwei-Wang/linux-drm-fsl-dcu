@@ -313,6 +313,10 @@ int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 	int surface_id;
 	uint32_t surface_width, surface_height;
 	int ret;
+
+	if (!surf->hw_surf_alloc)
+		DRM_ERROR("got io update area with no hw surface\n");
+
 	if (surf->is_primary)
 		surface_id = 0;
 	else
