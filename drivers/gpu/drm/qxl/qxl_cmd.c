@@ -515,6 +515,7 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 	qxl_bo_unreserve(cmd_bo);
 
+	qxl_fence_releaseable(qdev, release);
 	surf->hw_surf_alloc = true;
 	return 0;
 }
