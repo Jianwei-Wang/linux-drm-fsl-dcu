@@ -513,9 +513,10 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 		cmd->u.surface_create.data = qxl_bo_physical_address(qdev, surf, 0);
 	cmd->surface_id = surf->surface_id;
 	qxl_bo_kunmap_atomic_page(qdev, cmd_bo, ptr);
-	qxl_release_add_res(qdev, release, qxl_bo_ref(surf));
+	/* no need to add a release to the fence for this bo,
+	   since it is only released when we ask to destroy the surface
+	   and it would never signal otherwise */
 	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
-	qxl_fence_releaseable(qdev, release);
 	qxl_bo_unreserve(cmd_bo);
 
 	surf->hw_surf_alloc = true;
