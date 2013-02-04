@@ -10,6 +10,7 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+#include <linux/delay.h>
 static int qxl_ttm_debugfs_init(struct qxl_device *qdev);
 
 static struct qxl_device *qxl_get_qdev(struct ttm_bo_device *bdev)
@@ -399,14 +400,24 @@ static int qxl_sync_obj_wait(void *sync_obj,
 			     bool lazy, bool interruptible)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
-
+	int count = 0;
 	if (qfence->num_releases == 0)
 		return 0;
 
-	qxl_garbage_collect(qfence->qdev);
 
-	if (qfence->num_releases == 0)
-		return 0;
+	for (count = 0; count < 1000; count++) {
+		qxl_garbage_collect(qfence->qdev);
+	  
+		if (qfence->num_releases == 0)
+			return 0;
+
+		usleep_range(500,1000);
+	}
+
+	if (qfence->num_releases) {
+	  qxl_io_log(qfence->qdev, "sync obj still has outstanding releases %d %d\n", qfence->num_releases, qfence->release_ids[0]);
+	  DRM_ERROR("sync obj still has outstanding releases %d %d\n", qfence->num_releases, qfence->release_ids[0]);
+	}
 	
 	return 0;
 }
