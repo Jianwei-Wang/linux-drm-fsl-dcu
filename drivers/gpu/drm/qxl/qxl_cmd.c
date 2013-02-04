@@ -302,7 +302,6 @@ static int wait_for_io_cmd_user(struct qxl_device *qdev, uint8_t val, long port)
 	}
 	ret = wait_event_interruptible(qdev->io_cmd_event,
 				       atomic_read(&qdev->irq_received_io_cmd) > irq_num);
-out:
 	mutex_unlock(&qdev->async_io_mutex);
 	return ret;
 }
