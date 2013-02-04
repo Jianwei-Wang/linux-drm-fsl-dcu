@@ -74,9 +74,10 @@ apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 	uint32_t id = 0;
 	void *reloc_page;
 
-	reloc_page = qxl_bo_kmap_atomic_page(qdev, dst, dst_off & PAGE_MASK);
 	if (src && !src->is_primary)
 		id = src->surface_id;
+
+	reloc_page = qxl_bo_kmap_atomic_page(qdev, dst, dst_off & PAGE_MASK);
 	*(uint32_t *)(reloc_page + (dst_off & ~PAGE_MASK)) = id;
 	qxl_bo_kunmap_atomic_page(qdev, dst, reloc_page);
 }
