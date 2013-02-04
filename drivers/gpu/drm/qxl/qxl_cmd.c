@@ -589,7 +589,7 @@ static int qxl_reap_surf(struct qxl_device *qdev, struct qxl_bo *surf, bool stal
 	spin_unlock(&surf->tbo.bdev->fence_lock);
 	if (ret == -EBUSY) {
 		qxl_bo_unreserve(surf);
-		return 0;
+		return -EBUSY;
 	}
 
 	qxl_surface_evict(qdev, surf);
