@@ -177,7 +177,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 
 			ret = qxl_bo_reserve(bo, false);
 			if (ret) {
-				DRM_ERROR("failed to reserve release\n");
+				DRM_ERROR("failed to reserve release %d\n", id);
 				return ret;
 			}
 			
