@@ -459,7 +459,7 @@ static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
 	qdev = qbo->gem_base.dev->dev_private;
 
 	if (bo->mem.mem_type == TTM_PL_PRIV0 && qbo->surface_id) {
-		qxl_surface_evict(qdev, qbo);
+		qxl_surface_evict(qdev, qbo, new_mem ? true : false);
 	}
 }
 

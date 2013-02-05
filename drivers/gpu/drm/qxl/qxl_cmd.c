@@ -559,21 +559,25 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	return 0;
 }
 
-void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf)
+void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf, bool do_update_area)
 {
-	struct qxl_rect rect;
-	int ret;
+	/* no need to update area if we are just freeing the surface normally */
+	if (do_update_area) {
+		struct qxl_rect rect;
+		int ret;
 
-	/* if we are evicting, we need to make sure the surface is up
-	   to date */
-	rect.left = 0;
-	rect.right = surf->surf.width;
-	rect.top = 0;
-	rect.bottom = surf->surf.height;
+		/* if we are evicting, we need to make sure the surface is up
+		   to date */
+		rect.left = 0;
+		rect.right = surf->surf.width;
+		rect.top = 0;
+		rect.bottom = surf->surf.height;
 retry:
-	ret = qxl_io_update_area(qdev, surf, &rect);
-	if (ret == -ERESTARTSYS)
-		goto retry;
+		ret = qxl_io_update_area(qdev, surf, &rect);
+		if (ret == -ERESTARTSYS)
+			goto retry;
+	}
+
 	/* nuke the surface id at the hw */
 	qxl_hw_surface_dealloc(qdev, surf);
 	qxl_surface_id_dealloc(qdev, surf);
@@ -600,7 +604,7 @@ static int qxl_reap_surf(struct qxl_device *qdev, struct qxl_bo *surf, bool stal
 		return -EBUSY;
 	}
 
-	qxl_surface_evict(qdev, surf);
+	qxl_surface_evict(qdev, surf, true);
 	qxl_bo_unreserve(surf);
 	return 0;
 }
