@@ -163,6 +163,8 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		if (user_cmd.command_size > PAGE_SIZE - sizeof(union qxl_release_info))
 			return -EINVAL;
 
+		qxl_garbage_collect(qdev);
+
 		ret = qxl_alloc_release_reserved(qdev,
 						 sizeof(union qxl_release_info) +
 						 user_cmd.command_size,

@@ -131,8 +131,6 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 
 	idr_ret = qxl_release_alloc(qdev, type, release);
 
-	qxl_garbage_collect(qdev);
-
 	mutex_lock(&qdev->release_mutex);
 	if (qdev->current_release_bo_offset[cur_idx] + 1 >= RELEASES_PER_BO) {
 		qxl_bo_unref(&qdev->current_release_bo[cur_idx]);
