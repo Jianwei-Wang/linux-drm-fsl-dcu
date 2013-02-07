@@ -67,6 +67,13 @@ static uint8_t setup_slot(struct qxl_device *qdev, uint8_t slot_index_offset,
 	return slot_index;
 }
 
+static void qxl_gc_work(struct work_struct *work)
+{
+	struct qxl_device *qdev = container_of(work, struct qxl_device, gc_work);
+       
+	qxl_garbage_collect(qdev);
+}
+
 int qxl_device_init(struct qxl_device *qdev,
 		    struct drm_device *ddev,
 		    struct pci_dev *pdev,
@@ -184,6 +191,10 @@ int qxl_device_init(struct qxl_device *qdev,
 		qdev->main_mem_slot,
 		(unsigned long)qdev->vram_base, qdev->rom->ram_header_offset);
 
+
+	qdev->gc_queue = create_singlethread_workqueue("qxl_gc");
+	INIT_WORK(&qdev->gc_work, qxl_gc_work);
+
 	r = qxl_fb_init(qdev);
 	if (r)
 		return r;
@@ -197,6 +208,10 @@ void qxl_device_fini(struct qxl_device *qdev)
 		qxl_bo_unref(&qdev->current_release_bo[0]);
 	if (qdev->current_release_bo[1])
 		qxl_bo_unref(&qdev->current_release_bo[1]);
+	flush_workqueue(qdev->gc_queue);
+	destroy_workqueue(qdev->gc_queue);
+	qdev->gc_queue = NULL;
+
 	qxl_ring_free(qdev->command_ring);
 	qxl_ring_free(qdev->cursor_ring);
 	qxl_ring_free(qdev->release_ring);

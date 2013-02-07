@@ -154,23 +154,20 @@ static int qxl_bo_man_get_node(struct ttm_mem_type_manager *man,
 	struct qxl_device *qdev = container_of(man->bdev, struct qxl_device,
 					       mman.bdev);
 	int ret;
-	int res = 0;
 	int count_loops = 0;
 
 	ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
 	while (unlikely(ret || mem->mm_node == NULL)) {
 		qxl_io_notify_oom(qdev);
-		res += qxl_garbage_collect(qdev);
-		if (res == 0)
-		  mdelay(10);
+
+		queue_work(qdev->gc_queue, &qdev->gc_work);
+		mdelay(10);
 		count_loops++;
 		if (count_loops == 2)
 		  return 0;
 		/* TODO - sleep here */
 		ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
 	}
-	if (unlikely(res > 0))
-		QXL_INFO(qdev, "%s: released %d\n", res);
 	return ret;
 }
 

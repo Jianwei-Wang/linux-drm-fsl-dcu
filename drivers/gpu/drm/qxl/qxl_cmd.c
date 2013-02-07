@@ -157,6 +157,12 @@ void qxl_ring_wait_idle(struct qxl_ring *ring)
 	spin_unlock_irqrestore(&ring->lock, flags);
 }
 
+void qxl_queue_garbage_collect(struct qxl_device *qdev)
+{
+	if (!qxl_check_idle(qdev->release_ring))
+		queue_work(qdev->gc_queue, &qdev->gc_work);
+}
+
 int qxl_garbage_collect(struct qxl_device *qdev)
 {
 	struct drm_qxl_release *release;
@@ -249,7 +255,6 @@ void *qxl_allocnf(struct qxl_device *qdev, unsigned long size,
 {
 	struct qxl_bo *bo;
 
-	qxl_garbage_collect(qdev);
 	bo = qxl_create_pinned_bo(qdev, size);
 	qxl_release_add_res(qdev, release, bo);
 	return bo->kptr;
@@ -439,17 +444,7 @@ again:
 		spin_lock(&qdev->surf_id_idr_lock);
 		idr_remove(&qdev->surf_id_idr, handle);
 		spin_unlock(&qdev->surf_id_idr_lock);
-		/* deallocate some surfaces */
-		if (count == 1)
-			qxl_garbage_collect(qdev);
-		else if (count < 4) {
-			qxl_io_notify_oom(qdev);
-			res = qxl_garbage_collect(qdev);
-			if (res == 0)
-				mdelay(10);
-		} else {
-			qxl_reap_surface_id(qdev, 20);
-		}
+		qxl_reap_surface_id(qdev, 20);
 		goto again;
 	}
 	surf->surface_id = handle;

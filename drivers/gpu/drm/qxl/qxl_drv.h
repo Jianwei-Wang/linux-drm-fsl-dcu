@@ -317,6 +317,10 @@ struct qxl_device {
 	struct mutex release_mutex;
 	struct qxl_bo *current_release_bo[2];
 	int current_release_bo_offset[2];
+
+	struct workqueue_struct *gc_queue;
+	struct work_struct gc_work;
+
 };
 
 /* forward declaration for QXL_INFO_IO */
@@ -514,6 +518,7 @@ void qxl_release_add_res(struct qxl_device *qdev,
 struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id);
 
+void qxl_queue_garbage_collect(struct qxl_device *qdev);
 int qxl_garbage_collect(struct qxl_device *qdev);
 
 /* debugfs */
