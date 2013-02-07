@@ -89,10 +89,16 @@ qxl_release_free(struct qxl_device *qdev,
 	spin_unlock(&qdev->release_idr_lock);
 	kfree(release);
 }
+
 void
 qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
 		    struct qxl_bo *bo)
 {
+	int i;
+	for (i = 0; i < release->bo_count; i++)
+		if (release->bos[i] == bo)
+			return;
+
 	if (release->bo_count >= QXL_MAX_RES) {
 		DRM_ERROR("exceeded max resource on a drm_qxl_release item\n");
 		return;
