@@ -397,31 +397,54 @@ static int qxl_sync_obj_wait(void *sync_obj,
 			     bool lazy, bool interruptible)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
-	int count = 0;
-	if (qfence->num_releases == 0)
+	int count = 0, sc = 0;
+	struct qxl_bo *bo = container_of(qfence, struct qxl_bo, fence);
+
+	spin_lock(&qfence->qdev->fence_lock);
+	if (qfence->num_active_releases == 0) {
+		spin_unlock(&qfence->qdev->fence_lock);
 		return 0;
+	}
+	spin_unlock(&qfence->qdev->fence_lock);	  
 
+retry:
+	if (bo->type == QXL_GEM_DOMAIN_SURFACE) {
+		if (sc == 0)
+			qxl_update_surface(qfence->qdev, bo);
+		else
+			qxl_io_flush_surfaces(qfence->qdev);
+		sc++;
+		qxl_io_flush_release(qfence->qdev);
+	} else
+		qxl_io_flush_release(qfence->qdev);
 
-	for (count = 0; count < 1000; count++) {
-		qxl_garbage_collect(qfence->qdev);
-	  
-		if (qfence->num_releases == 0)
-			return 0;
-
+	for (count = 0; count < 100; count++) {
+		queue_work(qfence->qdev->gc_queue, &qfence->qdev->gc_work);
 		usleep_range(500,1000);
+		spin_lock(&qfence->qdev->fence_lock);
+		if (qfence->num_active_releases == 0) {
+			spin_unlock(&qfence->qdev->fence_lock);
+			return 0;
+		}
+		qxl_io_flush_release(qfence->qdev);
+		spin_unlock(&qfence->qdev->fence_lock);
 	}
 
-	if (qfence->num_releases) {
-	  qxl_io_log(qfence->qdev, "sync obj still has outstanding releases %d %d\n", qfence->num_releases, qfence->release_ids[0]);
-	  DRM_ERROR("sync obj still has outstanding releases %d %d\n", qfence->num_releases, qfence->release_ids[0]);
-	}
-	
+
+	spin_lock(&qfence->qdev->fence_lock);
+	if (qfence->num_active_releases) {
+		qxl_io_log(qfence->qdev, "sync obj %d still has outstanding releases %d %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases, qfence->release_ids[0]);
+		WARN(1, "sync obj %d still has outstanding releases %d %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases, qfence->release_ids[0]);
+		spin_unlock(&qfence->qdev->fence_lock);
+		if (sc == 1)
+			goto retry;
+	} else
+		spin_unlock(&qfence->qdev->fence_lock);
 	return 0;
 }
 
 static int qxl_sync_obj_flush(void *sync_obj)
 {
-	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
 	return 0;
 }
 
@@ -437,11 +460,11 @@ static void *qxl_sync_obj_ref(void *sync_obj)
 static bool qxl_sync_obj_signaled(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
-
-	if (qfence->num_releases == 0)
-		return true;
-
-	return false;
+	bool ret;
+	spin_lock(&qfence->qdev->fence_lock);
+	ret = qfence->num_active_releases == 0;
+	spin_unlock(&qfence->qdev->fence_lock);
+	return ret;
 }
 
 static void qxl_bo_move_notify(struct ttm_buffer_object *bo,

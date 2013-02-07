@@ -586,7 +586,7 @@ static int qxl_reap_surf(struct qxl_device *qdev, struct qxl_bo *surf, bool stal
 	if (ret == -EBUSY)
 		return -EBUSY;
 
-	if (surf->fence.num_releases > 0 && stall == false) {
+	if (surf->fence.num_active_releases > 0 && stall == false) {
 		qxl_bo_unreserve(surf);
 		return -EBUSY;
 	}

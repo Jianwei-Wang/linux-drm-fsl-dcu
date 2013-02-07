@@ -408,7 +408,7 @@ qxl_debugfs_buffers_info(struct seq_file *m, void *data)
 	list_for_each_entry(bo, &qdev->gem.objects, list) {
 		seq_printf(m, "size %d, pc %d, sync obj %p, num releases %d\n",
 			   bo->gem_base.size, bo->pin_count,
-			   bo->tbo.sync_obj, bo->fence.num_releases);
+			   bo->tbo.sync_obj, bo->fence.num_active_releases);
 	}
 	return 0;
 }

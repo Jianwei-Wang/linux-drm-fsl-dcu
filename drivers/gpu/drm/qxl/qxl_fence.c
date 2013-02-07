@@ -26,15 +26,19 @@
 
 int qxl_fence_add_release(struct qxl_fence *qfence, uint32_t rel_id)
 {
-	if (qfence->num_releases + 1 > qfence->num_alloc_releases) {
+	spin_lock(&qfence->qdev->fence_lock);
+	if (qfence->num_used_releases + 1 > qfence->num_alloc_releases) {
 		qfence->num_alloc_releases += 4;
-		qfence->release_ids = krealloc(qfence->release_ids, sizeof(uint32_t)*qfence->num_alloc_releases, GFP_KERNEL);
+		qfence->release_ids = krealloc(qfence->release_ids, sizeof(uint32_t)*qfence->num_alloc_releases, GFP_ATOMIC);
 		if (!qfence->release_ids) {
 			qfence->num_alloc_releases -= 4;
+			spin_unlock(&qfence->qdev->fence_lock);
 			return -ENOMEM;
 		}
 	}
-	qfence->release_ids[qfence->num_releases++] = rel_id;
+	qfence->release_ids[qfence->num_used_releases++] = rel_id;
+	qfence->num_active_releases++;
+	spin_unlock(&qfence->qdev->fence_lock);
 	return 0;
 }
 
@@ -42,16 +46,19 @@ int qxl_fence_remove_release(struct qxl_fence *qfence, uint32_t rel_id)
 {
 	int i;
 
-	for (i = 0; i < qfence->num_releases; i++)
+	spin_lock(&qfence->qdev->fence_lock);
+	for (i = 0; i < qfence->num_used_releases; i++)
 		if (qfence->release_ids[i] == rel_id)
 			break;
 
-	if (i == qfence->num_releases)
+	if (i == qfence->num_used_releases) {
+		spin_unlock(&qfence->qdev->fence_lock);
 		return -ENOENT;
+	}
 
-	if (i < qfence->num_releases)
-		memcpy(&qfence->release_ids[i], &qfence->release_ids[i+1], sizeof(uint32_t)*(qfence->num_releases-i));
-	qfence->num_releases--;
+	qfence->release_ids[i] = 0;
+	qfence->num_active_releases--;
+	spin_unlock(&qfence->qdev->fence_lock);
 	return 0;
 }
 
@@ -60,6 +67,8 @@ int qxl_fence_init(struct qxl_device *qdev, struct qxl_fence *qfence)
 {
 	qfence->qdev = qdev;
 	qfence->num_alloc_releases = 0;
+	qfence->num_used_releases = 0;
+	qfence->num_active_releases = 0;
 	qfence->release_ids = NULL;
 	return 0;
 }
@@ -68,4 +77,6 @@ void qxl_fence_fini(struct qxl_fence *qfence)
 {
 	kfree(qfence->release_ids);
 	qfence->num_alloc_releases = 0;
+	qfence->num_used_releases = 0;
+	qfence->num_active_releases = 0;
 }

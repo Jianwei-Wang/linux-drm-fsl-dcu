@@ -72,8 +72,9 @@ enum {
    with releases AFAIK. */
 struct qxl_fence {
 	struct qxl_device *qdev;
-	int num_releases;
-	int num_alloc_releases;
+	uint32_t num_active_releases;
+	uint32_t num_alloc_releases;
+	uint32_t num_used_releases;
 	uint32_t *release_ids;
 };
 
@@ -321,6 +322,7 @@ struct qxl_device {
 	struct workqueue_struct *gc_queue;
 	struct work_struct gc_work;
 
+	spinlock_t fence_lock;
 };
 
 /* forward declaration for QXL_INFO_IO */
