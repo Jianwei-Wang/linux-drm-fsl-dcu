@@ -554,6 +554,7 @@ int qxl_bo_check_id(struct qxl_device *qdev, struct qxl_bo *bo);
 struct qxl_drv_surface *
 qxl_surface_lookup(struct drm_device *dev, int surface_id);
 void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf, bool freeing);
+int qxl_update_surface(struct qxl_device *qdev, struct qxl_bo *surf);
 
 /* qxl_fence.c */
 int qxl_fence_add_release(struct qxl_fence *qfence, uint32_t rel_id);
