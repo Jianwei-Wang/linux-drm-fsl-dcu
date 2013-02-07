@@ -202,8 +202,11 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			if (reloc.dst_handle) {
 				reloc_dst_bo = qxlhw_handle_to_bo(qdev, file_priv,
 								  reloc.dst_handle, &reloc_list);
-				if (!reloc_dst_bo)
+				if (!reloc_dst_bo) {
+					DRM_ERROR("no reloc dst bo fail\n");
+					qxl_bo_unreserve(cmd_bo);
 					return -EINVAL;
+				}
 				reloc_dst_offset = 0;
 			} else {
 				reloc_dst_bo = cmd_bo;
@@ -215,8 +218,15 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				reloc_src_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
 							   reloc.src_handle, &reloc_list);
-				if (!reloc_src_bo)
+				if (!reloc_src_bo) {
+					DRM_ERROR("no reloc src bo fail %d\n", reloc.src_handle);
+					if (reloc_dst_bo != cmd_bo)
+						drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
+					qxl_release_free(qdev, release);
+					qxl_bo_list_unreserve(&reloc_list, true);
+					qxl_bo_unreserve(cmd_bo);
 					return -EINVAL;
+				}
 			} else
 				reloc_src_bo = NULL;
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO) {
