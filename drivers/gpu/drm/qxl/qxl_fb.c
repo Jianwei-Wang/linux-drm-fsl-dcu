@@ -504,7 +504,7 @@ static int qxlfb_create_pinned_object(struct qxl_fbdev *qfbdev,
 	/* TODO: unallocate and reallocate surface0 for real. Hack to just
 	 * have a large enough surface0 for 1024x768 Xorg 32bpp mode */
 	ret = qxl_gem_object_create(qdev, aligned_size, 0,
-				    QXL_GEM_DOMAIN_VRAM,
+				    QXL_GEM_DOMAIN_SURFACE,
 				    false, /* is discardable */
 				    false, /* is kernel (false means device) */
 				    NULL,
@@ -523,7 +523,7 @@ static int qxlfb_create_pinned_object(struct qxl_fbdev *qfbdev,
 	ret = qxl_bo_reserve(qbo, false);
 	if (unlikely(ret != 0))
 		goto out_unref;
-	ret = qxl_bo_pin(qbo, QXL_GEM_DOMAIN_VRAM, NULL);
+	ret = qxl_bo_pin(qbo, QXL_GEM_DOMAIN_SURFACE, NULL);
 	if (ret) {
 		qxl_bo_unreserve(qbo);
 		goto out_unref;

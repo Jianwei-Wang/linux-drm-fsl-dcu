@@ -26,19 +26,19 @@
 
 int qxl_fence_add_release(struct qxl_fence *qfence, uint32_t rel_id)
 {
-	spin_lock(&qfence->qdev->fence_lock);
+	spin_lock(&qfence->fence_lock);
 	if (qfence->num_used_releases + 1 > qfence->num_alloc_releases) {
 		qfence->num_alloc_releases += 4;
 		qfence->release_ids = krealloc(qfence->release_ids, sizeof(uint32_t)*qfence->num_alloc_releases, GFP_ATOMIC);
 		if (!qfence->release_ids) {
 			qfence->num_alloc_releases -= 4;
-			spin_unlock(&qfence->qdev->fence_lock);
+			spin_unlock(&qfence->fence_lock);
 			return -ENOMEM;
 		}
 	}
 	qfence->release_ids[qfence->num_used_releases++] = rel_id;
 	qfence->num_active_releases++;
-	spin_unlock(&qfence->qdev->fence_lock);
+	spin_unlock(&qfence->fence_lock);
 	return 0;
 }
 
@@ -46,19 +46,19 @@ int qxl_fence_remove_release(struct qxl_fence *qfence, uint32_t rel_id)
 {
 	int i;
 
-	spin_lock(&qfence->qdev->fence_lock);
+	spin_lock(&qfence->fence_lock);
 	for (i = 0; i < qfence->num_used_releases; i++)
 		if (qfence->release_ids[i] == rel_id)
 			break;
 
 	if (i == qfence->num_used_releases) {
-		spin_unlock(&qfence->qdev->fence_lock);
+		spin_unlock(&qfence->fence_lock);
 		return -ENOENT;
 	}
 
 	qfence->release_ids[i] = 0;
 	qfence->num_active_releases--;
-	spin_unlock(&qfence->qdev->fence_lock);
+	spin_unlock(&qfence->fence_lock);
 	return 0;
 }
 
@@ -70,6 +70,7 @@ int qxl_fence_init(struct qxl_device *qdev, struct qxl_fence *qfence)
 	qfence->num_used_releases = 0;
 	qfence->num_active_releases = 0;
 	qfence->release_ids = NULL;
+	spin_lock_init(&qfence->fence_lock);
 	return 0;
 }
 

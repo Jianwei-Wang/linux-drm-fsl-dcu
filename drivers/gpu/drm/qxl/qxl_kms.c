@@ -91,7 +91,6 @@ int qxl_device_init(struct qxl_device *qdev,
 	mutex_init(&qdev->gem.mutex);
 	mutex_init(&qdev->update_area_mutex);
 	mutex_init(&qdev->release_mutex);
-	spin_lock_init(&qdev->fence_lock);
 	INIT_LIST_HEAD(&qdev->gem.objects);
 
 	qdev->rom_base = pci_resource_start(pdev, 2);

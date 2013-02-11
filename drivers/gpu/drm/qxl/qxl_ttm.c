@@ -157,6 +157,7 @@ static int qxl_bo_man_get_node(struct ttm_mem_type_manager *man,
 	int count_loops = 0;
 
 	ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
+#if 0
 	while (unlikely(ret || mem->mm_node == NULL)) {
 		qxl_io_notify_oom(qdev);
 
@@ -164,10 +165,11 @@ static int qxl_bo_man_get_node(struct ttm_mem_type_manager *man,
 		mdelay(10);
 		count_loops++;
 		if (count_loops == 2)
-		  return 0;
+		  return -ENOMEM;
 		/* TODO - sleep here */
 		ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
 	}
+#endif
 	return ret;
 }
 
@@ -400,46 +402,119 @@ static int qxl_sync_obj_wait(void *sync_obj,
 	int count = 0, sc = 0;
 	struct qxl_bo *bo = container_of(qfence, struct qxl_bo, fence);
 
-	spin_lock(&qfence->qdev->fence_lock);
+	spin_lock(&qfence->fence_lock);
 	if (qfence->num_active_releases == 0) {
-		spin_unlock(&qfence->qdev->fence_lock);
+		spin_unlock(&qfence->fence_lock);
 		return 0;
 	}
-	spin_unlock(&qfence->qdev->fence_lock);	  
+	spin_unlock(&qfence->fence_lock);	  
 
 retry:
-	if (bo->type == QXL_GEM_DOMAIN_SURFACE) {
-		if (sc == 0)
+	if (sc == 0) {
+		if (bo->type == QXL_GEM_DOMAIN_SURFACE)
 			qxl_update_surface(qfence->qdev, bo);
-		else
-			qxl_io_flush_surfaces(qfence->qdev);
-		sc++;
-		qxl_io_flush_release(qfence->qdev);
-	} else
-		qxl_io_flush_release(qfence->qdev);
-
-	for (count = 0; count < 100; count++) {
-		queue_work(qfence->qdev->gc_queue, &qfence->qdev->gc_work);
-		usleep_range(500,1000);
-		spin_lock(&qfence->qdev->fence_lock);
-		if (qfence->num_active_releases == 0) {
-			spin_unlock(&qfence->qdev->fence_lock);
-			return 0;
-		}
-		qxl_io_flush_release(qfence->qdev);
-		spin_unlock(&qfence->qdev->fence_lock);
+	} else if (sc == 1)
+		qxl_io_flush_surfaces(qfence->qdev);
+	else if (sc > 1) {
+		printk("notifying oom from sync obj wait\n");
+		qxl_io_notify_oom(qfence->qdev);
 	}
 
+	qxl_release_ring_flush(qfence->qdev);
+	sc++;
 
-	spin_lock(&qfence->qdev->fence_lock);
+	for (count = 0; count < 10; count++) {
+		bool ret;
+		ret = qxl_queue_garbage_collect(qfence->qdev, true);
+		if (ret == false)
+			break;
+
+		spin_lock(&qfence->fence_lock);
+		if (qfence->num_active_releases == 0) {
+			spin_unlock(&qfence->fence_lock);
+			return 0;
+		}
+		qxl_release_ring_flush(qfence->qdev);
+		spin_unlock(&qfence->fence_lock);
+	}
+
+	spin_lock(&qfence->fence_lock);
 	if (qfence->num_active_releases) {
+		int i;
+		bool have_drawable_releases = false;
 		qxl_io_log(qfence->qdev, "sync obj %d still has outstanding releases %d %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases, qfence->release_ids[0]);
+		for (i = 0; i < qfence->num_used_releases; i++) {
+			struct drm_qxl_release *release;
+			if (qfence->release_ids[i] == 0)
+				continue;
+			release = qxl_release_from_id_locked(qfence->qdev, qfence->release_ids[i]);
+			if (release == NULL)
+				continue;
+			qxl_io_log(qfence->qdev, "release %d is %d\n", qfence->release_ids[i], release->type);
+
+			if (release->type == QXL_RELEASE_SURFACE_CMD) {
+				void *ptr;
+				struct qxl_surface_cmd *scmd;
+				int ret;
+				struct qxl_bo *bo;
+				bool reserved = true;
+				bo = release->bos[0];
+				ret = qxl_bo_reserve(bo, false);
+				if (ret) {
+					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", qfence->release_ids[i]);
+					reserved = false;
+				}
+				
+				ptr = qxl_bo_kmap_atomic_page(qfence->qdev, bo, release->release_offset & PAGE_SIZE);
+				scmd = ptr + (release->release_offset & ~PAGE_SIZE);
+
+				qxl_io_log(qfence->qdev, "surf %d %d\n", scmd->surface_id, scmd->type);
+				if (scmd->type == 0) 
+					qxl_io_log(qfence->qdev, "CREATE %llx %d %d %d %d\n", scmd->u.surface_create.data, scmd->u.surface_create.width, scmd->u.surface_create.height, scmd->u.surface_create.stride);
+				qxl_bo_kunmap_atomic_page(qfence->qdev, bo, ptr);
+				if (reserved)
+					qxl_bo_unreserve(bo);
+			} 
+				
+			if (release->type != QXL_RELEASE_DRAWABLE)
+				continue;
+			
+			have_drawable_releases = true;
+			{
+				void *ptr;
+				struct qxl_drawable *draw;
+				int ret;
+				struct qxl_bo *bo;
+				bo = release->bos[0];
+				ret = qxl_bo_reserve(bo, false);
+				if (ret) {
+					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", qfence->release_ids[i]);
+					continue;
+				}
+				
+				ptr = qxl_bo_kmap_atomic_page(qfence->qdev, bo, release->release_offset & PAGE_SIZE);
+				draw = ptr + (release->release_offset & ~PAGE_SIZE);
+
+				qxl_io_log(qfence->qdev, "draw %d %d\n", draw->surface_id, draw->type);
+				if (draw->type == 3) 
+					qxl_io_log(qfence->qdev, "COPY %llx %d %d %d %d\n", draw->u.copy.src_bitmap, draw->u.copy.src_area.top, draw->u.copy.src_area.bottom, draw->u.copy.src_area.left, draw->u.copy.src_area.right);
+				qxl_bo_kunmap_atomic_page(qfence->qdev, bo, ptr);
+				qxl_bo_unreserve(bo);
+			}
+			
+		}
+
 		WARN(1, "sync obj %d still has outstanding releases %d %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases, qfence->release_ids[0]);
-		spin_unlock(&qfence->qdev->fence_lock);
-		if (sc == 1)
+		spin_unlock(&qfence->fence_lock);
+		qxl_queue_garbage_collect(qfence->qdev, true);
+
+		if (have_drawable_releases || sc < 4) {
+			if (have_drawable_releases && sc > 20)
+				return -EBUSY;
 			goto retry;
+		}
 	} else
-		spin_unlock(&qfence->qdev->fence_lock);
+		spin_unlock(&qfence->fence_lock);
 	return 0;
 }
 
@@ -461,9 +536,9 @@ static bool qxl_sync_obj_signaled(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
 	bool ret;
-	spin_lock(&qfence->qdev->fence_lock);
+	spin_lock(&qfence->fence_lock);
 	ret = qfence->num_active_releases == 0;
-	spin_unlock(&qfence->qdev->fence_lock);
+	spin_unlock(&qfence->fence_lock);
 	return ret;
 }
 
@@ -472,7 +547,7 @@ static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
 {
 	struct qxl_bo *qbo;
 	struct qxl_device *qdev;
-	int ret;
+
 	if (!qxl_ttm_bo_is_qxl_bo(bo)) 
 		return;
 	qbo = container_of(bo, struct qxl_bo, tbo);

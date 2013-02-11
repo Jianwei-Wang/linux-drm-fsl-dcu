@@ -157,10 +157,23 @@ void qxl_ring_wait_idle(struct qxl_ring *ring)
 	spin_unlock_irqrestore(&ring->lock, flags);
 }
 
-void qxl_queue_garbage_collect(struct qxl_device *qdev)
+void qxl_release_ring_flush(struct qxl_device *qdev)
 {
-	if (!qxl_check_idle(qdev->release_ring))
+	if (!qxl_check_header(qdev->release_ring))
+		return;
+	qxl_io_flush_release(qdev);
+}
+
+bool qxl_queue_garbage_collect(struct qxl_device *qdev, bool flush)
+{
+	if (!qxl_check_idle(qdev->release_ring)) {
 		queue_work(qdev->gc_queue, &qdev->gc_work);
+		if (flush) {
+			flush_work(&qdev->gc_work);
+		}
+		return true;
+	}
+	return false;
 }
 
 int qxl_garbage_collect(struct qxl_device *qdev)
@@ -176,15 +189,18 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
 		QXL_INFO(qdev, "popped %lld\n", id);
 		while (id) {
+			bool reserved = true;
 			release = qxl_release_from_id_locked(qdev, id);
 			if (release == NULL)
 				break;
 			bo = release->bos[0];
 
-			ret = qxl_bo_reserve(bo, false);
+			ret = qxl_bo_reserve(bo, true);
 			if (ret) {
+				qxl_io_log(qdev, "failed to reserve release on garbage collect %d\n", id);
 				DRM_ERROR("failed to reserve release %d\n", id);
-				return ret;
+				//	return ret;
+				reserved = false;
 			}
 			
 			ptr = qxl_bo_kmap_atomic_page(qdev, bo, release->release_offset & PAGE_SIZE);
@@ -192,7 +208,8 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			next_id = info->next;
 			qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 
-			qxl_bo_unreserve(bo);
+			if (reserved)
+				qxl_bo_unreserve(bo);
 			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
 				next_id);
 
@@ -444,7 +461,7 @@ again:
 		spin_lock(&qdev->surf_id_idr_lock);
 		idr_remove(&qdev->surf_id_idr, handle);
 		spin_unlock(&qdev->surf_id_idr_lock);
-		qxl_reap_surface_id(qdev, 20);
+		qxl_reap_surface_id(qdev, 2);
 		goto again;
 	}
 	surf->surface_id = handle;
@@ -632,6 +649,8 @@ again:
 		ret = qxl_reap_surf(qdev, objptr, stall);
 		if (ret == 0)
 			num_reaped++;
+		if (num_reaped == max_to_reap)
+			break;
 	}
 	if (num_reaped == 0 && stall == false) {
 		stall = true;

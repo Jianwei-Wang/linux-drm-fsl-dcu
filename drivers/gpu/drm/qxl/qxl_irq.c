@@ -13,7 +13,7 @@ irqreturn_t qxl_irq_handler(DRM_IRQ_ARGS)
 	if (pending & QXL_INTERRUPT_DISPLAY) {
 		atomic_inc(&qdev->irq_received_display);
 		wake_up_all(&qdev->display_event);
-		qxl_queue_garbage_collect(qdev);
+		qxl_queue_garbage_collect(qdev, false);
 	}
 	if (pending & QXL_INTERRUPT_CURSOR) {
 		atomic_inc(&qdev->irq_received_cursor);

@@ -76,6 +76,7 @@ struct qxl_fence {
 	uint32_t num_alloc_releases;
 	uint32_t num_used_releases;
 	uint32_t *release_ids;
+	spinlock_t fence_lock;
 };
 
 struct qxl_bo {
@@ -322,7 +323,6 @@ struct qxl_device {
 	struct workqueue_struct *gc_queue;
 	struct work_struct gc_work;
 
-	spinlock_t fence_lock;
 };
 
 /* forward declaration for QXL_INFO_IO */
@@ -462,6 +462,7 @@ void qxl_io_monitors_config(struct qxl_device *qdev);
 int qxl_ring_push(struct qxl_ring *ring, const void *new_elt, bool interruptible);
 void qxl_io_flush_release(struct qxl_device *qdev);
 void qxl_io_flush_surfaces(struct qxl_device *qdev);
+void qxl_release_ring_flush(struct qxl_device *qdev);
 
 /*
  * qxl_bo_add_resource.
@@ -520,7 +521,7 @@ void qxl_release_add_res(struct qxl_device *qdev,
 struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id);
 
-void qxl_queue_garbage_collect(struct qxl_device *qdev);
+bool qxl_queue_garbage_collect(struct qxl_device *qdev, bool flush);
 int qxl_garbage_collect(struct qxl_device *qdev);
 
 /* debugfs */
