@@ -73,9 +73,8 @@ enum {
 struct qxl_fence {
 	struct qxl_device *qdev;
 	uint32_t num_active_releases;
-	uint32_t num_alloc_releases;
-	uint32_t num_used_releases;
 	uint32_t *release_ids;
+	struct radix_tree_root tree;
 	spinlock_t fence_lock;
 };
 

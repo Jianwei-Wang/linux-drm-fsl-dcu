@@ -442,15 +442,19 @@ retry:
 	if (qfence->num_active_releases) {
 		int i;
 		bool have_drawable_releases = false;
-		qxl_io_log(qfence->qdev, "sync obj %d still has outstanding releases %d %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases, qfence->release_ids[0]);
-		for (i = 0; i < qfence->num_used_releases; i++) {
+		void **slot;
+		struct radix_tree_iter iter;
+		int release_id;
+
+		qxl_io_log(qfence->qdev, "sync obj %d still has outstanding releases %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases);
+		radix_tree_for_each_slot(slot, &qfence->tree, &iter, 0) {
 			struct drm_qxl_release *release;
-			if (qfence->release_ids[i] == 0)
-				continue;
-			release = qxl_release_from_id_locked(qfence->qdev, qfence->release_ids[i]);
+
+			release_id = iter.index;
+			release = qxl_release_from_id_locked(qfence->qdev, release_id);
 			if (release == NULL)
 				continue;
-			qxl_io_log(qfence->qdev, "release %d is %d\n", qfence->release_ids[i], release->type);
+			qxl_io_log(qfence->qdev, "release %d is %d\n", release_id, release->type);
 
 			if (release->type == QXL_RELEASE_SURFACE_CMD) {
 				void *ptr;
@@ -461,7 +465,7 @@ retry:
 				bo = release->bos[0];
 				ret = qxl_bo_reserve(bo, false);
 				if (ret) {
-					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", qfence->release_ids[i]);
+					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", release_id);
 					reserved = false;
 				}
 				
@@ -488,7 +492,7 @@ retry:
 				bo = release->bos[0];
 				ret = qxl_bo_reserve(bo, false);
 				if (ret) {
-					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", qfence->release_ids[i]);
+					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", release_id);
 					continue;
 				}
 				
@@ -504,7 +508,7 @@ retry:
 			
 		}
 
-		WARN(1, "sync obj %d still has outstanding releases %d %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases, qfence->release_ids[0]);
+		WARN(1, "sync obj %d still has outstanding releases %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases);
 		spin_unlock(&qfence->fence_lock);
 		qxl_queue_garbage_collect(qfence->qdev, true);
 
