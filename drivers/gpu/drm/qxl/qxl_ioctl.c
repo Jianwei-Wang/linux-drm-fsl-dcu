@@ -133,7 +133,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	INIT_LIST_HEAD(&reloc_list.bos);
 
 	for (cmd_num = 0; cmd_num < execbuffer->commands_num; ++cmd_num) {
-		struct drm_qxl_release *release;
+		struct qxl_release *release;
 		struct qxl_bo *cmd_bo;
 		int release_type;
 		struct drm_qxl_command *commands =

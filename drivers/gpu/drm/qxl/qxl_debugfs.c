@@ -123,7 +123,7 @@ static int idr_iter_fn(int id, void *p, void *data)
 	struct seq_file *m = release_data->m;
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
 	struct qxl_device *qdev = node->minor->dev->dev_private;
-	struct drm_qxl_release *release = qxl_release_from_id_locked(qdev, id);
+	struct qxl_release *release = qxl_release_from_id_locked(qdev, id);
 
 	seq_printf(m, "%d, type %d bo %d\n", id, release->type,
 		   release->bo_count);

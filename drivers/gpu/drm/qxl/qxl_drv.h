@@ -170,7 +170,7 @@ enum {
 /* drm_ prefix to differentiate from qxl_release_info in
  * spice-protocol/qxl_dev.h */
 #define QXL_MAX_RES 96
-struct drm_qxl_release {
+struct qxl_release {
 	int id;
 	int type;
 	int bo_count;
@@ -346,7 +346,7 @@ struct qxl_ring *qxl_ring_create(struct qxl_ring_header *header,
 				 wait_queue_head_t *push_event);
 void qxl_ring_free(struct qxl_ring *ring);
 extern void *qxl_allocnf(struct qxl_device *qdev, unsigned long size,
-			 struct drm_qxl_release *release);
+			 struct qxl_release *release);
 
 
 static inline void *
@@ -435,7 +435,7 @@ int qxl_mmap(struct file *filp, struct vm_area_struct *vma);
 /* qxl image */
 
 struct qxl_image *qxl_image_create(struct qxl_device *qdev,
-				   struct drm_qxl_release *release,
+				   struct qxl_release *release,
 				   struct qxl_bo **image_bo,
 				   const uint8_t *data,
 				   int x, int y, int width, int height,
@@ -471,18 +471,18 @@ void qxl_bo_add_resource(struct qxl_bo *main_bo, struct qxl_bo *resource);
 
 /* used both directly via qxl_draw and via ioctl execbuffer */
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
-			   int type, struct drm_qxl_release **release,
+			   int type, struct qxl_release **release,
 			   struct qxl_bo **bo);
 int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
-			       int type, struct drm_qxl_release **release,
+			       int type, struct qxl_release **release,
 			       struct qxl_bo **rbo);
 int qxl_fence_releaseable(struct qxl_device *qdev,
-			  struct drm_qxl_release *release);
+			  struct qxl_release *release);
 int
 qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo,
 		      uint32_t type, bool interruptible);
 int
-qxl_push_command_ring_release(struct qxl_device *qdev, struct drm_qxl_release *release,
+qxl_push_command_ring_release(struct qxl_device *qdev, struct qxl_release *release,
 			      uint32_t type, bool interruptible);
 int
 qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo,
@@ -509,15 +509,15 @@ void qxl_draw_copyarea(struct qxl_device *qdev,
 
 uint64_t
 qxl_release_alloc(struct qxl_device *qdev, int type,
-		  struct drm_qxl_release **ret);
+		  struct qxl_release **ret);
 
 void qxl_release_free(struct qxl_device *qdev,
-		      struct drm_qxl_release *release);
+		      struct qxl_release *release);
 void qxl_release_add_res(struct qxl_device *qdev,
-			 struct drm_qxl_release *release,
+			 struct qxl_release *release,
 			 struct qxl_bo *bo);
 /* used by qxl_debugfs_release */
-struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
+struct qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id);
 
 bool qxl_queue_garbage_collect(struct qxl_device *qdev, bool flush);

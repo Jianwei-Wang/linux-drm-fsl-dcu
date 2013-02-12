@@ -448,7 +448,7 @@ retry:
 
 		qxl_io_log(qfence->qdev, "sync obj %d still has outstanding releases %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases);
 		radix_tree_for_each_slot(slot, &qfence->tree, &iter, 0) {
-			struct drm_qxl_release *release;
+			struct qxl_release *release;
 
 			release_id = iter.index;
 			release = qxl_release_from_id_locked(qfence->qdev, release_id);

@@ -220,7 +220,7 @@ static void
 qxl_hide_cursor(struct qxl_device *qdev)
 {
 	struct qxl_bo *cmd_bo;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	struct qxl_cursor_cmd *cmd;
 
 	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_CURSOR_CMD,
@@ -245,7 +245,7 @@ static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
 	struct qxl_cursor *cursor;
 	struct qxl_cursor_cmd *cmd;
 	struct qxl_bo *cursor_bo, *cmd_bo, *user_bo;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	void *user_ptr;
 
 	int size = 64*64*4;
@@ -326,7 +326,7 @@ static int qxl_crtc_cursor_move(struct drm_crtc *crtc,
 	struct qxl_device *qdev = dev->dev_private;
 	struct qxl_crtc *qcrtc = to_qxl_crtc(crtc);
 	struct qxl_bo *cmd_bo;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	struct qxl_cursor_cmd *cmd;
 
 	cmd = qxl_alloc_releasable(qdev, sizeof(*cmd), QXL_RELEASE_CURSOR_CMD,

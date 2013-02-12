@@ -34,9 +34,9 @@
 
 uint64_t
 qxl_release_alloc(struct qxl_device *qdev, int type,
-		  struct drm_qxl_release **ret)
+		  struct qxl_release **ret)
 {
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	int handle = 0;
 	size_t size = sizeof(*release);
 	int idr_ret;
@@ -71,7 +71,7 @@ release_fail:
 
 void
 qxl_release_free(struct qxl_device *qdev,
-		 struct drm_qxl_release *release)
+		 struct qxl_release *release)
 {
 	int i;
 
@@ -91,7 +91,7 @@ qxl_release_free(struct qxl_device *qdev,
 }
 
 void
-qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
+qxl_release_add_res(struct qxl_device *qdev, struct qxl_release *release,
 		    struct qxl_bo *bo)
 {
 	int i;
@@ -100,7 +100,7 @@ qxl_release_add_res(struct qxl_device *qdev, struct drm_qxl_release *release,
 			return;
 
 	if (release->bo_count >= QXL_MAX_RES) {
-		DRM_ERROR("exceeded max resource on a drm_qxl_release item\n");
+		DRM_ERROR("exceeded max resource on a qxl_release item\n");
 		return;
 	}
 	release->bos[release->bo_count++] = bo;
@@ -116,7 +116,7 @@ int qxl_release_bo_alloc(struct qxl_device *qdev,
 }
 
 int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
-			       int type, struct drm_qxl_release **release,
+			       int type, struct qxl_release **release,
 			       struct qxl_bo **rbo)
 {
 	struct qxl_bo *bo;
@@ -187,7 +187,7 @@ out_unref:
 }
 
 void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
-			   int type, struct drm_qxl_release **release,
+			   int type, struct qxl_release **release,
 			   struct qxl_bo **bo)
 {
 	int idr_ret;
@@ -201,7 +201,7 @@ void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 }
 
 int qxl_fence_releaseable(struct qxl_device *qdev,
-			  struct drm_qxl_release *release)
+			  struct qxl_release *release)
 {
 	int i, ret;
 	for (i = 0; i < release->bo_count; i++) {
@@ -214,10 +214,10 @@ int qxl_fence_releaseable(struct qxl_device *qdev,
 	return 0;
 }
 
-struct drm_qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
+struct qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id)
 {
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 
 	spin_lock(&qdev->release_idr_lock);
 	release = idr_find(&qdev->release_idr, id);

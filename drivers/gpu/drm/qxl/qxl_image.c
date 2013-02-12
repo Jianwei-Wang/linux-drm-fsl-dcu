@@ -119,7 +119,7 @@ void debug_fill(uint8_t *data, int width, int height)
 
 static struct qxl_image *
 qxl_image_create_helper(struct qxl_device *qdev,
-			struct drm_qxl_release *release,
+			struct qxl_release *release,
 			struct qxl_bo **image_bo,
 			const uint8_t *data,
 			int width, int height,
@@ -216,7 +216,7 @@ qxl_image_create_helper(struct qxl_device *qdev,
 }
 
 struct qxl_image *qxl_image_create(struct qxl_device *qdev,
-				   struct drm_qxl_release *release,
+				   struct qxl_release *release,
 				   struct qxl_bo **image_bo,
 				   const uint8_t *data,
 				   int x, int y, int width, int height,

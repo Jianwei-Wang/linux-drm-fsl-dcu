@@ -29,7 +29,7 @@
 static struct qxl_rect *drawable_set_clipping(struct qxl_device *qdev,
 					      struct qxl_drawable *drawable,
 					      unsigned num_clips,
-					      struct drm_qxl_release *release)
+					      struct qxl_release *release)
 {
 	struct qxl_clip_rects *dev_clips;
 
@@ -48,7 +48,7 @@ static struct qxl_rect *drawable_set_clipping(struct qxl_device *qdev,
 static struct qxl_drawable *
 make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 	      const struct qxl_rect *rect,
-	      struct drm_qxl_release **release,
+	      struct qxl_release **release,
 	      struct qxl_bo **drawable_bo)
 {
 	struct qxl_drawable *drawable;
@@ -89,7 +89,7 @@ make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 
 /* TODO: bo per command is wasteful. add an offset */
 int
-qxl_push_command_ring_release(struct qxl_device *qdev, struct drm_qxl_release *release,
+qxl_push_command_ring_release(struct qxl_device *qdev, struct qxl_release *release,
 			      uint32_t type, bool interruptible)
 {
 	struct qxl_command cmd;
@@ -129,7 +129,7 @@ push_drawable(struct qxl_device *qdev, struct qxl_bo *drawable_bo)
 }
 
 static struct qxl_palette *qxl_palette_create_1bit(
-			struct drm_qxl_release *release,
+			struct qxl_release *release,
 			const struct qxl_fb_image *qxl_fb_image)
 {
 	struct qxl_device *qdev = qxl_fb_image->qdev;
@@ -175,7 +175,7 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 	int height = fb_image->height;
 	const char *src = fb_image->data;
 	int depth = fb_image->depth;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	struct qxl_bo *image_bo;
 	struct qxl_bo *drawable_bo;
 
@@ -282,7 +282,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	/* depth is not actually interesting, we don't mask with it */
 	int depth = qxl_fb->base.bits_per_pixel;
 	uint8_t *surface_base = bo->kptr;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	struct qxl_bo *image_bo;
 	struct qxl_bo *drawable_bo;
 
@@ -346,7 +346,7 @@ void qxl_draw_copyarea(struct qxl_device *qdev,
 {
 	struct qxl_drawable *drawable;
 	struct qxl_rect rect;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	struct qxl_bo *drawable_bo;
 
 	rect.left = dx;
@@ -368,7 +368,7 @@ void qxl_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec)
 	uint32_t color = qxl_draw_fill_rec->color;
 	uint16_t rop = qxl_draw_fill_rec->rop;
 	struct qxl_drawable *drawable;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	struct qxl_bo *drawable_bo;
 
 	drawable = make_drawable(qdev, 0, QXL_DRAW_FILL, &rect, &release,

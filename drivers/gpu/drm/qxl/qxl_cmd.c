@@ -178,7 +178,7 @@ bool qxl_queue_garbage_collect(struct qxl_device *qdev, bool flush)
 
 int qxl_garbage_collect(struct qxl_device *qdev)
 {
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	uint64_t id, next_id;
 	int i = 0;
 	int ret;
@@ -268,7 +268,7 @@ out_unref:
 }
 
 void *qxl_allocnf(struct qxl_device *qdev, unsigned long size,
-		  struct drm_qxl_release *release)
+		  struct qxl_release *release)
 {
 	struct qxl_bo *bo;
 
@@ -488,7 +488,7 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 {
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	void *ptr;
 	int ret;
 
@@ -539,7 +539,7 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 {
 	struct qxl_surface_cmd *cmd;
 	struct qxl_bo *cmd_bo;
-	struct drm_qxl_release *release;
+	struct qxl_release *release;
 	int ret;
 	void *ptr;
 
