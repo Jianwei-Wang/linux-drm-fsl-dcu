@@ -96,6 +96,7 @@ struct qxl_bo {
 	struct qxl_surface surf;
 	uint32_t surface_id;
 	struct qxl_fence fence; /* per bo fence  - list of releases */
+	struct qxl_release *surf_create;
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
@@ -475,6 +476,7 @@ void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 			   struct qxl_bo **bo);
 int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 				       enum qxl_surface_cmd_type surface_cmd_type,
+				       struct qxl_release *create_rel,
 				       struct qxl_release **release,
 				       struct qxl_bo **rbo);
 int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,

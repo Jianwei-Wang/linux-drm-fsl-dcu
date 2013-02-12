@@ -30,8 +30,14 @@
  */
 /* manage releaseables */
 /* stack them 16 high for now -drawable object is 191 */
-#define RELEASES_PER_BO (4096 / 256)
+#define RELEASE_SIZE 256
+#define RELEASES_PER_BO (4096 / RELEASE_SIZE)
+/* put an alloc/dealloc surface cmd into one bo and round up to 128 */
+#define SURFACE_RELEASE_SIZE 128
+#define SURFACE_RELEASES_PER_BO (4096 / SURFACE_RELEASE_SIZE)
 
+static const int release_size_per_bo[] = { RELEASE_SIZE, SURFACE_RELEASE_SIZE };
+static const int releases_per_bo[] = { RELEASES_PER_BO, SURFACE_RELEASES_PER_BO };
 uint64_t
 qxl_release_alloc(struct qxl_device *qdev, int type,
 		  struct qxl_release **ret)
@@ -117,9 +123,40 @@ int qxl_release_bo_alloc(struct qxl_device *qdev,
 
 int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 				       enum qxl_surface_cmd_type surface_cmd_type,
+				       struct qxl_release *create_rel,
 				       struct qxl_release **release,
 				       struct qxl_bo **rbo)
 {
+	
+	if (surface_cmd_type == QXL_SURFACE_CMD_DESTROY && create_rel) {
+		void *ptr;
+		int idr_ret;
+		int ret;
+		struct qxl_bo *bo;
+		union qxl_release_info *info;
+		/* stash the release after the create command */
+		idr_ret = qxl_release_alloc(qdev, QXL_RELEASE_SURFACE_CMD, release);
+		bo = qxl_bo_ref(create_rel->bos[0]);
+
+		ret = qxl_bo_reserve(bo, false);
+		if (ret) {
+			mutex_unlock(&qdev->release_mutex);
+			goto out_unref;
+		}
+		(*release)->release_offset = create_rel->release_offset + 64;
+		*rbo = bo;
+
+		ptr = qxl_bo_kmap_atomic_page(qdev, bo, 0);
+		info = ptr + (*release)->release_offset;
+		info->id = idr_ret;	
+		qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
+
+		qxl_release_add_res(qdev, *release, bo);
+		return 0;
+	out_unref:
+		qxl_bo_unref(&bo);
+		return ret;
+	}
 	return qxl_alloc_release_reserved(qdev, sizeof(struct qxl_surface_cmd),
 					  QXL_RELEASE_SURFACE_CMD, release, rbo);
 }
@@ -147,7 +184,7 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 	idr_ret = qxl_release_alloc(qdev, type, release);
 
 	mutex_lock(&qdev->release_mutex);
-	if (qdev->current_release_bo_offset[cur_idx] + 1 >= RELEASES_PER_BO) {
+	if (qdev->current_release_bo_offset[cur_idx] + 1 >= releases_per_bo[cur_idx]) {
 		qxl_bo_unref(&qdev->current_release_bo[cur_idx]);
 		qdev->current_release_bo_offset[cur_idx] = 0;
 		qdev->current_release_bo[cur_idx] = NULL;
@@ -174,7 +211,7 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 		goto out_unref;
 	}
 
-	(*release)->release_offset = qdev->current_release_bo_offset[cur_idx] * 256;
+	(*release)->release_offset = qdev->current_release_bo_offset[cur_idx] * release_size_per_bo[cur_idx];
 	qdev->current_release_bo_offset[cur_idx]++;
 
 	*rbo = bo;
