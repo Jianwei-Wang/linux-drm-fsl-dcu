@@ -495,8 +495,8 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	if (surf->hw_surf_alloc)
 		return 0;
 
-	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
-					 &release, &cmd_bo);
+	ret = qxl_alloc_surface_release_reserved(qdev, QXL_SURFACE_CMD_CREATE,
+						 &release, &cmd_bo);
 	if (ret)
 		return ret;
 
@@ -546,8 +546,8 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	if (!surf->hw_surf_alloc)
 		return 0;
 
-	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd), QXL_RELEASE_SURFACE_CMD,
-					 &release, &cmd_bo);
+	ret = qxl_alloc_surface_release_reserved(qdev, QXL_SURFACE_CMD_DESTROY,
+						 &release, &cmd_bo);
 	if (ret)
 		return ret;
 
