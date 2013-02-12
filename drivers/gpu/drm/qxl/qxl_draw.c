@@ -29,19 +29,20 @@
 static struct qxl_rect *drawable_set_clipping(struct qxl_device *qdev,
 					      struct qxl_drawable *drawable,
 					      unsigned num_clips,
+					      struct qxl_bo **clips_bo,
 					      struct qxl_release *release)
 {
 	struct qxl_clip_rects *dev_clips;
 
 	dev_clips = qxl_allocnf(qdev, sizeof(*dev_clips) +
-				sizeof(struct qxl_rect) * num_clips, release);
+				sizeof(struct qxl_rect) * num_clips, release, clips_bo);
 	dev_clips->num_rects = num_clips;
 	dev_clips->chunk.next_chunk = 0;
 	dev_clips->chunk.prev_chunk = 0;
 	dev_clips->chunk.data_size = sizeof(struct qxl_rect) * num_clips;
 	drawable->clip.type = SPICE_CLIP_TYPE_RECTS;
 	drawable->clip.data = qxl_bo_physical_address(qdev,
-						      release->bos[release->bo_count - 1], 0);
+						      *clips_bo, 0);
 	return (struct qxl_rect *)dev_clips->chunk.data;
 }
 
@@ -130,6 +131,7 @@ push_drawable(struct qxl_device *qdev, struct qxl_bo *drawable_bo)
 
 static struct qxl_palette *qxl_palette_create_1bit(
 			struct qxl_release *release,
+			struct qxl_bo **palette_bo,
 			const struct qxl_fb_image *qxl_fb_image)
 {
 	struct qxl_device *qdev = qxl_fb_image->qdev;
@@ -141,10 +143,9 @@ static struct qxl_palette *qxl_palette_create_1bit(
 	static uint64_t unique; /* we make no attempt to actually set this
 				 * correctly globaly, since that would require
 				 * tracking all of our palettes. */
-
 	ret = qxl_allocnf(qdev,
 			  sizeof(struct qxl_palette) + sizeof(uint32_t) * 2,
-			  release);
+			  release, palette_bo);
 	ret->num_ents = 2;
 	ret->unique = unique++;
 	if (visual == FB_VISUAL_TRUECOLOR || visual == FB_VISUAL_DIRECTCOLOR) {
@@ -213,15 +214,17 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 	if (depth == 1) {
 		struct qxl_bo *palette_bo;
 
-		palette = qxl_palette_create_1bit(release, qxl_fb_image);
-		palette_bo = release->bos[release->bo_count - 1];
+		palette = qxl_palette_create_1bit(release, &palette_bo, qxl_fb_image);
 		image->u.bitmap.palette =
 			qxl_bo_physical_address(qdev, palette_bo, 0);
+		qxl_bo_unref(&palette_bo);
 	}
 	drawable->u.copy.src_bitmap =
 		qxl_bo_physical_address(qdev, image_bo, 0);
 
+	qxl_bo_unref(&image_bo);
 	push_drawable(qdev, drawable_bo);
+	qxl_bo_unref(&drawable_bo);
 }
 
 #if 0
@@ -285,6 +288,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	struct qxl_release *release;
 	struct qxl_bo *image_bo;
 	struct qxl_bo *drawable_bo;
+	struct qxl_bo *clips_bo;
 
 	left = clips->x1;
 	right = clips->x2;
@@ -308,7 +312,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	drawable_rect.bottom = bottom;
 	drawable = make_drawable(qdev, 0, QXL_DRAW_COPY, &drawable_rect,
 				 &release, &drawable_bo);
-	rects = drawable_set_clipping(qdev, drawable, num_clips, release);
+	rects = drawable_set_clipping(qdev, drawable, num_clips, &clips_bo, release);
 
 	drawable->u.copy.src_area.top = 0;
 	drawable->u.copy.src_area.bottom = height;
@@ -329,6 +333,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 		left, top, width, height, depth, stride);
 	drawable->u.copy.src_bitmap = qxl_bo_physical_address(qdev, image_bo, 0);
 
+	qxl_bo_unref(&image_bo);
 	clips_ptr = clips;
 	for (i = 0; i < num_clips; i++, clips_ptr += inc) {
 		rects[i].left   = clips_ptr->x1;
@@ -336,7 +341,10 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 		rects[i].top    = clips_ptr->y1;
 		rects[i].bottom = clips_ptr->y2;
 	}
+	qxl_bo_unref(&clips_bo);
+
 	push_drawable(qdev, drawable_bo);
+	qxl_bo_unref(&drawable_bo);
 }
 
 void qxl_draw_copyarea(struct qxl_device *qdev,
@@ -359,6 +367,7 @@ void qxl_draw_copyarea(struct qxl_device *qdev,
 	drawable->u.copy_bits.src_pos.y = sy;
 
 	push_drawable(qdev, drawable_bo);
+	qxl_bo_unref(&drawable_bo);
 }
 
 void qxl_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec)
@@ -383,4 +392,5 @@ void qxl_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec)
 	drawable->u.fill.mask.bitmap = 0;
 
 	push_drawable(qdev, drawable_bo);
+	qxl_bo_unref(&drawable_bo);
 }

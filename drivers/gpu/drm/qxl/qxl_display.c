@@ -230,6 +230,7 @@ qxl_hide_cursor(struct qxl_device *qdev)
 
 	qxl_fence_releaseable(qdev, release);
 	push_cursor(qdev, cmd_bo);
+	qxl_bo_unref(&cmd_bo);
 }
 
 static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
@@ -283,9 +284,7 @@ static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
 	/* allocate and copy over the cursor bo */
 	
 	cursor = qxl_allocnf(qdev, sizeof(struct qxl_cursor) + size,
-			     release);
-
-	cursor_bo = release->bos[release->bo_count - 1];
+			     release, &cursor_bo);
 
 	cursor->header.unique = 0;
 	cursor->header.type = SPICE_CURSOR_TYPE_ALPHA;
@@ -314,8 +313,10 @@ static int qxl_crtc_cursor_set(struct drm_crtc *crtc,
 	qxl_fence_releaseable(qdev, release);
 	push_cursor(qdev, cmd_bo);
 
+	qxl_bo_unref(&cursor_bo);
 	drm_gem_object_unreference_unlocked(obj);
 
+	qxl_bo_unref(&cmd_bo);
 	return ret;
 }
 
@@ -340,6 +341,7 @@ static int qxl_crtc_cursor_move(struct drm_crtc *crtc,
 
 	qxl_fence_releaseable(qdev, release);
 	push_cursor(qdev, cmd_bo);
+	qxl_bo_unref(&cmd_bo);
 	return 0;
 }
 

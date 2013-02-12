@@ -5,6 +5,7 @@
 #endif
 
 #include "qxl_drv.h"
+#include "qxl_object.h"
 
 struct image_info {
 	struct qxl_image *image;
@@ -141,8 +142,7 @@ qxl_image_create_helper(struct qxl_device *qdev,
 				  wrong (check the bitmaps are sent correctly
 				  first) */
 	chunk = qxl_allocnf(qdev, sizeof(*chunk) + height * chunk_stride,
-			    release);
-	chunk_bo = release->bos[release->bo_count - 1];
+			    release, &chunk_bo);
 
 	chunk->data_size = height * chunk_stride;
 	chunk->prev_chunk = 0;
@@ -162,8 +162,7 @@ qxl_image_create_helper(struct qxl_device *qdev,
 			memcpy(chunk->data + i*chunk_stride, data + i*stride,
 			       linesize);
 	/* Image */
-	image = qxl_allocnf(qdev, sizeof(*image), release);
-	*image_bo = release->bos[release->bo_count - 1];
+	image = qxl_allocnf(qdev, sizeof(*image), release, image_bo);
 
 	image->descriptor.id = 0;
 	image->descriptor.type = SPICE_IMAGE_TYPE_BITMAP;
@@ -194,6 +193,7 @@ qxl_image_create_helper(struct qxl_device *qdev,
 	image->u.bitmap.palette = 0;
 	image->u.bitmap.data = qxl_bo_physical_address(qdev, chunk_bo, 0);
 
+	qxl_bo_unref(&chunk_bo);
 	/* Add to hash table */
 	if (!hash) {
 		QXL_INFO(qdev, "%s: id %d has size %d %d\n", __func__,

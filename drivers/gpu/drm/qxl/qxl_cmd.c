@@ -268,13 +268,11 @@ out_unref:
 }
 
 void *qxl_allocnf(struct qxl_device *qdev, unsigned long size,
-		  struct qxl_release *release)
+		  struct qxl_release *release, struct qxl_bo **bo)
 {
-	struct qxl_bo *bo;
-
-	bo = qxl_create_pinned_bo(qdev, size);
-	qxl_release_add_res(qdev, release, bo);
-	return bo->kptr;
+	*bo = qxl_create_pinned_bo(qdev, size);
+	qxl_release_add_res(qdev, release, *bo);
+	return (*bo)->kptr;
 }
 
 static int wait_for_io_cmd_user(struct qxl_device *qdev, uint8_t val, long port)

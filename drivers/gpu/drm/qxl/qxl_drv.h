@@ -347,7 +347,8 @@ struct qxl_ring *qxl_ring_create(struct qxl_ring_header *header,
 				 wait_queue_head_t *push_event);
 void qxl_ring_free(struct qxl_ring *ring);
 extern void *qxl_allocnf(struct qxl_device *qdev, unsigned long size,
-			 struct qxl_release *release);
+			 struct qxl_release *release,
+			 struct qxl_bo **bo);
 
 
 static inline void *

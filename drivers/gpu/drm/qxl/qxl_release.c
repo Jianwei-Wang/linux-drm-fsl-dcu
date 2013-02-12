@@ -109,7 +109,8 @@ qxl_release_add_res(struct qxl_device *qdev, struct qxl_release *release,
 		DRM_ERROR("exceeded max resource on a qxl_release item\n");
 		return;
 	}
-	release->bos[release->bo_count++] = bo;
+	
+	release->bos[release->bo_count++] = qxl_bo_ref(bo);
 }
 
 int qxl_release_bo_alloc(struct qxl_device *qdev,
@@ -152,7 +153,6 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 		qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 
 		qxl_release_add_res(qdev, *release, bo);
-		return 0;
 	out_unref:
 		qxl_bo_unref(&bo);
 		return ret;
@@ -225,8 +225,6 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 
 	qxl_release_add_res(qdev, *release, bo);
 
-
-	return 0;
 out_unref:
 	qxl_bo_unref(&bo);
 	return ret;
@@ -240,9 +238,8 @@ void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 	void *ret;
 
 	idr_ret = qxl_release_alloc(qdev, type, release);
-	ret = qxl_allocnf(qdev, size, *release);
+	ret = qxl_allocnf(qdev, size, *release, bo);
 	((union qxl_release_info *)ret)->id = idr_ret;
-	*bo = (*release)->bos[(*release)->bo_count - 1];
 	return ret;
 }
 

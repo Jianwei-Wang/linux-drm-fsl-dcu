@@ -102,10 +102,9 @@ struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 	qobj = gem_to_qxl_bo(gobj);
 
 	ret = qxl_bo_list_add(reloc_list, qobj);
-	if (ret) {
-		drm_gem_object_unreference_unlocked(gobj);
+	if (ret)
 		return NULL;
-	}
+
 	return qobj;
 }
 
@@ -240,7 +239,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			}
 				
 			if (reloc_src_bo && reloc_src_bo != cmd_bo) {
-				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_src_bo));
+				qxl_release_add_res(qdev, release, reloc_src_bo);
 				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			}
 
