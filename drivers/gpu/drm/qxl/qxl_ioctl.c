@@ -203,7 +203,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 								  reloc.dst_handle, &reloc_list);
 				if (!reloc_dst_bo) {
 					DRM_ERROR("no reloc dst bo fail\n");
-					qxl_bo_unreserve(cmd_bo);
+					qxl_release_unreserve(qdev, release);
 					return -EINVAL;
 				}
 				reloc_dst_offset = 0;
@@ -221,9 +221,9 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 					DRM_ERROR("no reloc src bo fail %d\n", reloc.src_handle);
 					if (reloc_dst_bo != cmd_bo)
 						drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
-					qxl_release_free(qdev, release);
 					qxl_bo_list_unreserve(&reloc_list, true);
-					qxl_bo_unreserve(cmd_bo);
+					qxl_release_unreserve(qdev, release);
+					qxl_release_free(qdev, release);
 					return -EINVAL;
 				}
 			} else
@@ -248,7 +248,7 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		}
 		qxl_fence_releaseable(qdev, release);
 
-		qxl_bo_unreserve(cmd_bo);
+		qxl_release_unreserve(qdev, release);
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
 		ret = qxl_push_command_ring_release(qdev, release, user_cmd.type, true);

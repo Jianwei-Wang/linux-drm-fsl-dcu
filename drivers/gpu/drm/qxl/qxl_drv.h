@@ -176,6 +176,7 @@ struct qxl_release {
 	int type;
 	int bo_count;
 	uint32_t release_offset;
+	atomic_t reserve_count;
 	struct qxl_bo *bos[QXL_MAX_RES];
 };
 
@@ -465,6 +466,10 @@ void qxl_io_flush_release(struct qxl_device *qdev);
 void qxl_io_flush_surfaces(struct qxl_device *qdev);
 void qxl_release_ring_flush(struct qxl_device *qdev);
 
+int qxl_release_reserve(struct qxl_device *qdev,
+			struct qxl_release *release, bool no_wait);
+void qxl_release_unreserve(struct qxl_device *qdev,
+			   struct qxl_release *release);
 /*
  * qxl_bo_add_resource.
  *
