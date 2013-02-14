@@ -462,11 +462,11 @@ retry:
 				int ret;
 				struct qxl_bo *bo;
 				bool reserved = true;
-				bo = release->bos[0];
-				ret = qxl_bo_reserve(bo, false);
+
+				ret = qxl_release_reserve(qfence->qdev, release, false);
 				if (ret) {
 					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", release_id);
-					reserved = false;
+					continue;
 				}
 				
 				ptr = qxl_bo_kmap_atomic_page(qfence->qdev, bo, release->release_offset & PAGE_SIZE);
@@ -477,7 +477,7 @@ retry:
 					qxl_io_log(qfence->qdev, "CREATE %llx %d %d %d %d\n", scmd->u.surface_create.data, scmd->u.surface_create.width, scmd->u.surface_create.height, scmd->u.surface_create.stride);
 				qxl_bo_kunmap_atomic_page(qfence->qdev, bo, ptr);
 				if (reserved)
-					qxl_bo_unreserve(bo);
+					qxl_release_unreserve(qfence->qdev, release);
 			} 
 				
 			if (release->type != QXL_RELEASE_DRAWABLE)
@@ -490,7 +490,7 @@ retry:
 				int ret;
 				struct qxl_bo *bo;
 				bo = release->bos[0];
-				ret = qxl_bo_reserve(bo, false);
+				ret = qxl_release_reserve(qfence->qdev, release, false);
 				if (ret) {
 					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", release_id);
 					continue;
@@ -503,7 +503,7 @@ retry:
 				if (draw->type == 3) 
 					qxl_io_log(qfence->qdev, "COPY %llx %d %d %d %d\n", draw->u.copy.src_bitmap, draw->u.copy.src_area.top, draw->u.copy.src_area.bottom, draw->u.copy.src_area.left, draw->u.copy.src_area.right);
 				qxl_bo_kunmap_atomic_page(qfence->qdev, bo, ptr);
-				qxl_bo_unreserve(bo);
+				qxl_release_unreserve(qfence->qdev, release);
 			}
 			
 		}
