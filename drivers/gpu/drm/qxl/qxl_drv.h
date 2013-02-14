@@ -97,6 +97,7 @@ struct qxl_bo {
 	uint32_t surface_id;
 	struct qxl_fence fence; /* per bo fence  - list of releases */
 	struct qxl_release *surf_create;
+	atomic_t reserve_count;
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
@@ -176,7 +177,6 @@ struct qxl_release {
 	int type;
 	int bo_count;
 	uint32_t release_offset;
-	atomic_t reserve_count;
 	struct qxl_bo *bos[QXL_MAX_RES];
 };
 

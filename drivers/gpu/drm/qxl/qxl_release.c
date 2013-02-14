@@ -55,7 +55,7 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 	release->type = type;
 	release->bo_count = 0;
 	release->release_offset = 0;
-	atomic_set(&release->reserve_count, 0);
+
 again:
 	if (idr_pre_get(&qdev->release_idr, GFP_KERNEL) == 0) {
 		DRM_ERROR("Out of memory for release idr\n");
@@ -127,7 +127,7 @@ int qxl_release_reserve(struct qxl_device *qdev,
 			struct qxl_release *release, bool no_wait)
 {
 	int ret;
-	if (atomic_inc_return(&release->reserve_count) == 1) {
+	if (atomic_inc_return(&release->bos[0]->reserve_count) == 1) {
 		ret = qxl_bo_reserve(release->bos[0], no_wait);
 		if (ret)
 			return ret;
@@ -138,7 +138,7 @@ int qxl_release_reserve(struct qxl_device *qdev,
 void qxl_release_unreserve(struct qxl_device *qdev,
 			  struct qxl_release *release)
 {
-	if (atomic_dec_and_test(&release->reserve_count)) {
+	if (atomic_dec_and_test(&release->bos[0]->reserve_count)) {
 		qxl_bo_unreserve(release->bos[0]);
 	}
 }
