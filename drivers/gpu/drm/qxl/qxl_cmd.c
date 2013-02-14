@@ -189,18 +189,16 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
 		QXL_INFO(qdev, "popped %lld\n", id);
 		while (id) {
-			bool reserved = true;
 			release = qxl_release_from_id_locked(qdev, id);
 			if (release == NULL)
 				break;
 			bo = release->bos[0];
 
-			ret = qxl_bo_reserve(bo, true);
+			ret = qxl_release_reserve(qdev, release, true);
 			if (ret) {
 				qxl_io_log(qdev, "failed to reserve release on garbage collect %d\n", id);
 				DRM_ERROR("failed to reserve release %d\n", id);
 				//	return ret;
-				reserved = false;
 			}
 			
 			ptr = qxl_bo_kmap_atomic_page(qdev, bo, release->release_offset & PAGE_SIZE);
@@ -208,8 +206,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			next_id = info->next;
 			qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 
-			if (reserved)
-				qxl_bo_unreserve(bo);
+			qxl_release_unreserve(qdev, release);
 			QXL_INFO(qdev, "popped %lld, next %lld\n", id,
 				next_id);
 
