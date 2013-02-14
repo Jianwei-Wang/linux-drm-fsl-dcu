@@ -146,23 +146,19 @@ void qxl_release_unreserve(struct qxl_device *qdev,
 int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 				       enum qxl_surface_cmd_type surface_cmd_type,
 				       struct qxl_release *create_rel,
-				       struct qxl_release **release,
-				       struct qxl_bo **rbo)
+				       struct qxl_release **release)
 {
-	
 	if (surface_cmd_type == QXL_SURFACE_CMD_DESTROY && create_rel) {
-		void *ptr;
 		int idr_ret;
 		int ret;
 		struct qxl_bo *bo;
 		union qxl_release_info *info;
-		bool reserved = true;
+
 		/* stash the release after the create command */
 		idr_ret = qxl_release_alloc(qdev, QXL_RELEASE_SURFACE_CMD, release);
 		bo = qxl_bo_ref(create_rel->bos[0]);
 		
 		(*release)->release_offset = create_rel->release_offset + 64;
-		*rbo = bo;
 
 		qxl_release_add_res(qdev, *release, bo);
 
@@ -171,18 +167,18 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 			DRM_ERROR("release reserve failed\n");
 			goto out_unref;
 		}
-		ptr = qxl_bo_kmap_atomic_page(qdev, bo, 0);
-		info = ptr + (*release)->release_offset;
+		info = qxl_release_map(qdev, *release);
 		info->id = idr_ret;	
-		qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
+		qxl_release_unmap(qdev, *release, info);
 
 
 	out_unref:
 		qxl_bo_unref(&bo);
 		return ret;
 	}
+
 	return qxl_alloc_release_reserved(qdev, sizeof(struct qxl_surface_cmd),
-					  QXL_RELEASE_SURFACE_CMD, release, rbo);
+					  QXL_RELEASE_SURFACE_CMD, release, NULL);
 
 }
 
@@ -192,7 +188,6 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 {
 	struct qxl_bo *bo;
 	int idr_ret;
-	void *ptr;
 	int ret;
 	union qxl_release_info *info;
 	int cur_idx;
@@ -234,7 +229,8 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 	(*release)->release_offset = qdev->current_release_bo_offset[cur_idx] * release_size_per_bo[cur_idx];
 	qdev->current_release_bo_offset[cur_idx]++;
 
-	*rbo = bo;
+	if (rbo)
+		*rbo = bo;
 
 	qxl_release_add_res(qdev, *release, bo);
 
@@ -246,12 +242,9 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 
 	mutex_unlock(&qdev->release_mutex);	
 
-	ptr = qxl_bo_kmap_atomic_page(qdev, bo, 0);
-	info = ptr + (*release)->release_offset;
+	info = qxl_release_map(qdev, *release);
 	info->id = idr_ret;	
-	qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
-
-
+	qxl_release_unmap(qdev, *release, info);
 
 out_unref:
 	qxl_bo_unref(&bo);
@@ -302,4 +295,28 @@ struct qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 		return NULL;
 	}
 	return release;
+}
+
+union qxl_release_info *qxl_release_map(struct qxl_device *qdev,
+					struct qxl_release *release)
+{
+	void *ptr;
+	union qxl_release_info *info;
+	struct qxl_bo *bo = release->bos[0];
+
+	ptr = qxl_bo_kmap_atomic_page(qdev, bo, release->release_offset & PAGE_SIZE);
+	info = ptr + (release->release_offset & ~PAGE_SIZE);
+	return info;
+}
+
+void qxl_release_unmap(struct qxl_device *qdev,
+		       struct qxl_release *release,
+		       union qxl_release_info *info)
+{
+	struct qxl_bo *bo = release->bos[0];
+	void *ptr;
+
+	ptr = ((void *)info) - (release->release_offset & ~PAGE_SIZE);
+	
+	qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 }

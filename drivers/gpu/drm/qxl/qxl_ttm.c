@@ -460,7 +460,6 @@ retry:
 				void *ptr;
 				struct qxl_surface_cmd *scmd;
 				int ret;
-				struct qxl_bo *bo;
 				bool reserved = true;
 
 				ret = qxl_release_reserve(qfence->qdev, release, false);
@@ -469,13 +468,12 @@ retry:
 					continue;
 				}
 				
-				ptr = qxl_bo_kmap_atomic_page(qfence->qdev, bo, release->release_offset & PAGE_SIZE);
-				scmd = ptr + (release->release_offset & ~PAGE_SIZE);
+				scmd = (struct qxl_surface_cmd *)qxl_release_map(qfence->qdev, release);
 
 				qxl_io_log(qfence->qdev, "surf %d %d\n", scmd->surface_id, scmd->type);
 				if (scmd->type == 0) 
 					qxl_io_log(qfence->qdev, "CREATE %llx %d %d %d %d\n", scmd->u.surface_create.data, scmd->u.surface_create.width, scmd->u.surface_create.height, scmd->u.surface_create.stride);
-				qxl_bo_kunmap_atomic_page(qfence->qdev, bo, ptr);
+				qxl_release_unmap(qfence->qdev, release, &scmd->release_info);
 				if (reserved)
 					qxl_release_unreserve(qfence->qdev, release);
 			} 
@@ -496,13 +494,12 @@ retry:
 					continue;
 				}
 				
-				ptr = qxl_bo_kmap_atomic_page(qfence->qdev, bo, release->release_offset & PAGE_SIZE);
-				draw = ptr + (release->release_offset & ~PAGE_SIZE);
+				draw = (struct qxl_drawable *)qxl_release_map(qfence->qdev, release);
 
 				qxl_io_log(qfence->qdev, "draw %d %d\n", draw->surface_id, draw->type);
 				if (draw->type == 3) 
 					qxl_io_log(qfence->qdev, "COPY %llx %d %d %d %d\n", draw->u.copy.src_bitmap, draw->u.copy.src_area.top, draw->u.copy.src_area.bottom, draw->u.copy.src_area.left, draw->u.copy.src_area.right);
-				qxl_bo_kunmap_atomic_page(qfence->qdev, bo, ptr);
+				qxl_release_unmap(qfence->qdev, release, &draw->release_info);
 				qxl_release_unreserve(qfence->qdev, release);
 			}
 			

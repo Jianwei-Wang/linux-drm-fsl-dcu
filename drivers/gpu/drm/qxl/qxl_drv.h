@@ -470,6 +470,11 @@ int qxl_release_reserve(struct qxl_device *qdev,
 			struct qxl_release *release, bool no_wait);
 void qxl_release_unreserve(struct qxl_device *qdev,
 			   struct qxl_release *release);
+union qxl_release_info *qxl_release_map(struct qxl_device *qdev,
+					struct qxl_release *release);
+void qxl_release_unmap(struct qxl_device *qdev,
+		       struct qxl_release *release,
+		       union qxl_release_info *info);
 /*
  * qxl_bo_add_resource.
  *
@@ -483,8 +488,7 @@ void *qxl_alloc_releasable(struct qxl_device *qdev, unsigned long size,
 int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 				       enum qxl_surface_cmd_type surface_cmd_type,
 				       struct qxl_release *create_rel,
-				       struct qxl_release **release,
-				       struct qxl_bo **rbo);
+				       struct qxl_release **release);
 int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 			       int type, struct qxl_release **release,
 			       struct qxl_bo **rbo);
