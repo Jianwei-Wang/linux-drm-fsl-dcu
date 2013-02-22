@@ -36,32 +36,25 @@ int qxl_alloc_ioctl(struct drm_device *dev, void *data,
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_alloc *qxl_alloc = data;
 	int ret;
-	/*
-	 * TODO: actually take note of the drm_qxl_alloc->type flag, except for
-	 * the primary
-	 * surface creation (i.e. use the surfaces bar)
-	 */
+	struct qxl_bo *qobj;
+	uint32_t handle;
+	u32 domain = QXL_GEM_DOMAIN_VRAM;
 
 	if (qxl_alloc->size == 0) {
 		DRM_ERROR("invalid size %d\n", qxl_alloc->size);
 		return -EINVAL;
 	}
-	{
-		struct qxl_bo *qobj;
-		uint32_t handle;
-		u32 domain = QXL_GEM_DOMAIN_VRAM;
-		ret = qxl_gem_object_create_with_handle(qdev, file_priv,
-							domain,
-							qxl_alloc->size,
-							NULL,
-							&qobj, &handle);
-		if (ret) {
-			DRM_ERROR("%s: failed to create gem ret=%d\n",
-				  __func__, ret);
-			return -ENOMEM;
-		}
-		qxl_alloc->handle = handle;
+	ret = qxl_gem_object_create_with_handle(qdev, file_priv,
+						domain,
+						qxl_alloc->size,
+						NULL,
+						&qobj, &handle);
+	if (ret) {
+		DRM_ERROR("%s: failed to create gem ret=%d\n",
+			  __func__, ret);
+		return -ENOMEM;
 	}
+	qxl_alloc->handle = handle;
 	return 0;
 }
 
@@ -172,16 +165,10 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			break;
 		case QXL_CMD_SURFACE:
 		case QXL_CMD_CURSOR:
-			DRM_ERROR("Only draw commands in execbuffers\n");
+		default:
+			DRM_DEBUG("Only draw commands in execbuffers\n");
 			return -EINVAL;
 			break;
-		default:
-			qxl_io_log(qdev,
-				   "%s: bad command %d not in {%d, %d, %d}\n",
-				   __func__, user_cmd.type,
-				   QXL_CMD_DRAW, QXL_CMD_SURFACE,
-				   QXL_CMD_CURSOR);
-			return -EFAULT;
 		}
 
 		if (user_cmd.command_size > PAGE_SIZE - sizeof(union qxl_release_info))
@@ -196,12 +183,9 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		if (ret)
 			return ret;
 
+		/* TODO copy slow path code from i915 */
 		fb_cmd = qxl_bo_kmap_atomic_page(qdev, cmd_bo, (release->release_offset & PAGE_SIZE));
 		unwritten = __copy_from_user_inatomic_nocache(fb_cmd + sizeof(union qxl_release_info) + (release->release_offset & ~PAGE_SIZE), (void *)(unsigned long)user_cmd.command, user_cmd.command_size);
-//		if (DRM_COPY_FROM_USER(fb_cmd + sizeof(union qxl_release_info),
-//					(void *)user_cmd.command,
-//					user_cmd.command_size))
-//			return -EFAULT;
 		qxl_bo_kunmap_atomic_page(qdev, cmd_bo, fb_cmd);
 		if (unwritten) {
 			DRM_ERROR("got unwritten %d\n", unwritten);
@@ -209,35 +193,26 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			qxl_release_free(qdev, release);
 			return -EFAULT;
 		}
-#if 0
-		qxl_io_log(qdev, "%s: type %d, size %d, #relocs %d\n",
-			   __func__, user_cmd.type,
-			   user_cmd.command_size, user_cmd.relocs_num);
-#endif
+
 		for (i = 0 ; i < user_cmd.relocs_num; ++i) {
 			if (DRM_COPY_FROM_USER(&reloc,
 					       &((struct drm_qxl_reloc *)user_cmd.relocs)[i],
 					       sizeof(reloc))) {
-				DRM_ERROR("Got failed copy\n");
 				qxl_bo_list_unreserve(&reloc_list, true);
 				qxl_release_unreserve(qdev, release);
 				qxl_release_free(qdev, release);
 				return -EFAULT;
 			}
-#if 0
-			qxl_io_log(qdev, "%s: r#%d: %d+%d->%d+%d\n",
-				   __func__, i, reloc.src_handle,
-				   reloc.src_offset, reloc.dst_handle,
-				   reloc.dst_offset);
-#endif
+
 			/* add the bos to the list of bos to validate -
 			   need to validate first then process relocs? */
 			if (reloc.dst_handle) {
 				reloc_dst_bo = qxlhw_handle_to_bo(qdev, file_priv,
 								  reloc.dst_handle, &reloc_list);
 				if (!reloc_dst_bo) {
-					DRM_ERROR("no reloc dst bo fail\n");
+					qxl_bo_list_unreserve(&reloc_list, true);
 					qxl_release_unreserve(qdev, release);
+					qxl_release_free(qdev, release);
 					return -EINVAL;
 				}
 				reloc_dst_offset = 0;
@@ -252,7 +227,6 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 					qxlhw_handle_to_bo(qdev, file_priv,
 							   reloc.src_handle, &reloc_list);
 				if (!reloc_src_bo) {
-					DRM_ERROR("no reloc src bo fail %d\n", reloc.src_handle);
 					if (reloc_dst_bo != cmd_bo)
 						drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
 					qxl_bo_list_unreserve(&reloc_list, true);
@@ -277,15 +251,11 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			}
 
-			if (reloc_dst_bo != cmd_bo) {
-			  //				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
+			if (reloc_dst_bo != cmd_bo)
 				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
-			}
 		}
 		qxl_fence_releaseable(qdev, release);
 
-		/* TODO: multiple commands in a single push (introduce new
-		 * QXLCommandBunch ?) */
 		ret = qxl_push_command_ring_release(qdev, release, user_cmd.type, true);
 		if (ret == -ERESTARTSYS) {
 			qxl_release_unreserve(qdev, release);
@@ -298,9 +268,6 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	qxl_bo_list_unreserve(&reloc_list, 0);
 	return 0;
 }
-
-/* TODO: this should be defined in ram or rom */
-#define NUM_SURFACES 1024
 
 int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file)

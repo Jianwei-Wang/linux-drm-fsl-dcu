@@ -376,10 +376,8 @@ retry:
 	if (sc == 0) {
 		if (bo->type == QXL_GEM_DOMAIN_SURFACE)
 			qxl_update_surface(qfence->qdev, bo);
-	} //else if (sc == 1)
-	//		qxl_io_flush_surfaces(qfence->qdev);
+	}
 	else if (sc >= 1) {
-		printk("notifying oom from sync obj wait\n");
 		qxl_io_notify_oom(qfence->qdev);
 	}
 
@@ -399,13 +397,11 @@ retry:
 	}
 
 	if (qfence->num_active_releases) {
-		int i;
 		bool have_drawable_releases = false;
 		void **slot;
 		struct radix_tree_iter iter;
 		int release_id;
 
-		qxl_io_log(qfence->qdev, "sync obj %d still has outstanding releases %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases);
 		radix_tree_for_each_slot(slot, &qfence->tree, &iter, 0) {
 			struct qxl_release *release;
 
@@ -413,64 +409,21 @@ retry:
 			release = qxl_release_from_id_locked(qfence->qdev, release_id);
 			if (release == NULL)
 				continue;
-			qxl_io_log(qfence->qdev, "release %d is %d\n", release_id, release->type);
 
-			if (release->type == QXL_RELEASE_SURFACE_CMD) {
-				struct qxl_surface_cmd *scmd;
-				int ret;
-				bool reserved = true;
-
-				ret = qxl_release_reserve(qfence->qdev, release, false);
-				if (ret) {
-					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", release_id);
-					continue;
-				}
-				
-				scmd = (struct qxl_surface_cmd *)qxl_release_map(qfence->qdev, release);
-
-				qxl_io_log(qfence->qdev, "surf %d %d\n", scmd->surface_id, scmd->type);
-				if (scmd->type == 0) 
-					qxl_io_log(qfence->qdev, "CREATE %llx %d %d %d %d\n", scmd->u.surface_create.data, scmd->u.surface_create.width, scmd->u.surface_create.height, scmd->u.surface_create.stride);
-				qxl_release_unmap(qfence->qdev, release, &scmd->release_info);
-				if (reserved)
-					qxl_release_unreserve(qfence->qdev, release);
-			} 
-				
-			if (release->type != QXL_RELEASE_DRAWABLE)
-				continue;
-			
-			have_drawable_releases = true;
-			{
-				struct qxl_drawable *draw;
-				int ret;
-				struct qxl_bo *bo;
-				bo = release->bos[0];
-				ret = qxl_release_reserve(qfence->qdev, release, false);
-				if (ret) {
-					qxl_io_log(qfence->qdev, "failed to reserve bo for id %d\n", release_id);
-					continue;
-				}
-				
-				draw = (struct qxl_drawable *)qxl_release_map(qfence->qdev, release);
-
-				qxl_io_log(qfence->qdev, "draw %d %d\n", draw->surface_id, draw->type);
-				if (draw->type == 3) 
-					qxl_io_log(qfence->qdev, "COPY %llx %d %d %d %d\n", draw->u.copy.src_bitmap, draw->u.copy.src_area.top, draw->u.copy.src_area.bottom, draw->u.copy.src_area.left, draw->u.copy.src_area.right);
-				qxl_release_unmap(qfence->qdev, release, &draw->release_info);
-				qxl_release_unreserve(qfence->qdev, release);
-			}
-			
+			if (release->type == QXL_RELEASE_DRAWABLE)
+				have_drawable_releases = true;
 		}
 
-		WARN(1, "sync obj %d still has outstanding releases %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases);
 		qxl_queue_garbage_collect(qfence->qdev, true);
 
 		if (have_drawable_releases || sc < 4) {
 			if (sc > 2)
 				/* back off */
 				usleep_range(500, 1000);
-			if (have_drawable_releases && sc > 300)
+			if (have_drawable_releases && sc > 300) {
+				WARN(1, "sync obj %d still has outstanding releases %d %d %d %ld %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, (unsigned long)bo->gem_base.size, qfence->num_active_releases);
 				return -EBUSY;
+			}
 			goto retry;
 		}
 	}
@@ -494,9 +447,7 @@ static void *qxl_sync_obj_ref(void *sync_obj)
 static bool qxl_sync_obj_signaled(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
-	bool ret;
-	ret = qfence->num_active_releases == 0;
-	return ret;
+	return (qfence->num_active_releases == 0);
 }
 
 static void qxl_bo_move_notify(struct ttm_buffer_object *bo,

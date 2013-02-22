@@ -210,7 +210,6 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	int i = 0;
 	int ret;
 	union qxl_release_info *info;
-	void *ptr;
 
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
 		QXL_INFO(qdev, "popped %lld\n", id);
@@ -221,8 +220,8 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 
 			ret = qxl_release_reserve(qdev, release, false);
 			if (ret) {
-				qxl_io_log(qdev, "failed to reserve release on garbage collect %d\n", id);
-				DRM_ERROR("failed to reserve release %d\n", id);
+				qxl_io_log(qdev, "failed to reserve release on garbage collect %lld\n", id);
+				DRM_ERROR("failed to reserve release %lld\n", id);
 			}
 
 			info = qxl_release_map(qdev, release);
@@ -474,7 +473,6 @@ again:
 		goto again;
 
 	if (handle >= qdev->rom->n_surfaces) {
-		int res;
 		count++;
 		spin_lock(&qdev->surf_id_idr_lock);
 		idr_remove(&qdev->surf_id_idr, handle);
@@ -505,7 +503,6 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 {
 	struct qxl_surface_cmd *cmd;
 	struct qxl_release *release;
-	void *ptr;
 	int ret;
 
 	if (surf->hw_surf_alloc)
@@ -561,7 +558,6 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	struct qxl_surface_cmd *cmd;
 	struct qxl_release *release;
 	int ret;
-	void *ptr;
 	int id;
 
 	if (!surf->hw_surf_alloc)
@@ -675,7 +671,7 @@ static int qxl_reap_surface_id(struct qxl_device *qdev, int max_to_reap)
 	int i, ret;
 	bool stall = false;
 	int start = 0;
-	int max = qdev->rom->n_surfaces;
+
 	mutex_lock(&qdev->surf_evict_mutex);
 again:
 
@@ -699,12 +695,8 @@ again:
 
 		{
 		  struct qxl_bo *bo = (struct qxl_bo *)objptr;
-		  printk("reaping %d %p %d %d %d %d\n", surfid, objptr, bo->surface_id, stall, bo->hw_surf_alloc, atomic_read(&bo->tbo.kref.refcount));
-		  qxl_io_log(qdev, "reaping %d %p %d %d %d %d %d\n", surfid, objptr, bo->surface_id, stall, bo->hw_surf_alloc, atomic_read(&bo->tbo.kref.refcount), qdev->last_alloced_surf_id);
-
 		  if (!bo->hw_surf_alloc)
 			  continue;
-
 		}
 
 		ret = qxl_reap_surf(qdev, objptr, stall);
