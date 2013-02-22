@@ -191,6 +191,18 @@ void qxl_release_ring_flush(struct qxl_device *qdev)
 	qxl_io_flush_release(qdev);
 }
 
+int
+qxl_push_command_ring_release(struct qxl_device *qdev, struct qxl_release *release,
+			      uint32_t type, bool interruptible)
+{
+	struct qxl_command cmd;
+
+	cmd.type = type;
+	cmd.data = qxl_bo_physical_address(qdev, release->bos[0], release->release_offset);
+
+	return qxl_ring_push(qdev->command_ring, &cmd, interruptible);
+}
+
 bool qxl_queue_garbage_collect(struct qxl_device *qdev, bool flush)
 {
 	if (!qxl_check_idle(qdev->release_ring)) {

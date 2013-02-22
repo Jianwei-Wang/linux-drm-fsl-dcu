@@ -522,14 +522,8 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 int qxl_fence_releaseable(struct qxl_device *qdev,
 			  struct qxl_release *release);
 int
-qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo,
-		      uint32_t type, bool interruptible);
-int
 qxl_push_command_ring_release(struct qxl_device *qdev, struct qxl_release *release,
 			      uint32_t type, bool interruptible);
-int
-qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo,
-		     uint32_t type, bool interruptible);
 
 /* qxl drawing commands */
 

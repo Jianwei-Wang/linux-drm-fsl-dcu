@@ -236,6 +236,18 @@ static void qxl_crtc_destroy(struct drm_crtc *crtc)
 	kfree(qxl_crtc);
 }
 
+static int
+qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type, bool interruptible)
+{
+	struct qxl_command cmd;
+
+	cmd.type = type;
+	cmd.data = qxl_bo_physical_address(qdev, bo, 0);
+
+	return qxl_ring_push(qdev->cursor_ring, &cmd, interruptible);
+}
+
+
 static void
 push_cursor(struct qxl_device *qdev, struct qxl_bo *cursor_bo)
 {

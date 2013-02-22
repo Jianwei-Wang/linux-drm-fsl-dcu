@@ -88,20 +88,7 @@ make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 	return drawable;
 }
 
-/* TODO: bo per command is wasteful. add an offset */
-int
-qxl_push_command_ring_release(struct qxl_device *qdev, struct qxl_release *release,
-			      uint32_t type, bool interruptible)
-{
-	struct qxl_command cmd;
-
-	cmd.type = type;
-	cmd.data = qxl_bo_physical_address(qdev, release->bos[0], release->release_offset);
-
-	return qxl_ring_push(qdev->command_ring, &cmd, interruptible);
-}
-
-int
+static int
 qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type, bool interruptible)
 {
 	struct qxl_command cmd;
@@ -110,17 +97,6 @@ qxl_push_command_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type,
 	cmd.data = qxl_bo_physical_address(qdev, bo, 0);
 
 	return qxl_ring_push(qdev->command_ring, &cmd, interruptible);
-}
-
-int
-qxl_push_cursor_ring(struct qxl_device *qdev, struct qxl_bo *bo, uint32_t type, bool interruptible)
-{
-	struct qxl_command cmd;
-
-	cmd.type = type;
-	cmd.data = qxl_bo_physical_address(qdev, bo, 0);
-
-	return qxl_ring_push(qdev->cursor_ring, &cmd, interruptible);
 }
 
 static void
