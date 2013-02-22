@@ -54,6 +54,8 @@ static int qxl_check_header(struct qxl_ring *ring)
 	unsigned long flags;
 	spin_lock_irqsave(&ring->lock, flags);
 	ret = header->prod - header->cons < header->num_items;
+	if (ret == 0)
+		header->notify_on_cons = header->cons + 1;
 	spin_unlock_irqrestore(&ring->lock, flags);
 	return ret;
 }
