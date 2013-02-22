@@ -23,10 +23,6 @@
  * Authors:
  *     David Airlie
  */
-	/*
-	 *  Modularization
-	 */
-
 #include <linux/module.h>
 #include <linux/fb.h>
 
@@ -575,30 +571,12 @@ static int qxl_fb_find_or_create_single(
 	int ret;
 
 	if (!helper->fb) {
-		pr_info("%s:%d\n", __func__, __LINE__);
 		ret = qxlfb_create(qfbdev, sizes);
-		pr_info("%s:%d %d\n", __func__, __LINE__, ret);
 		if (ret)
 			return ret;
 		new_fb = 1;
 	}
 	return new_fb;
-}
-
-static char *mode_option;
-int qxl_parse_options(char *options)
-{
-	char *this_opt;
-
-	if (!options || !*options)
-		return 0;
-
-	while ((this_opt = strsep(&options, ",")) != NULL) {
-		if (!*this_opt)
-			continue;
-		mode_option = this_opt;
-	}
-	return 0;
 }
 
 static int qxl_fbdev_destroy(struct drm_device *dev, struct qxl_fbdev *qfbdev)
@@ -630,11 +608,6 @@ static struct drm_fb_helper_funcs qxl_fb_helper_funcs = {
 	*/
 	.fb_probe = qxl_fb_find_or_create_single,
 };
-
-/* TODO: defio
- * How does that work? can I get the changed data to send as opaques?
- * Otherwise I need to invalidate an area - counter to qxl phylosophy.
- */
 
 int qxl_fbdev_init(struct qxl_device *qdev)
 {
@@ -673,24 +646,4 @@ void qxl_fbdev_fini(struct qxl_device *qdev)
 	qdev->mode_info.qfbdev = NULL;
 }
 
-void qxl_fbdev_set_suspend(struct qxl_device *qdev, int state)
-{
-	fb_set_suspend(qdev->mode_info.qfbdev->helper.fbdev, state);
-}
 
-int qxl_fbdev_total_size(struct qxl_device *qdev)
-{
-	struct qxl_bo *robj;
-	int size = 0;
-
-	robj = gem_to_qxl_bo(qdev->mode_info.qfbdev->qfb.obj);
-	size += qxl_bo_size(robj);
-	return size;
-}
-
-bool qxl_fbdev_robj_is_fb(struct qxl_device *qdev, struct qxl_bo *robj)
-{
-	if (robj == gem_to_qxl_bo(qdev->mode_info.qfbdev->qfb.obj))
-		return true;
-	return false;
-}
