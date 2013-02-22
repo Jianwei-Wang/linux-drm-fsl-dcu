@@ -60,7 +60,6 @@
 #define QXL_DEBUGFS_MAX_COMPONENTS		32
 
 extern int qxl_log_level;
-extern int qxl_debug_disable_fb;
 
 enum {
 	QXL_INFO_LEVEL = 1,
@@ -250,6 +249,7 @@ int qxl_debugfs_add_files(struct qxl_device *rdev,
 			     struct drm_info_list *files,
 			     unsigned nfiles);
 int qxl_debugfs_fence_init(struct qxl_device *rdev);
+void qxl_debugfs_remove_files(struct qxl_device *qdev);
 
 struct qxl_device;
 

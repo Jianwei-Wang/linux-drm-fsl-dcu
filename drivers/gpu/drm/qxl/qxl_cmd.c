@@ -223,7 +223,6 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			if (ret) {
 				qxl_io_log(qdev, "failed to reserve release on garbage collect %d\n", id);
 				DRM_ERROR("failed to reserve release %d\n", id);
-				//	return ret;
 			}
 
 			info = qxl_release_map(qdev, release);

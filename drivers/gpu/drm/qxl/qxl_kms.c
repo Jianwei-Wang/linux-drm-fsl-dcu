@@ -27,12 +27,15 @@
 #include "qxl_object.h"
 
 #include <linux/io-mapping.h>
+
+int qxl_log_level;
+
 static void qxl_dump_mode(struct qxl_device *qdev, void *p)
 {
 	struct qxl_mode *m = p;
-	DRM_INFO("%d: %dx%d %d bits, stride %d, %dmm x %dmm, orientation %d\n",
-		 m->id, m->x_res, m->y_res, m->bits, m->stride, m->x_mili,
-		 m->y_mili, m->orientation);
+	DRM_DEBUG_KMS("%d: %dx%d %d bits, stride %d, %dmm x %dmm, orientation %d\n",
+		      m->id, m->x_res, m->y_res, m->bits, m->stride, m->x_mili,
+		      m->y_mili, m->orientation);
 }
 
 static bool qxl_check_device(struct qxl_device *qdev)
@@ -249,6 +252,7 @@ void qxl_device_fini(struct qxl_device *qdev)
 	qdev->rom = NULL;
 	qdev->mode_info.modes = NULL;
 	qdev->mode_info.num_modes = 0;
+	qxl_debugfs_remove_files(qdev);
 }
 
 int qxl_driver_unload(struct drm_device *dev)
@@ -269,10 +273,6 @@ int qxl_driver_load(struct drm_device *dev, unsigned long flags)
 {
 	struct qxl_device *qdev;
 	int r;
-
-	/* globals defined in qxl_debugfs.c */
-	qxl_log_level = 0;
-	qxl_debug_disable_fb = 0;
 
 	/* require kms */
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))

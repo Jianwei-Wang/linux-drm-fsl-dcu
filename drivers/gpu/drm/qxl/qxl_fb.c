@@ -184,11 +184,6 @@ static void qxl_fb_fillrect(struct fb_info *info,
 	uint16_t rop;
 	struct qxl_draw_fill qxl_draw_fill_rec;
 
-	if (qxl_debug_disable_fb) {
-		QXL_INFO_ONCE(qdev, "(skipped) %s:%d\n", __func__, __LINE__);
-		return;
-	}
-
 	if (info->fix.visual == FB_VISUAL_TRUECOLOR ||
 	    info->fix.visual == FB_VISUAL_DIRECTCOLOR)
 		color = ((u32 *) (info->pseudo_palette))[fb_rect->color];
@@ -242,11 +237,6 @@ static void qxl_fb_copyarea(struct fb_info *info,
 {
 	struct qxl_fbdev *qfbdev = info->par;
 
-	if (qxl_debug_disable_fb) {
-		QXL_INFO_ONCE(qfbdev->qdev, "skipped %s:%d\n",
-			      __func__, __LINE__);
-		return;
-	}
 	qxl_draw_copyarea(qfbdev->qdev,
 			  region->width, region->height,
 			  region->sx, region->sy,
@@ -333,10 +323,6 @@ static void qxl_fb_imageblit(struct fb_info *info,
 	struct qxl_device *qdev = qfbdev->qdev;
 	struct qxl_fb_image qxl_fb_image;
 
-	if (qxl_debug_disable_fb) {
-		QXL_INFO_ONCE(qfbdev->qdev, "%s: skipping\n", __func__);
-		return;
-	}
 	if (in_interrupt() || in_atomic()) {
 		/* we cannot do any ttm_bo allocation since that will fail on
 		 * ioremap_wc..__get_vm_area_node, so queue the work item
