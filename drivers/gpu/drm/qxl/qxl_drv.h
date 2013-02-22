@@ -75,7 +75,6 @@ struct qxl_fence {
 	uint32_t num_active_releases;
 	uint32_t *release_ids;
 	struct radix_tree_root tree;
-	spinlock_t fence_lock;
 };
 
 struct qxl_bo {
@@ -177,6 +176,7 @@ struct qxl_release {
 	int type;
 	int bo_count;
 	uint32_t release_offset;
+	uint32_t surface_release_id;
 	struct qxl_bo *bos[QXL_MAX_RES];
 };
 
@@ -313,6 +313,7 @@ struct qxl_device {
 	spinlock_t surf_id_idr_lock;
 	int last_alloced_surf_id;
 
+	struct mutex surf_evict_mutex;
 	struct io_mapping *vram_mapping;
 	struct io_mapping *surface_mapping;
 
@@ -565,7 +566,7 @@ int qxl_debugfs_add_files(struct qxl_device *qdev,
 int qxl_surface_id_alloc(struct qxl_device *qdev,
 			 struct qxl_bo *surf);
 void qxl_surface_id_dealloc(struct qxl_device *qdev,
-			    struct qxl_bo *surf);
+			    uint32_t surface_id);
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
 			 struct qxl_bo *surf,
 			 struct ttm_mem_reg *mem);

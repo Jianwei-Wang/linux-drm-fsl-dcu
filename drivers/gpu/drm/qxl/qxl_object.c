@@ -10,6 +10,7 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	bo = container_of(tbo, struct qxl_bo, tbo);
 	qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 
+	qxl_surface_evict(qdev, bo, false);
 	qxl_fence_fini(&bo->fence);
 	mutex_lock(&qdev->gem.mutex);
 	list_del_init(&bo->list);
@@ -340,6 +341,7 @@ int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
 		return ret;
 
 	if (!bo->pin_count) {
+		qxl_ttm_placement_from_domain(bo, bo->type);
 		ret = ttm_bo_validate(&bo->tbo, &bo->placement,
 				      true, false);
 		if (ret)

@@ -55,7 +55,7 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 	release->type = type;
 	release->bo_count = 0;
 	release->release_offset = 0;
-
+	release->surface_release_id = 0;
 again:
 	if (idr_pre_get(&qdev->release_idr, GFP_KERNEL) == 0) {
 		DRM_ERROR("Out of memory for release idr\n");
@@ -84,6 +84,10 @@ qxl_release_free(struct qxl_device *qdev,
 
 	QXL_INFO(qdev, "release %d, type %d, %d bos\n", release->id,
 		 release->type, release->bo_count);
+
+	if (release->surface_release_id)
+		qxl_surface_id_dealloc(qdev, release->surface_release_id);
+
 	for (i = 0 ; i < release->bo_count; ++i) {
 		QXL_INFO(qdev, "release %llx\n",
 			release->bos[i]->tbo.addr_space_offset
@@ -148,9 +152,10 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 				       struct qxl_release *create_rel,
 				       struct qxl_release **release)
 {
+	int ret;
+
 	if (surface_cmd_type == QXL_SURFACE_CMD_DESTROY && create_rel) {
 		int idr_ret;
-		int ret;
 		struct qxl_bo *bo;
 		union qxl_release_info *info;
 
@@ -159,10 +164,10 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 		bo = qxl_bo_ref(create_rel->bos[0]);
 		
 		(*release)->release_offset = create_rel->release_offset + 64;
-
+		
 		qxl_release_add_res(qdev, *release, bo);
 
-		ret = qxl_release_reserve(qdev, *release, true);
+		ret = qxl_release_reserve(qdev, *release, false);
 		if (ret) {
 			DRM_ERROR("release reserve failed\n");
 			goto out_unref;
@@ -178,8 +183,7 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 	}
 
 	return qxl_alloc_release_reserved(qdev, sizeof(struct qxl_surface_cmd),
-					  QXL_RELEASE_SURFACE_CMD, release, NULL);
-
+					 QXL_RELEASE_SURFACE_CMD, release, NULL);
 }
 
 int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
@@ -216,12 +220,10 @@ int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
 			return ret;
 		}
 
-		if (cur_idx == 1) {
-			/* pin surface cmd bo's since we can't evict them normally */
-			ret = qxl_bo_reserve(qdev->current_release_bo[cur_idx], false);
-			qxl_bo_pin(qdev->current_release_bo[cur_idx], QXL_GEM_DOMAIN_VRAM, NULL);
-			qxl_bo_unreserve(qdev->current_release_bo[cur_idx]);
-		}		 
+		/* pin releases bo's they are too messy to evict */
+		ret = qxl_bo_reserve(qdev->current_release_bo[cur_idx], false);
+		qxl_bo_pin(qdev->current_release_bo[cur_idx], QXL_GEM_DOMAIN_VRAM, NULL);
+		qxl_bo_unreserve(qdev->current_release_bo[cur_idx]);
 	}
 
 	bo = qxl_bo_ref(qdev->current_release_bo[cur_idx]);

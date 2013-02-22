@@ -178,8 +178,12 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 //					user_cmd.command_size))
 //			return -EFAULT;
 		qxl_bo_kunmap_atomic_page(qdev, cmd_bo, fb_cmd);
-		if (unwritten)
+		if (unwritten) {
+			DRM_ERROR("got unwritten %d\n", unwritten);
+			qxl_release_unreserve(qdev, release);
+			qxl_release_free(qdev, release);
 			return -EFAULT;
+		}
 #if 0
 		qxl_io_log(qdev, "%s: type %d, size %d, #relocs %d\n",
 			   __func__, user_cmd.type,
@@ -187,9 +191,14 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 #endif
 		for (i = 0 ; i < user_cmd.relocs_num; ++i) {
 			if (DRM_COPY_FROM_USER(&reloc,
-				&((struct drm_qxl_reloc *)user_cmd.relocs)[i],
-				sizeof(reloc)))
+					       &((struct drm_qxl_reloc *)user_cmd.relocs)[i],
+					       sizeof(reloc))) {
+				DRM_ERROR("Got failed copy\n");
+				qxl_bo_list_unreserve(&reloc_list, true);
+				qxl_release_unreserve(qdev, release);
+				qxl_release_free(qdev, release);
 				return -EFAULT;
+			}
 #if 0
 			qxl_io_log(qdev, "%s: r#%d: %d+%d->%d+%d\n",
 				   __func__, i, reloc.src_handle,
@@ -243,20 +252,23 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			}
 
-			if (reloc_dst_bo != cmd_bo)
+			if (reloc_dst_bo != cmd_bo) {
+			  //				qxl_release_add_res(qdev, release, qxl_bo_ref(reloc_dst_bo));
 				drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
+			}
 		}
 		qxl_fence_releaseable(qdev, release);
 
-		qxl_release_unreserve(qdev, release);
 		/* TODO: multiple commands in a single push (introduce new
 		 * QXLCommandBunch ?) */
 		ret = qxl_push_command_ring_release(qdev, release, user_cmd.type, true);
 		if (ret == -ERESTARTSYS) {
+			qxl_release_unreserve(qdev, release);
 			qxl_release_free(qdev, release);
 			qxl_bo_list_unreserve(&reloc_list, true);
 			return ret;
 		}
+		qxl_release_unreserve(qdev, release);
 	}
 	qxl_bo_list_unreserve(&reloc_list, 0);
 	return 0;

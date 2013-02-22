@@ -194,7 +194,7 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			if (release == NULL)
 				break;
 
-			ret = qxl_release_reserve(qdev, release, true);
+			ret = qxl_release_reserve(qdev, release, false);
 			if (ret) {
 				qxl_io_log(qdev, "failed to reserve release on garbage collect %d\n", id);
 				DRM_ERROR("failed to reserve release %d\n", id);
@@ -443,7 +443,7 @@ again:
 	}
 
 	spin_lock(&qdev->surf_id_idr_lock);
-	idr_ret = idr_get_new_above(&qdev->surf_id_idr, surf, 1, &handle);
+	idr_ret = idr_get_new_above(&qdev->surf_id_idr, NULL, 1, &handle);
 	spin_unlock(&qdev->surf_id_idr_lock);
 
 	if (idr_ret == -EAGAIN)
@@ -468,12 +468,11 @@ again:
 }
 
 void qxl_surface_id_dealloc(struct qxl_device *qdev,
-			    struct qxl_bo *surf)
+			    uint32_t surface_id)
 {
 	spin_lock(&qdev->surf_id_idr_lock);
-	idr_remove(&qdev->surf_id_idr, surf->surface_id);
+	idr_remove(&qdev->surf_id_idr, surface_id);
 	spin_unlock(&qdev->surf_id_idr_lock);
-	surf->surface_id = 0;
 }
 
 int qxl_hw_surface_alloc(struct qxl_device *qdev,
@@ -519,13 +518,16 @@ int qxl_hw_surface_alloc(struct qxl_device *qdev,
 	/* no need to add a release to the fence for this bo,
 	   since it is only released when we ask to destroy the surface
 	   and it would never signal otherwise */
-	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
-
 	qxl_fence_releaseable(qdev, release);
+
+	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 
 	qxl_release_unreserve(qdev, release);
 
 	surf->hw_surf_alloc = true;
+	spin_lock(&qdev->surf_id_idr_lock);
+	idr_replace(&qdev->surf_id_idr, surf, surf->surface_id);
+	spin_unlock(&qdev->surf_id_idr_lock);
 	return 0;
 }
 
@@ -536,6 +538,7 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 	struct qxl_release *release;
 	int ret;
 	void *ptr;
+	int id;
 
 	if (!surf->hw_surf_alloc)
 		return 0;
@@ -547,18 +550,28 @@ int qxl_hw_surface_dealloc(struct qxl_device *qdev,
 		return ret;
 
 	surf->surf_create = NULL;
+	/* remove the surface from the idr, but not the surface id yet */
+	spin_lock(&qdev->surf_id_idr_lock);
+	idr_replace(&qdev->surf_id_idr, NULL, surf->surface_id);
+	spin_unlock(&qdev->surf_id_idr_lock);	
+	surf->hw_surf_alloc = false;
 
+	id = surf->surface_id;
+	surf->surface_id = 0;
+
+	release->surface_release_id = id;
 	cmd = (struct qxl_surface_cmd *)qxl_release_map(qdev, release);	
 	cmd->type = QXL_SURFACE_CMD_DESTROY;
-	cmd->surface_id = surf->surface_id;
+	cmd->surface_id = id;
 	qxl_release_unmap(qdev, release, &cmd->release_info);
+
+	qxl_fence_releaseable(qdev, release);
 
 	qxl_push_command_ring_release(qdev, release, QXL_CMD_SURFACE, false);
 
-
-	qxl_fence_releaseable(qdev, release);
 	qxl_release_unreserve(qdev, release);
-	surf->hw_surf_alloc = false;
+
+
 	return 0;
 }
 
@@ -580,7 +593,7 @@ retry:
 	return ret;
 }
 
-void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf, bool do_update_area)
+void qxl_surface_evict_locked(struct qxl_device *qdev, struct qxl_bo *surf, bool do_update_area)
 {
 	/* no need to update area if we are just freeing the surface normally */
 	if (do_update_area) {
@@ -589,14 +602,22 @@ void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf, bool do_upd
 
 	/* nuke the surface id at the hw */
 	qxl_hw_surface_dealloc(qdev, surf);
-	qxl_surface_id_dealloc(qdev, surf);
+//	qxl_surface_id_dealloc(qdev, surf);
+
+}
+
+void qxl_surface_evict(struct qxl_device *qdev, struct qxl_bo *surf, bool do_update_area)
+{
+	mutex_lock(&qdev->surf_evict_mutex);
+	qxl_surface_evict_locked(qdev, surf, do_update_area);
+	mutex_unlock(&qdev->surf_evict_mutex);		
 }
 
 static int qxl_reap_surf(struct qxl_device *qdev, struct qxl_bo *surf, bool stall)
 {
 	int ret;
 
-	ret = qxl_bo_reserve(surf, true);
+	ret = qxl_bo_reserve(surf, false);
 	if (ret == -EBUSY)
 		return -EBUSY;
 
@@ -605,15 +626,21 @@ static int qxl_reap_surf(struct qxl_device *qdev, struct qxl_bo *surf, bool stal
 		return -EBUSY;
 	}
 
+	if (stall)
+		mutex_unlock(&qdev->surf_evict_mutex);
+
 	spin_lock(&surf->tbo.bdev->fence_lock);
 	ret = ttm_bo_wait(&surf->tbo, true, true, !stall);
 	spin_unlock(&surf->tbo.bdev->fence_lock);
+
+	if (stall)
+		mutex_lock(&qdev->surf_evict_mutex);
 	if (ret == -EBUSY) {
 		qxl_bo_unreserve(surf);
 		return -EBUSY;
 	}
 
-	qxl_surface_evict(qdev, surf, true);
+	qxl_surface_evict_locked(qdev, surf, true);
 	qxl_bo_unreserve(surf);
 	return 0;
 }
@@ -624,34 +651,54 @@ static int qxl_reap_surface_id(struct qxl_device *qdev, int max_to_reap)
 	int i, ret;
 	bool stall = false;
 	int start = 0;
+	int max = qdev->rom->n_surfaces;
+	mutex_lock(&qdev->surf_evict_mutex);
 again:
 
 	spin_lock(&qdev->surf_id_idr_lock);
-	if (qdev->last_alloced_surf_id + 1 + 2 * max_to_reap > 1024)
-		start = 0;
-	else
-		start = qdev->last_alloced_surf_id + 1;
+	start = qdev->last_alloced_surf_id + 1;
 	spin_unlock(&qdev->surf_id_idr_lock);
 
-	for (i = start; i < start + 2 * max_to_reap; i++) {
+	for (i = start; i < start + qdev->rom->n_surfaces; i++) {
 		void *objptr;
-
+		int surfid = i % qdev->rom->n_surfaces;
+		/* this avoids the case where the objects is in the
+		   idr but has been evicted half way - its makes
+		   the idr lookup atomic with the eviction */
+	
 		spin_lock(&qdev->surf_id_idr_lock);
-		objptr = idr_find(&qdev->surf_id_idr, i);
+		objptr = idr_find(&qdev->surf_id_idr, surfid);
 		spin_unlock(&qdev->surf_id_idr_lock);
 
 		if (!objptr)
 			continue;
 
+		{
+		  struct qxl_bo *bo = (struct qxl_bo *)objptr;
+		  printk("reaping %d %p %d %d %d %d\n", surfid, objptr, bo->surface_id, stall, bo->hw_surf_alloc, atomic_read(&bo->tbo.kref.refcount));
+		  qxl_io_log(qdev, "reaping %d %p %d %d %d %d %d\n", surfid, objptr, bo->surface_id, stall, bo->hw_surf_alloc, atomic_read(&bo->tbo.kref.refcount), qdev->last_alloced_surf_id);
+
+		  if (!bo->hw_surf_alloc)
+			  continue;
+
+		}
+
 		ret = qxl_reap_surf(qdev, objptr, stall);
 		if (ret == 0)
 			num_reaped++;
-		if (num_reaped == max_to_reap)
+		if (num_reaped >= max_to_reap)
 			break;
 	}
 	if (num_reaped == 0 && stall == false) {
 		stall = true;
 		goto again;
 	}
+
+	mutex_unlock(&qdev->surf_evict_mutex);
+	if (num_reaped) {
+		usleep_range(500, 1000);
+		qxl_queue_garbage_collect(qdev, true);
+	}
+
 	return 0;
 }

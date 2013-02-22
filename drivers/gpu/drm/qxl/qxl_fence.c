@@ -26,10 +26,12 @@
 
 int qxl_fence_add_release(struct qxl_fence *qfence, uint32_t rel_id)
 {
-	spin_lock(&qfence->fence_lock);
+	struct qxl_bo *bo = container_of(qfence, struct qxl_bo, fence);
+
+	spin_lock(&bo->tbo.bdev->fence_lock);
 	radix_tree_insert(&qfence->tree, rel_id, qfence);
 	qfence->num_active_releases++;
-	spin_unlock(&qfence->fence_lock);
+	spin_unlock(&bo->tbo.bdev->fence_lock);
 	return 0;
 }
 
@@ -37,14 +39,18 @@ int qxl_fence_remove_release(struct qxl_fence *qfence, uint32_t rel_id)
 {
 	void *ret;
 	int retval = 0;
-	spin_lock(&qfence->fence_lock);
+	struct qxl_bo *bo = container_of(qfence, struct qxl_bo, fence);
+
+	spin_lock(&bo->tbo.bdev->fence_lock);
 
 	ret = radix_tree_delete(&qfence->tree, rel_id);
 	if (ret == qfence)
 		qfence->num_active_releases--;
-	else
+	else {
+		printk("didn't find fence in radix tree for %d\n", rel_id);
 		retval = -ENOENT;
-	spin_unlock(&qfence->fence_lock);
+	}
+	spin_unlock(&bo->tbo.bdev->fence_lock);
 	return retval;
 }
 
@@ -53,7 +59,6 @@ int qxl_fence_init(struct qxl_device *qdev, struct qxl_fence *qfence)
 {
 	qfence->qdev = qdev;
 	qfence->num_active_releases = 0;
-	spin_lock_init(&qfence->fence_lock);
 	INIT_RADIX_TREE(&qfence->tree, GFP_ATOMIC);
 	return 0;
 }

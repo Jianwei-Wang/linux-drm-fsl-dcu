@@ -402,20 +402,17 @@ static int qxl_sync_obj_wait(void *sync_obj,
 	int count = 0, sc = 0;
 	struct qxl_bo *bo = container_of(qfence, struct qxl_bo, fence);
 
-	spin_lock(&qfence->fence_lock);
 	if (qfence->num_active_releases == 0) {
-		spin_unlock(&qfence->fence_lock);
 		return 0;
 	}
-	spin_unlock(&qfence->fence_lock);	  
 
 retry:
 	if (sc == 0) {
 		if (bo->type == QXL_GEM_DOMAIN_SURFACE)
 			qxl_update_surface(qfence->qdev, bo);
-	} else if (sc == 1)
-		qxl_io_flush_surfaces(qfence->qdev);
-	else if (sc > 1) {
+	} //else if (sc == 1)
+	//		qxl_io_flush_surfaces(qfence->qdev);
+	else if (sc >= 1) {
 		printk("notifying oom from sync obj wait\n");
 		qxl_io_notify_oom(qfence->qdev);
 	}
@@ -429,16 +426,12 @@ retry:
 		if (ret == false)
 			break;
 
-		spin_lock(&qfence->fence_lock);
 		if (qfence->num_active_releases == 0) {
-			spin_unlock(&qfence->fence_lock);
 			return 0;
 		}
 		qxl_release_ring_flush(qfence->qdev);
-		spin_unlock(&qfence->fence_lock);
 	}
 
-	spin_lock(&qfence->fence_lock);
 	if (qfence->num_active_releases) {
 		int i;
 		bool have_drawable_releases = false;
@@ -506,16 +499,17 @@ retry:
 		}
 
 		WARN(1, "sync obj %d still has outstanding releases %d %d %d %d %d\n", sc, bo->surface_id, bo->is_primary, bo->pin_count, bo->gem_base.size, qfence->num_active_releases);
-		spin_unlock(&qfence->fence_lock);
 		qxl_queue_garbage_collect(qfence->qdev, true);
 
 		if (have_drawable_releases || sc < 4) {
-			if (have_drawable_releases && sc > 20)
+			if (sc > 2)
+				/* back off */
+				usleep_range(500, 1000);
+			if (have_drawable_releases && sc > 300)
 				return -EBUSY;
 			goto retry;
 		}
-	} else
-		spin_unlock(&qfence->fence_lock);
+	}
 	return 0;
 }
 
@@ -537,9 +531,7 @@ static bool qxl_sync_obj_signaled(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
 	bool ret;
-	spin_lock(&qfence->fence_lock);
 	ret = qfence->num_active_releases == 0;
-	spin_unlock(&qfence->fence_lock);
 	return ret;
 }
 
