@@ -214,17 +214,6 @@ static void qxl_fb_fillrect(struct fb_info *info,
 			"%s: TODO use RCU, mysterious locks with spin_lock\n",
 			__func__);
 		return;
-#if 0
-		unsigned long flags;
-		spin_lock_irqsave(&qdev->fb_workqueue_spinlock, flags);
-		if (qxl_fb_queue_draw_fill(&qxl_draw_fill_rec)) {
-			qxl_io_log(qdev,
-			"%s: failed to queue work item in interrupt context.\n"
-			"fb_fillrect = %x\n", __func__, fb_rect);
-		}
-		spin_unlock_irqrestore(&qdev->fb_workqueue_spinlock, flags);
-		return;
-#endif
 	}
 	/* ensure proper order of rendering operations - TODO: must do this
 	 * for everything. */
@@ -241,74 +230,6 @@ static void qxl_fb_copyarea(struct fb_info *info,
 			  region->width, region->height,
 			  region->sx, region->sy,
 			  region->dx, region->dy);
-}
-
-#if 0
-static u32 checksum(struct fb_info *info)
-{
-	u8 *addr;
-	u32 sum = 0;
-	/* for now checksum the pixmap - later check other stuff */
-	for (addr = info->pixmap.addr;
-	     addr < info->pixmap.addr + info->pixmap.size; ++addr)
-		sum += *addr;
-	return sum;
-}
-#endif
-
-static struct qxl_fb_work_item *get_work_item(struct qxl_device *qdev, int type)
-{
-	struct qxl_fb_work_item *item;
-
-	if (list_empty(&qdev->fb_work_item_free))
-		/* not much we can do, really - log this to qemu at least */
-		return NULL;
-	item = list_first_entry(&qdev->fb_work_item_free,
-				struct qxl_fb_work_item, head);
-	list_del(&item->head);
-	item->type = type;
-	return item;
-}
-
-static void push_fb_work_item(struct qxl_device *qdev,
-			      struct qxl_fb_work_item *item)
-{
-	list_add_tail(&item->head, &qdev->fb_work_item_pending);
-	queue_work(qdev->fb_workqueue, &qdev->fb_work);
-}
-
-/* not static for debugfs */
-int qxl_fb_queue_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec)
-{
-	struct qxl_device *qdev = qxl_draw_fill_rec->qdev;
-	struct qxl_fb_work_item *item =
-		get_work_item(qdev, QXL_FB_WORK_ITEM_DRAW_FILL);
-
-	if (!item)
-		return -ENOMEM;
-	item->qxl_draw_fill = *qxl_draw_fill_rec;
-	push_fb_work_item(qdev, item);
-	return 0;
-}
-
-/* not static for debugfs */
-int qxl_fb_queue_imageblit(struct qxl_device *qdev,
-			   struct qxl_fb_image *qxl_fb_image,
-			   struct fb_info *info,
-			   const struct fb_image *image)
-{
-	struct qxl_fb_work_item *item =
-		get_work_item(qdev, QXL_FB_WORK_ITEM_IMAGE);
-
-	if (!item)
-		return -ENOMEM;
-	if (!qxl_fb_image)
-		qxl_fb_image_init(&item->qxl_fb_image, qdev, info, image);
-	else    /* debugfs path */
-		memcpy(&item->qxl_fb_image, qxl_fb_image,
-		       sizeof(*qxl_fb_image));
-	push_fb_work_item(qdev, item);
-	return 0;
 }
 
 static void qxl_fb_imageblit_safe(struct qxl_fb_image *qxl_fb_image)
@@ -332,16 +253,6 @@ static void qxl_fb_imageblit(struct fb_info *info,
 			"%s: TODO use RCU, mysterious locks with spin_lock\n",
 			   __func__);
 		return;
-#if 0
-		unsigned long flags;
-		spin_lock_irqsave(&qdev->fb_workqueue_spinlock, flags);
-		if (qxl_fb_queue_imageblit(qdev, NULL, info, image))
-			qxl_io_log(qdev,
-			"%s: failed to queue work item in interrupt context.\n"
-			"info = %x, image = %x\n", __func__, info, image);
-		spin_unlock_irqrestore(&qdev->fb_workqueue_spinlock, flags);
-		return;
-#endif
 	}
 	/* ensure proper order of rendering operations - TODO: must do this
 	 * for everything. */

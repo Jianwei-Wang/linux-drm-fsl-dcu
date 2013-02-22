@@ -159,64 +159,6 @@ static int qxl_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
 	return 0;
 }
 
-static int qxl_bo_man_init(struct ttm_mem_type_manager *man,
-			   unsigned long p_size)
-{
-	return ttm_bo_manager_func.init(man, p_size);
-}
-
-static int qxl_bo_man_takedown(struct ttm_mem_type_manager *man)
-{
-	return ttm_bo_manager_func.takedown(man);
-}
-
-static int qxl_bo_man_get_node(struct ttm_mem_type_manager *man,
-			       struct ttm_buffer_object *bo,
-			       struct ttm_placement *placement,
-			       struct ttm_mem_reg *mem)
-{
-	struct qxl_device *qdev = container_of(man->bdev, struct qxl_device,
-					       mman.bdev);
-	int ret;
-	int count_loops = 0;
-
-	ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
-#if 0
-	while (unlikely(ret || mem->mm_node == NULL)) {
-		qxl_io_notify_oom(qdev);
-
-		queue_work(qdev->gc_queue, &qdev->gc_work);
-		mdelay(10);
-		count_loops++;
-		if (count_loops == 2)
-		  return -ENOMEM;
-		/* TODO - sleep here */
-		ret = ttm_bo_manager_func.get_node(man, bo, placement, mem);
-	}
-#endif
-	return ret;
-}
-
-static void qxl_bo_man_put_node(struct ttm_mem_type_manager *man,
-				struct ttm_mem_reg *mem)
-{
-	ttm_bo_manager_func.put_node(man, mem);
-}
-
-static void qxl_bo_man_debug(struct ttm_mem_type_manager *man,
-			     const char *prefix)
-{
-	ttm_bo_manager_func.debug(man, prefix);
-}
-
-static const struct ttm_mem_type_manager_func qxl_bo_manager_func = {
-	qxl_bo_man_init,
-	qxl_bo_man_takedown,
-	qxl_bo_man_get_node,
-	qxl_bo_man_put_node,
-	qxl_bo_man_debug,
-};
-
 static int qxl_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 			     struct ttm_mem_type_manager *man)
 {
@@ -234,7 +176,7 @@ static int qxl_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	case TTM_PL_VRAM:
 	case TTM_PL_PRIV0:
 		/* "On-card" video ram */
-		man->func = &qxl_bo_manager_func;
+		man->func = &ttm_bo_manager_func;
 		man->gpu_offset = 0;
 		man->flags = TTM_MEMTYPE_FLAG_FIXED |
 			     TTM_MEMTYPE_FLAG_MAPPABLE;
@@ -474,7 +416,6 @@ retry:
 			qxl_io_log(qfence->qdev, "release %d is %d\n", release_id, release->type);
 
 			if (release->type == QXL_RELEASE_SURFACE_CMD) {
-				void *ptr;
 				struct qxl_surface_cmd *scmd;
 				int ret;
 				bool reserved = true;
@@ -500,7 +441,6 @@ retry:
 			
 			have_drawable_releases = true;
 			{
-				void *ptr;
 				struct qxl_drawable *draw;
 				int ret;
 				struct qxl_bo *bo;

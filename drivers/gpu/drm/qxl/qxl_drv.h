@@ -578,13 +578,6 @@ irqreturn_t qxl_irq_handler(DRM_IRQ_ARGS);
 /* qxl_fb.c */
 int qxl_fb_init(struct qxl_device *qdev);
 
-/* not static for debugfs */
-int qxl_fb_queue_imageblit(struct qxl_device *qdev,
-			   struct qxl_fb_image *qxl_fb_image,
-			   struct fb_info *info,
-			   const struct fb_image *image);
-int qxl_fb_queue_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec);
-
 int qxl_debugfs_add_files(struct qxl_device *qdev,
 			  struct drm_info_list *files,
 			  unsigned nfiles);
