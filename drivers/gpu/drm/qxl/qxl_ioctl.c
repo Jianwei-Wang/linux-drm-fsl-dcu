@@ -297,7 +297,7 @@ int qxl_update_area_ioctl(struct drm_device *dev, void *data,
 		ret = ttm_bo_validate(&qobj->tbo, &qobj->placement,
 				      true, false);
 		if (unlikely(ret))
-			goto out;
+			goto out2;
 	}
 
 	ret = qxl_bo_check_id(qdev, qobj);
@@ -390,6 +390,30 @@ static int qxl_alloc_surf_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
+static int qxl_alloc_bo_info(struct drm_device *dev, void *data,
+			     struct drm_file *file)
+{
+	struct drm_qxl_bo_info *param = data;
+	struct qxl_bo *qobj;
+	struct drm_gem_object *gobj;
+
+	gobj = drm_gem_object_lookup(dev, file, param->handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_qxl_bo(gobj);
+
+	param->size = qobj->gem_base.size;
+	param->type = qobj->type;
+	if (qobj->type == QXL_GEM_DOMAIN_SURFACE) {
+		param->width = qobj->surf.width;
+		param->height = qobj->surf.height;
+		param->stride = qobj->surf.stride;
+		param->format = qobj->surf.format;
+	}
+	drm_gem_object_unreference_unlocked(gobj);
+	return 0;
+}
 struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC, qxl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -405,6 +429,9 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 							DRM_AUTH|DRM_UNLOCKED),
 
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC_SURF, qxl_alloc_surf_ioctl,
+			  DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(QXL_BO_INFO, qxl_alloc_bo_info,
 			  DRM_AUTH|DRM_UNLOCKED),
 };
 

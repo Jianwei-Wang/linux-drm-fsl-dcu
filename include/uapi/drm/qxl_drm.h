@@ -44,8 +44,8 @@
 #define DRM_QXL_UPDATE_AREA 0x03
 #define DRM_QXL_GETPARAM    0x04
 #define DRM_QXL_CLIENTCAP   0x05
-
 #define DRM_QXL_ALLOC_SURF  0x06
+#define DRM_QXL_BO_INFO     0x07
 
 struct drm_qxl_alloc {
 	uint32_t size;
@@ -123,6 +123,17 @@ struct drm_qxl_alloc_surf {
 	uint32_t pad;
 };
 
+struct drm_qxl_bo_info {
+	uint32_t handle;
+	uint32_t size;
+	uint32_t type;
+	uint32_t format;
+	uint32_t width;
+	uint32_t height;
+	int32_t stride;
+	uint32_t pad;
+};
+
 #define DRM_IOCTL_QXL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC, struct drm_qxl_alloc)
 
@@ -148,5 +159,9 @@ struct drm_qxl_alloc_surf {
 #define DRM_IOCTL_QXL_ALLOC_SURF \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC_SURF,\
 		struct drm_qxl_alloc_surf)
+
+#define DRM_IOCTL_QXL_BO_INFO \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_BO_INFO,\
+		struct drm_qxl_bo_info)
 
 #endif
