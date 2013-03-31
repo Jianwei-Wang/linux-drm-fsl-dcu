@@ -146,6 +146,9 @@ int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	uint32_t reloc_dst_offset;
 	INIT_LIST_HEAD(&reloc_list.bos);
 
+	if (execbuffer->flags & QXL_EXECBUFFER_3D)
+		return qxl_execbuffer_3d(dev, execbuffer, file_priv);
+
 	for (cmd_num = 0; cmd_num < execbuffer->commands_num; ++cmd_num) {
 		struct qxl_release *release;
 		struct qxl_bo *cmd_bo;
@@ -414,6 +417,35 @@ static int qxl_alloc_bo_info(struct drm_device *dev, void *data,
 	drm_gem_object_unreference_unlocked(gobj);
 	return 0;
 }
+
+int qxl_alloc_3d_ioctl(struct drm_device *dev, void *data,
+		    struct drm_file *file_priv)
+{
+	struct qxl_device *qdev = dev->dev_private;
+	struct drm_qxl_alloc_3d *qxl_alloc = data;
+	int ret;
+	struct qxl_bo *qobj;
+	uint32_t handle;
+	u32 domain = QXL_GEM_DOMAIN_3D;
+
+	if (qxl_alloc->size == 0) {
+		DRM_ERROR("invalid size %d\n", qxl_alloc->size);
+		return -EINVAL;
+	}
+	ret = qxl_gem_object_create_with_handle(qdev, file_priv,
+						domain,
+						qxl_alloc->size,
+						NULL,
+						&qobj, &handle);
+	if (ret) {
+		DRM_ERROR("%s: failed to create gem ret=%d\n",
+			  __func__, ret);
+		return -ENOMEM;
+	}
+	qxl_alloc->handle = handle;
+	return 0;
+}
+
 struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC, qxl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -433,6 +465,8 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 
 	DRM_IOCTL_DEF_DRV(QXL_BO_INFO, qxl_alloc_bo_info,
 			  DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(QXL_ALLOC_3D, qxl_alloc_3d_ioctl, DRM_AUTH|DRM_UNLOCKED),
 };
 
 int qxl_max_ioctls = DRM_ARRAY_SIZE(qxl_ioctls);

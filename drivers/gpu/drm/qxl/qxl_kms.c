@@ -119,6 +119,13 @@ int qxl_device_init(struct qxl_device *qdev,
 	mutex_init(&qdev->surf_evict_mutex);
 	INIT_LIST_HEAD(&qdev->gem.objects);
 
+	qdev->ivdev = pci_get_device(0x1af4, 0x1110, NULL);
+
+	if (qdev->ivdev) {
+		qdev->ivbase = pci_resource_start(qdev->ivdev, 2);
+		qdev->ivsize = pci_resource_len(qdev->ivdev, 2);
+	}
+
 	qdev->rom_base = pci_resource_start(pdev, 2);
 	qdev->rom_size = pci_resource_len(pdev, 2);
 	qdev->vram_base = pci_resource_start(pdev, 0);
@@ -128,6 +135,8 @@ int qxl_device_init(struct qxl_device *qdev,
 
 	qdev->vram_mapping = io_mapping_create_wc(qdev->vram_base, pci_resource_len(pdev, 0));
 	qdev->surface_mapping = io_mapping_create_wc(qdev->surfaceram_base, qdev->surfaceram_size);
+	if (qdev->ivdev)
+		qdev->ivdev_mapping = io_mapping_create_wc(qdev->ivbase, qdev->ivsize);
 	DRM_DEBUG_KMS("qxl: vram %p-%p(%dM %dk), surface %p-%p(%dM %dk)\n",
 		 (void *)qdev->vram_base, (void *)pci_resource_end(pdev, 0),
 		 (int)pci_resource_len(pdev, 0) / 1024 / 1024,
@@ -196,6 +205,11 @@ int qxl_device_init(struct qxl_device *qdev,
 
 	mutex_init(&qdev->async_io_mutex);
 
+	if (qdev->ivdev) {
+		r = qxl_init_3d(qdev);
+		if (r)
+			DRM_INFO("3D failed to init %d\n", r);
+	}
 	/* reset the device into a known state - no memslots, no primary
 	 * created, no surfaces. */
 	qxl_io_reset(qdev);
@@ -243,11 +257,19 @@ void qxl_device_fini(struct qxl_device *qdev)
 	qxl_ring_free(qdev->command_ring);
 	qxl_ring_free(qdev->cursor_ring);
 	qxl_ring_free(qdev->release_ring);
+
+	if (qdev->ivdev)
+		qxl_fini_3d(qdev);
+
 	qxl_bo_fini(qdev);
+	if (qdev->ivdev)
+		io_mapping_free(qdev->ivdev_mapping);
 	io_mapping_free(qdev->surface_mapping);
 	io_mapping_free(qdev->vram_mapping);
 	iounmap(qdev->ram_header);
 	iounmap(qdev->rom);
+	if (qdev->ivdev)
+		pci_dev_put(qdev->ivdev);
 	qdev->rom = NULL;
 	qdev->mode_info.modes = NULL;
 	qdev->mode_info.num_modes = 0;

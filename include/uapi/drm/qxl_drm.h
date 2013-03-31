@@ -37,6 +37,7 @@
 #define QXL_GEM_DOMAIN_CPU 0
 #define QXL_GEM_DOMAIN_VRAM 1
 #define QXL_GEM_DOMAIN_SURFACE 2
+#define QXL_GEM_DOMAIN_3D 3
 
 #define DRM_QXL_ALLOC       0x00
 #define DRM_QXL_MAP         0x01
@@ -46,6 +47,8 @@
 #define DRM_QXL_CLIENTCAP   0x05
 #define DRM_QXL_ALLOC_SURF  0x06
 #define DRM_QXL_BO_INFO     0x07
+
+#define DRM_QXL_ALLOC_3D    0x08
 
 struct drm_qxl_alloc {
 	uint32_t size;
@@ -86,6 +89,8 @@ struct drm_qxl_command {
 };
 
 /* XXX: call it drm_qxl_commands? */
+#define QXL_EXECBUFFER_3D (1 << 1)
+
 struct drm_qxl_execbuffer {
 	uint32_t		flags;		/* for future use */
 	uint32_t		commands_num;
@@ -134,6 +139,11 @@ struct drm_qxl_bo_info {
 	uint32_t pad;
 };
 
+struct drm_qxl_alloc_3d {
+	uint32_t size;
+	uint32_t handle; /* 0 is an invalid handle */
+};
+
 #define DRM_IOCTL_QXL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC, struct drm_qxl_alloc)
 
@@ -163,5 +173,9 @@ struct drm_qxl_bo_info {
 #define DRM_IOCTL_QXL_BO_INFO \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_BO_INFO,\
 		struct drm_qxl_bo_info)
+
+#define DRM_IOCTL_QXL_ALLOC_3D \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC_3D,	\
+		struct drm_qxl_alloc_3d)
 
 #endif

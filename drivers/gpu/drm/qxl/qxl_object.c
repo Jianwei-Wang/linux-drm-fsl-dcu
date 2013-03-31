@@ -63,6 +63,8 @@ void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain)
 		qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_VRAM;
 	if (domain & QXL_GEM_DOMAIN_SURFACE)
 		qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_PRIV0;
+	if (domain & QXL_GEM_DOMAIN_3D)
+		qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_PRIV1;
 	if (domain & QXL_GEM_DOMAIN_CPU)
 		qbo->placements[c++] = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
 	if (!c)
@@ -154,6 +156,8 @@ void *qxl_bo_kmap_atomic_page(struct qxl_device *qdev,
 		map = qdev->vram_mapping;
 	else if (bo->tbo.mem.mem_type == TTM_PL_PRIV0)
 		map = qdev->surface_mapping;
+	else if (bo->tbo.mem.mem_type == TTM_PL_PRIV1)
+		map = qdev->ivdev_mapping;
 	else
 		goto fallback;
 
@@ -194,6 +198,8 @@ void qxl_bo_kunmap_atomic_page(struct qxl_device *qdev,
 		map = qdev->vram_mapping;
 	else if (bo->tbo.mem.mem_type == TTM_PL_PRIV0)
 		map = qdev->surface_mapping;
+	else if (bo->tbo.mem.mem_type == TTM_PL_PRIV1)
+		map = qdev->ivdev_mapping;
 	else
 		goto fallback;
 

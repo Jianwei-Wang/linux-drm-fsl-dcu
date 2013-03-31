@@ -183,6 +183,14 @@ static int qxl_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_CACHED;
 		break;
+	case TTM_PL_PRIV1:
+		man->func = &ttm_bo_manager_func;
+		man->gpu_offset = 0;
+		man->flags = TTM_MEMTYPE_FLAG_FIXED |
+			     TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->available_caching = TTM_PL_MASK_CACHING;
+		man->default_caching = TTM_PL_FLAG_CACHED;
+		break;
 	default:
 		DRM_ERROR("Unsupported memory type %u\n", (unsigned)type);
 		return -EINVAL;
@@ -240,6 +248,11 @@ static int qxl_ttm_io_mem_reserve(struct ttm_bo_device *bdev,
 	case TTM_PL_PRIV0:
 		mem->bus.is_iomem = true;
 		mem->bus.base = qdev->surfaceram_base;
+		mem->bus.offset = mem->start << PAGE_SHIFT;
+		break;
+	case TTM_PL_PRIV1:
+		mem->bus.is_iomem = true;
+		mem->bus.base = qdev->ivbase;
 		mem->bus.offset = mem->start << PAGE_SHIFT;
 		break;
 	default:
@@ -367,6 +380,9 @@ static int qxl_sync_obj_wait(void *sync_obj,
 	int count = 0, sc = 0;
 	struct qxl_bo *bo = container_of(qfence, struct qxl_bo, fence);
 
+	if (qfence->type)
+		return qxl_3d_fence_wait((struct qxl_3d_fence *)sync_obj, interruptible);
+
 	if (qfence->num_active_releases == 0)
 		return 0;
 
@@ -431,17 +447,28 @@ static int qxl_sync_obj_flush(void *sync_obj)
 
 static void qxl_sync_obj_unref(void **sync_obj)
 {
+	struct qxl_fence **qfence = (struct qxl_fence **)sync_obj;
+	if ((*qfence)->type == 0)
+		return;
+
+	qxl_3d_fence_unref((struct qxl_3d_fence **)sync_obj);
 }
 
 static void *qxl_sync_obj_ref(void *sync_obj)
 {
-	return sync_obj;
+	struct qxl_fence *qfence = sync_obj;
+	if (qfence->type == 0)
+		return sync_obj;
+
+	return qxl_3d_fence_ref((struct qxl_3d_fence *)sync_obj);
 }
 
 static bool qxl_sync_obj_signaled(void *sync_obj)
 {
 	struct qxl_fence *qfence = (struct qxl_fence *)sync_obj;
-	return (qfence->num_active_releases == 0);
+	if (qfence->type == 0)
+		return (qfence->num_active_releases == 0);
+	return qxl_3d_fence_signaled((struct qxl_3d_fence *)sync_obj);
 }
 
 static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
@@ -516,6 +543,17 @@ int qxl_ttm_init(struct qxl_device *qdev)
 		 ((unsigned)num_io_pages * PAGE_SIZE) / (1024 * 1024));
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
 		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
+
+	if (qdev->ivdev) {
+		r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_PRIV1,
+				   qdev->ivsize / PAGE_SIZE);
+		if (r) {
+			DRM_ERROR("Failed initializing 3D shmem.\n");
+			return r;
+		}
+		DRM_INFO("qxl: %uM of 3D SHMEM memory size\n",
+			 (unsigned)qdev->ivsize / (1024 * 1024));
+	}
 	r = qxl_ttm_debugfs_init(qdev);
 	if (r) {
 		DRM_ERROR("Failed to init debugfs\n");
@@ -534,7 +572,7 @@ void qxl_ttm_fini(struct qxl_device *qdev)
 }
 
 
-#define QXL_DEBUGFS_MEM_TYPES 2
+#define QXL_DEBUGFS_MEM_TYPES 3
 
 #if defined(CONFIG_DEBUG_FS)
 static int qxl_mm_dump_table(struct seq_file *m, void *data)
@@ -558,19 +596,26 @@ static int qxl_ttm_debugfs_init(struct qxl_device *qdev)
 	static struct drm_info_list qxl_mem_types_list[QXL_DEBUGFS_MEM_TYPES];
 	static char qxl_mem_types_names[QXL_DEBUGFS_MEM_TYPES][32];
 	unsigned i;
-
-	for (i = 0; i < QXL_DEBUGFS_MEM_TYPES; i++) {
+	int types = QXL_DEBUGFS_MEM_TYPES;
+	if (!qdev->ivdev)
+		types--;
+	for (i = 0; i < types; i++) {
 		if (i == 0)
 			sprintf(qxl_mem_types_names[i], "qxl_mem_mm");
-		else
+		else if (i == 1)
 			sprintf(qxl_mem_types_names[i], "qxl_surf_mm");
+		else
+			sprintf(qxl_mem_types_names[i], "qxl_3d_mm");
 		qxl_mem_types_list[i].name = qxl_mem_types_names[i];
 		qxl_mem_types_list[i].show = &qxl_mm_dump_table;
 		qxl_mem_types_list[i].driver_features = 0;
 		if (i == 0)
 			qxl_mem_types_list[i].data = qdev->mman.bdev.man[TTM_PL_VRAM].priv;
-		else
+		else if (i == 1)
 			qxl_mem_types_list[i].data = qdev->mman.bdev.man[TTM_PL_PRIV0].priv;
+		else
+			qxl_mem_types_list[i].data = qdev->mman.bdev.man[TTM_PL_PRIV1].priv;
+
 
 	}
 	return qxl_debugfs_add_files(qdev, qxl_mem_types_list, i);

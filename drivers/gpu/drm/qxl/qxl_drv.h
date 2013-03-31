@@ -45,6 +45,8 @@
 #include <drm/qxl_drm.h>
 #include "qxl_dev.h"
 
+#include "qxl_3d.h"
+
 #define DRIVER_AUTHOR		"Dave Airlie"
 
 #define DRIVER_NAME		"qxl"
@@ -93,7 +95,10 @@ enum {
 	QXL_INTERRUPT_IO_CMD |\
 	QXL_INTERRUPT_CLIENT_MONITORS_CONFIG)
 
+#define QXL_FENCE_TYPE_2D 0
+#define QXL_FENCE_TYPE_3D 1
 struct qxl_fence {
+	unsigned type;
 	struct qxl_device *qdev;
 	uint32_t num_active_releases;
 	uint32_t *release_ids;
@@ -321,6 +326,11 @@ struct qxl_device {
 	struct workqueue_struct *gc_queue;
 	struct work_struct gc_work;
 
+	struct pci_dev *ivdev;
+	resource_size_t ivbase, ivsize;
+	struct io_mapping *ivdev_mapping;
+
+	struct qxl_3d_info q3d_info;\
 };
 
 /* forward declaration for QXL_INFO_IO */
@@ -563,4 +573,9 @@ int qxl_fence_remove_release(struct qxl_fence *qfence, uint32_t rel_id);
 int qxl_fence_init(struct qxl_device *qdev, struct qxl_fence *qfence);
 void qxl_fence_fini(struct qxl_fence *qfence);
 
+int qxl_execbuffer_3d(struct drm_device *dev,
+		      struct drm_qxl_execbuffer *execbuffer,
+		      struct drm_file *drm_file);
+int qxl_init_3d(struct qxl_device *qdev);
+void qxl_fini_3d(struct qxl_device *qdev);
 #endif
