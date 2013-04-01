@@ -47,8 +47,12 @@
 #define DRM_QXL_CLIENTCAP   0x05
 #define DRM_QXL_ALLOC_SURF  0x06
 #define DRM_QXL_BO_INFO     0x07
-
-#define DRM_QXL_ALLOC_3D    0x08
+ 
+#define DRM_QXL_3D_ALLOC    0x08
+#define DRM_QXL_3D_RESOURCE_CREATE 0x09
+#define DRM_QXL_3D_TRANSFER_GET 0x0A
+#define DRM_QXL_3D_TRANSFER_PUT 0x0B
+#define DRM_QXL_3D_RESOURCE_UNREF 0x0C
 
 struct drm_qxl_alloc {
 	uint32_t size;
@@ -139,9 +143,42 @@ struct drm_qxl_bo_info {
 	uint32_t pad;
 };
 
-struct drm_qxl_alloc_3d {
+struct drm_qxl_3d_alloc {
 	uint32_t size;
 	uint32_t handle; /* 0 is an invalid handle */
+};
+
+struct drm_qxl_3d_resource_create {
+	uint32_t target;
+	uint32_t format;
+	uint32_t bind;
+	uint32_t width;
+	uint32_t height;
+	uint32_t depth;
+	uint32_t res_handle;  /* returned by kernel */
+};
+
+struct drm_qxl_3d_resource_unref {
+	uint32_t res_handle;
+};
+
+struct drm_qxl_3d_box {
+	uint32_t x, y, z;
+	uint32_t w, h, d;
+};
+
+struct drm_qxl_3d_transfer_put {
+	uint32_t res_handle;
+	uint32_t bo_handle;
+	struct drm_qxl_3d_box box;
+	struct drm_qxl_3d_box transfer_box;
+	uint32_t level;
+};
+
+struct drm_qxl_3d_transfer_get {
+	uint32_t res_handle;/* resource id */
+	uint32_t bo_handle;/* bo to get into */
+	struct drm_qxl_3d_box box;
 };
 
 #define DRM_IOCTL_QXL_ALLOC \
@@ -174,8 +211,24 @@ struct drm_qxl_alloc_3d {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_BO_INFO,\
 		struct drm_qxl_bo_info)
 
-#define DRM_IOCTL_QXL_ALLOC_3D \
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC_3D,	\
-		struct drm_qxl_alloc_3d)
+#define DRM_IOCTL_QXL_3D_ALLOC \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_ALLOC,	\
+		struct drm_qxl_3d_alloc)
+
+#define DRM_IOCTL_QXL_3D_RESOURCE_CREATE			\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_RESOURCE_CREATE,	\
+		struct drm_qxl_3d_resource_create)
+
+#define DRM_IOCTL_QXL_3D_TRANSFER_GET \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_TRANSFER_GET,	\
+		struct drm_qxl_3d_transfer_get)
+
+#define DRM_IOCTL_QXL_3D_TRANSFER_PUT \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_TRANSFER_PUT,	\
+		struct drm_qxl_3d_transfer_put)
+
+#define DRM_IOCTL_QXL_3D_RESOURCE_UNREF			\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_RESOURCE_UNREF,	\
+		struct drm_qxl_3d_resource_unref)
 
 #endif

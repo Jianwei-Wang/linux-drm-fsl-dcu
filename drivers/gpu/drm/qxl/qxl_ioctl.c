@@ -418,11 +418,11 @@ static int qxl_alloc_bo_info(struct drm_device *dev, void *data,
 	return 0;
 }
 
-int qxl_alloc_3d_ioctl(struct drm_device *dev, void *data,
-		    struct drm_file *file_priv)
+static int qxl_alloc_3d_ioctl(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
 {
 	struct qxl_device *qdev = dev->dev_private;
-	struct drm_qxl_alloc_3d *qxl_alloc = data;
+	struct drm_qxl_3d_alloc *qxl_alloc = data;
 	int ret;
 	struct qxl_bo *qobj;
 	uint32_t handle;
@@ -446,6 +446,30 @@ int qxl_alloc_3d_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
+static int qxl_alloc_3d_resource_create(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	return 0;
+}
+
+static int qxl_alloc_3d_resource_unref(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	return 0;
+}
+	
+static int qxl_alloc_3d_transfer_get(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	return 0;
+}
+
+static int qxl_alloc_3d_transfer_put(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	return 0;
+}
+
 struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_ALLOC, qxl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -466,7 +490,14 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(QXL_BO_INFO, qxl_alloc_bo_info,
 			  DRM_AUTH|DRM_UNLOCKED),
 
-	DRM_IOCTL_DEF_DRV(QXL_ALLOC_3D, qxl_alloc_3d_ioctl, DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(QXL_3D_ALLOC, qxl_alloc_3d_ioctl, DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(QXL_3D_RESOURCE_CREATE, qxl_alloc_3d_resource_create, DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(QXL_3D_TRANSFER_GET, qxl_alloc_3d_transfer_get, DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(QXL_3D_TRANSFER_PUT, qxl_alloc_3d_transfer_put, DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(QXL_3D_RESOURCE_UNREF, qxl_alloc_3d_resource_unref, DRM_AUTH|DRM_UNLOCKED),
 };
 
 int qxl_max_ioctls = DRM_ARRAY_SIZE(qxl_ioctls);

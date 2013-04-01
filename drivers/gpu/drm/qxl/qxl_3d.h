@@ -12,20 +12,17 @@ enum qxl_3d_cmd_type {
 	QXL_3D_FENCE,
 };
 
-struct qxl_box {
-	uint32_t x, y, z;
-	uint32_t w, h, d;
-};
+
 struct qxl_3d_transfer_put {
 	uint32_t res_handle;
-	struct qxl_box box;
-	struct qxl_box transfer_box;
+	struct drm_qxl_3d_box box;
+	struct drm_qxl_3d_box transfer_box;
 	uint32_t level;
 };
 
 struct qxl_3d_transfer_get {
 	uint32_t res_handle;
-	struct qxl_box box;
+	struct drm_qxl_3d_box box;
 };
 
 struct qxl_3d_flush_buffer {
@@ -64,19 +61,24 @@ struct qxl_3d_ram {
 	struct qxl_command	cmd_ring[QXL_COMMAND_RING_SIZE];
 };
 
+struct qxl_3d_fence_driver {
+	atomic64_t last_seq;
+	uint64_t last_activity;
+	bool initialized;
+	uint64_t			sync_seq;
+};
+
 struct qxl_3d_info {
 	struct qxl_ring *iv3d_ring;
 	void *iv3d;
 	struct qxl_3d_ram *ram_3d_header;  
   
 	struct qxl_bo *ringbo;
+
+	struct qxl_3d_fence_driver fence_drv;
+	wait_queue_head_t		fence_queue;
 };
 
-struct qxl_3d_fence_driver {
-	atomic64_t last_seq;
-	uint64_t last_activity;
-	bool initialized;
-};
 
 struct qxl_3d_fence {
 	uint32_t type;
@@ -90,4 +92,7 @@ void qxl_3d_fence_unref(struct qxl_3d_fence **fence);
  
 bool qxl_3d_fence_signaled(struct qxl_3d_fence *fence);
 int qxl_3d_fence_wait(struct qxl_3d_fence *fence, bool interruptible);
+void qxl_3d_fence_process(struct qxl_device *qdev);
+
+#define QXL_3D_FENCE_SIGNALED_SEQ 0LL
 #endif
