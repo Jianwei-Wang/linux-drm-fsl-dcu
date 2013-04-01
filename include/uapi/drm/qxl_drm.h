@@ -53,6 +53,7 @@
 #define DRM_QXL_3D_TRANSFER_GET 0x0A
 #define DRM_QXL_3D_TRANSFER_PUT 0x0B
 #define DRM_QXL_3D_RESOURCE_UNREF 0x0C
+#define DRM_QXL_3D_WAIT   0x0D
 
 struct drm_qxl_alloc {
 	uint32_t size;
@@ -181,6 +182,10 @@ struct drm_qxl_3d_transfer_get {
 	struct drm_qxl_3d_box box;
 };
 
+struct drm_qxl_3d_wait {
+	uint32_t handle; /* 0 is an invalid handle */
+	uint32_t pad;
+};
 #define DRM_IOCTL_QXL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC, struct drm_qxl_alloc)
 
@@ -211,7 +216,8 @@ struct drm_qxl_3d_transfer_get {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_BO_INFO,\
 		struct drm_qxl_bo_info)
 
-#define DRM_IOCTL_QXL_3D_ALLOC \
+
+#define DRM_IOCTL_QXL_3D_ALLOC				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_ALLOC,	\
 		struct drm_qxl_3d_alloc)
 
@@ -231,4 +237,7 @@ struct drm_qxl_3d_transfer_get {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_RESOURCE_UNREF,	\
 		struct drm_qxl_3d_resource_unref)
 
+#define DRM_IOCTL_QXL_3D_WAIT				\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_3D_WAIT,	\
+		struct drm_qxl_3d_wait)
 #endif
