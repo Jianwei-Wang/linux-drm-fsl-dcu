@@ -109,4 +109,10 @@ extern bool qxl_ttm_bo_is_qxl_bo(struct ttm_buffer_object *bo);
 
 extern int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo);
 extern void qxl_bo_list_unreserve(struct qxl_reloc_list *reloc_list, bool failed);
+
+static inline uint64_t
+qxl_3d_bo_addr(struct qxl_bo *bo, uint32_t offset)
+{
+	return bo->tbo.offset + offset;
+}
 #endif

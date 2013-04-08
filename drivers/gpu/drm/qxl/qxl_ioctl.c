@@ -451,6 +451,30 @@ static int qxl_3d_resource_create_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_resource_create *rc = data;
+	struct qxl_3d_command cmd;
+	int ret;
+	uint32_t res_id;
+
+	ret = qxl_3d_resource_id_get(qdev, &res_id);
+	if (ret)
+		return ret;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.type = QXL_3D_CMD_CREATE_RESOURCE;
+	cmd.u.res_create.handle = res_id;
+	cmd.u.res_create.target = rc->target;
+	cmd.u.res_create.format = rc->format;
+	cmd.u.res_create.bind = rc->bind;
+	cmd.u.res_create.width = rc->width;
+	cmd.u.res_create.height = rc->height;
+	cmd.u.res_create.depth = rc->depth;
+	cmd.u.res_create.array_size = rc->array_size;
+	cmd.u.res_create.last_level = rc->last_level;
+	cmd.u.res_create.nr_samples = rc->nr_samples;
+	
+	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+
+	rc->res_handle = res_id;
 	return 0;
 }
 
@@ -463,27 +487,108 @@ static int qxl_3d_resource_unref_ioctl(struct drm_device *dev, void *data,
 }
 	
 static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv)
+			      struct drm_file *file)
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_transfer_get *args = data;
+	struct qxl_3d_command cmd;
+	struct drm_gem_object *gobj = NULL;
+	struct qxl_bo *qobj = NULL;
+	struct qxl_3d_fence *fence;
+	int ret;
+
+	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_qxl_bo(gobj);
+
+	ret = qxl_bo_reserve(qobj, false);
+	if (ret)
+		goto out;
+
+	memset(&cmd, 0, sizeof(cmd));
+
+	cmd.type = QXL_3D_TRANSFER_GET;
+
+	cmd.u.transfer_get.res_handle = args->res_handle;
+	cmd.u.transfer_get.box = args->box;
+	cmd.u.transfer_get.data = qxl_3d_bo_addr(qobj, 0);
+
+	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+
+	ret = qxl_3d_fence_emit(qdev, &fence);
+
+	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
+
+	qxl_bo_unreserve(qobj);
+ out:
+	drm_gem_object_unreference_unlocked(gobj);
 	return 0;
 }
 
 static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
-			      struct drm_file *file_priv)
+			      struct drm_file *file)
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_transfer_put *args = data;
+	struct qxl_3d_command cmd;
+	struct drm_gem_object *gobj = NULL;
+	struct qxl_bo *qobj = NULL;
+	struct qxl_3d_fence *fence;
+	int ret;
+	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_qxl_bo(gobj);
+
+	ret = qxl_bo_reserve(qobj, false);
+	if (ret)
+		goto out;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.type = QXL_3D_TRANSFER_PUT;
+	cmd.u.transfer_put.res_handle = args->res_handle;
+	cmd.u.transfer_put.box = args->box;
+	cmd.u.transfer_put.transfer_box = args->transfer_box;
+	cmd.u.transfer_put.level = args->level;
+	cmd.u.transfer_put.data = qxl_3d_bo_addr(qobj, 0);
+	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+
+	ret = qxl_3d_fence_emit(qdev, &fence);
+
+	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
+
+	qxl_bo_unreserve(qobj);
+ out:
+	drm_gem_object_unreference_unlocked(gobj);
 	return 0;
 }
 
 static int qxl_3d_wait_ioctl(struct drm_device *dev, void *data,
-			     struct drm_file *file_priv)
+			     struct drm_file *file)
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_wait *args = data;
-	return 0;
+	struct drm_gem_object *gobj = NULL;
+	struct qxl_bo *qobj = NULL;
+	int ret;
+	gobj = drm_gem_object_lookup(dev, file, args->handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_qxl_bo(gobj);
+
+	if (qobj->type != QXL_GEM_DOMAIN_3D) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	ret = qxl_3d_wait(qobj, false);
+out:
+	drm_gem_object_unreference_unlocked(gobj);
+	return ret;
 }
 
 struct drm_ioctl_desc qxl_ioctls[] = {
@@ -510,6 +615,8 @@ struct drm_ioctl_desc qxl_ioctls[] = {
 
 	DRM_IOCTL_DEF_DRV(QXL_3D_RESOURCE_CREATE, qxl_3d_resource_create_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
+	/* make transfer async to the main ring? - no sure, can we
+	   thread these in the underlying GL */
 	DRM_IOCTL_DEF_DRV(QXL_3D_TRANSFER_GET, qxl_3d_transfer_get_ioctl, DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(QXL_3D_TRANSFER_PUT, qxl_3d_transfer_put_ioctl, DRM_AUTH|DRM_UNLOCKED),
 

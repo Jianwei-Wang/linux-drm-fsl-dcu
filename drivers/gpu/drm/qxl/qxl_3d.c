@@ -2,6 +2,25 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+int qxl_3d_resource_id_get(struct qxl_device *qdev, uint32_t *resid)
+{
+	int handle;
+	int idr_ret = -ENOMEM;
+again:
+	if (idr_pre_get(&qdev->q3d_info.resource_idr, GFP_KERNEL) == 0) {
+		goto fail;
+	}
+	spin_lock(&qdev->q3d_info.resource_idr_lock);
+	idr_ret = idr_get_new_above(&qdev->q3d_info.resource_idr, NULL, 1, &handle);
+	spin_unlock(&qdev->q3d_info.resource_idr_lock);
+	if (idr_ret == -EAGAIN)
+		goto again;
+
+	*resid = handle;
+fail:
+	return idr_ret;
+}
+
 static u32 qxl_3d_fence_read(struct qxl_device *qdev)
 {
 	return qdev->q3d_info.ram_3d_header->last_fence;
@@ -18,6 +37,10 @@ int qxl_init_3d(struct qxl_device *qdev)
 {
 	/* create an object for the 3D ring and pin it at 0. */
 	int ret;
+
+	init_waitqueue_head(&qdev->q3d_info.fence_queue);
+	idr_init(&qdev->q3d_info.resource_idr);
+	spin_lock_init(&qdev->q3d_info.resource_idr_lock);
 
 	ret = qxl_bo_create(qdev, sizeof(struct qxl_3d_ram), true,
 			    QXL_GEM_DOMAIN_3D, NULL, &qdev->q3d_info.ringbo);
@@ -38,15 +61,26 @@ int qxl_init_3d(struct qxl_device *qdev)
 		goto out_unreserve;
 
 	qdev->q3d_info.iv3d_ring = qxl_ring_create(&(qdev->q3d_info.ram_3d_header->cmd_ring_hdr),
-					  sizeof(struct qxl_command),
+					  sizeof(struct qxl_3d_command),
 					  QXL_COMMAND_RING_SIZE,
 					  0, 
 					  false,
 					  &qdev->display_event);
 
-out_unreserve:
+	DRM_INFO("3d version is %d %d\n", qdev->q3d_info.ram_3d_header->version, sizeof(struct qxl_3d_command));
+
+	/* push something misc into the ring */
+	{
+		struct qxl_3d_command cmd;
+		cmd.type = 0xdeadbeef;
+		qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, false);
+	}
+
 	qxl_bo_unreserve(qdev->q3d_info.ringbo);
 
+	return 0;
+out_unreserve:
+	qxl_bo_unreserve(qdev->q3d_info.ringbo);
 out_unref:
 	qxl_bo_unref(&qdev->q3d_info.ringbo);
 	return ret;
@@ -56,7 +90,87 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 		      struct drm_qxl_execbuffer *execbuffer,
 		      struct drm_file *drm_file)
 {
+	struct qxl_device *qdev = dev->dev_private;	
+	struct drm_qxl_command *commands =
+		(struct drm_qxl_command *)execbuffer->commands;
+	struct drm_qxl_command user_cmd;
+	struct drm_gem_object *gobj;
+	struct qxl_3d_fence *fence;
+	struct qxl_bo *qobj;
+	void *optr;
+	void *osyncobj;
+	int ret;
+
+	if (execbuffer->commands_num > 1)
+		return -EINVAL;
+
+	if (DRM_COPY_FROM_USER(&user_cmd, &commands[0],
+			       sizeof(user_cmd)))
+		return -EFAULT;
+	/* allocate a command bo */
+	
+	printk("user cmd size %d\n", user_cmd.command_size);
+
+	ret = qxl_gem_object_create(qdev, user_cmd.command_size,
+				    0, QXL_GEM_DOMAIN_3D, false,
+				    true, NULL, &gobj);
+
+	if (ret)
+		return ret;
+
+	qobj = gem_to_qxl_bo(gobj);
+
+	ret = qxl_bo_reserve(qobj, false);
+	if (ret)
+		goto out_free;
+
+	ret = qxl_bo_pin(qobj, QXL_GEM_DOMAIN_3D, NULL);
+	if (ret)
+		goto out_unresv;
+
+	ret = qxl_bo_kmap(qobj, &optr);
+	if (ret)
+		goto out_unresv;
+
+	if (DRM_COPY_FROM_USER(optr, (void *)(unsigned long)user_cmd.command,
+			       user_cmd.command_size)) {
+		ret = -EFAULT;
+		goto out_kunmap;
+	}
+
+	qxl_bo_kunmap(qobj);
+
+	{
+		struct qxl_3d_command cmd;
+		cmd.type = QXL_3D_CMD_SUBMIT;
+		cmd.u.cmd_submit.phy_addr = qxl_3d_bo_addr(qobj, 0);
+		cmd.u.cmd_submit.size = user_cmd.command_size;
+		qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	}
+
+
+	ret = qxl_3d_fence_emit(qdev, &fence);
+
+	spin_lock(&qobj->tbo.glob->lru_lock);
+	spin_lock(&qobj->tbo.bdev->fence_lock);
+	osyncobj = qobj->tbo.sync_obj;
+	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
+
+	spin_unlock(&qobj->tbo.bdev->fence_lock);
+	spin_unlock(&qobj->tbo.glob->lru_lock);
+	qxl_bo_unreserve(qobj);
+	/* fence the command bo */
+	drm_gem_object_unreference_unlocked(gobj);
+	if (osyncobj)
+		qdev->mman.bdev.driver->sync_obj_ref(osyncobj);
 	return 0;
+out_kunmap:
+	qxl_bo_kunmap(qobj);
+out_unresv:
+	qxl_bo_unreserve(qobj);
+out_free:
+	drm_gem_object_unreference_unlocked(gobj);
+	return ret;
 }
 
 static void qxl_3d_fence_destroy(struct kref *kref)
@@ -98,6 +212,62 @@ static bool qxl_3d_fence_seq_signaled(struct qxl_device *qdev, u64 seq)
 static int qxl_3d_fence_wait_seq(struct qxl_device *qdev, u64 target_seq,
 				 bool intr)
 {
+  	unsigned long timeout, last_activity;
+	uint64_t seq;
+	unsigned i;
+	bool signaled;
+	int r;
+
+	while (target_seq > atomic64_read(&qdev->q3d_info.fence_drv.last_seq)) {
+
+		timeout = jiffies - QXL_3D_FENCE_JIFFIES_TIMEOUT;
+		if (time_after(qdev->q3d_info.fence_drv.last_activity, timeout)) {
+			/* the normal case, timeout is somewhere before last_activity */
+			timeout = qdev->q3d_info.fence_drv.last_activity - timeout;
+		} else {
+			/* either jiffies wrapped around, or no fence was signaled in the last 500ms
+			 * anyway we will just wait for the minimum amount and then check for a lockup
+			 */
+			timeout = 1;
+		}
+		seq = atomic64_read(&qdev->q3d_info.fence_drv.last_seq);
+		/* Save current last activity valuee, used to check for GPU lockups */
+		last_activity = qdev->q3d_info.fence_drv.last_activity;
+
+		//		radeon_irq_kms_sw_irq_get(rdev, ring);
+		if (intr) {
+			r = wait_event_interruptible_timeout(qdev->q3d_info.fence_queue,
+				(signaled = qxl_3d_fence_seq_signaled(qdev, target_seq)),
+				timeout);
+                } else {
+			r = wait_event_timeout(qdev->q3d_info.fence_queue,
+				(signaled = qxl_3d_fence_seq_signaled(qdev, target_seq)),
+				timeout);
+		}
+		//		radeon_irq_kms_sw_irq_put(rdev, ring);
+		if (unlikely(r < 0)) {
+			return r;
+		}
+
+		if (unlikely(!signaled)) {
+			/* we were interrupted for some reason and fence
+			 * isn't signaled yet, resume waiting */
+			if (r) {
+				continue;
+			}
+
+			/* check if sequence value has changed since last_activity */
+			if (seq != atomic64_read(&qdev->q3d_info.fence_drv.last_seq)) {
+				continue;
+			}
+
+			/* test if somebody else has already decided that this is a lockup */
+			if (last_activity != qdev->q3d_info.fence_drv.last_activity) {
+				continue;
+			}
+
+		}
+	}
 	return 0;
 }
 
@@ -143,7 +313,17 @@ int qxl_3d_fence_emit(struct qxl_device *qdev,
 
 	kref_init(&((*fence)->kref));
 	(*fence)->qdev = qdev;
+	(*fence)->type = 1;
 	(*fence)->seq = ++qdev->q3d_info.fence_drv.sync_seq;
+
+	{
+	  struct qxl_3d_command cmd;
+	  memset(&cmd, 0, sizeof(cmd));
+	  cmd.type = QXL_3D_FENCE;
+	  cmd.u.fence_id = (*fence)->seq;
+	  qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	}
+
 	return 0;
 }
 		     
@@ -179,3 +359,20 @@ void qxl_3d_fence_process(struct qxl_device *qdev)
 	}
 	
 }
+
+int qxl_3d_wait(struct qxl_bo *bo, bool no_wait)
+{
+	int r;
+
+	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
+	if (unlikely(r != 0))
+		return r;
+	spin_lock(&bo->tbo.bdev->fence_lock);
+	if (bo->tbo.sync_obj)
+		r = ttm_bo_wait(&bo->tbo, true, true, no_wait);
+	spin_unlock(&bo->tbo.bdev->fence_lock);
+	ttm_bo_unreserve(&bo->tbo);
+	return r;
+}
+
+

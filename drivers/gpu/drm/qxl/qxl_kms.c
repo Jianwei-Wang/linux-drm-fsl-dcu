@@ -205,11 +205,7 @@ int qxl_device_init(struct qxl_device *qdev,
 
 	mutex_init(&qdev->async_io_mutex);
 
-	if (qdev->ivdev) {
-		r = qxl_init_3d(qdev);
-		if (r)
-			DRM_INFO("3D failed to init %d\n", r);
-	}
+
 	/* reset the device into a known state - no memslots, no primary
 	 * created, no surfaces. */
 	qxl_io_reset(qdev);
@@ -219,6 +215,11 @@ int qxl_device_init(struct qxl_device *qdev,
 	if (r)
 		return r;
 
+	if (qdev->ivdev) {
+		r = qxl_init_3d(qdev);
+		if (r)
+			DRM_INFO("3D failed to init %d\n", r);
+	}
 	/*
 	 * Note that virtual is surface0. We rely on the single ioremap done
 	 * before.

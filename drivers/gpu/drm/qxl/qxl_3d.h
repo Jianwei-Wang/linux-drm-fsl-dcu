@@ -14,6 +14,7 @@ enum qxl_3d_cmd_type {
 
 
 struct qxl_3d_transfer_put {
+	QXLPHYSICAL data;
 	uint32_t res_handle;
 	struct drm_qxl_3d_box box;
 	struct drm_qxl_3d_box transfer_box;
@@ -21,6 +22,7 @@ struct qxl_3d_transfer_put {
 };
 
 struct qxl_3d_transfer_get {
+	QXLPHYSICAL data;
 	uint32_t res_handle;
 	struct drm_qxl_3d_box box;
 };
@@ -37,6 +39,10 @@ struct qxl_3d_resource_create {
 	uint32_t width;
 	uint32_t height;
 	uint32_t depth;
+	uint32_t array_size;
+	uint32_t last_level;
+	uint32_t nr_samples;
+	uint32_t pad;
 };
 
 struct qxl_3d_ring_header {
@@ -47,10 +53,22 @@ struct qxl_3d_ring_header {
 	uint32_t notify_on_cons;
 };
 
+struct qxl_3d_cmd_submit {
+	uint64_t phy_addr;
+	uint32_t size;
+};
+
 struct qxl_3d_command {
-	QXLPHYSICAL data;
 	uint32_t type;
 	uint32_t padding;
+	union qxl_3d_cmds {
+		struct qxl_3d_resource_create res_create;
+		struct qxl_3d_transfer_put transfer_put;
+		struct qxl_3d_transfer_get transfer_get;
+		uint64_t fence_id;
+		struct qxl_3d_cmd_submit cmd_submit;
+		unsigned char pads[120];
+	} u;
 };
 
 struct qxl_3d_ram {
@@ -58,7 +76,7 @@ struct qxl_3d_ram {
 	uint32_t pad;
 	uint64_t last_fence;
 	struct qxl_ring_header  cmd_ring_hdr;
-	struct qxl_command	cmd_ring[QXL_COMMAND_RING_SIZE];
+	struct qxl_3d_command	cmd_ring[QXL_COMMAND_RING_SIZE];
 };
 
 struct qxl_3d_fence_driver {
@@ -77,6 +95,9 @@ struct qxl_3d_info {
 
 	struct qxl_3d_fence_driver fence_drv;
 	wait_queue_head_t		fence_queue;
+
+	struct idr	resource_idr;
+	spinlock_t resource_idr_lock;
 };
 
 
@@ -95,4 +116,7 @@ int qxl_3d_fence_wait(struct qxl_3d_fence *fence, bool interruptible);
 void qxl_3d_fence_process(struct qxl_device *qdev);
 
 #define QXL_3D_FENCE_SIGNALED_SEQ 0LL
+#define QXL_3D_FENCE_JIFFIES_TIMEOUT		(HZ / 2)
+
+
 #endif

@@ -156,6 +156,9 @@ struct drm_qxl_3d_resource_create {
 	uint32_t width;
 	uint32_t height;
 	uint32_t depth;
+	uint32_t array_size;
+	uint32_t last_level;
+	uint32_t nr_samples;
 	uint32_t res_handle;  /* returned by kernel */
 };
 
@@ -186,6 +189,7 @@ struct drm_qxl_3d_wait {
 	uint32_t handle; /* 0 is an invalid handle */
 	uint32_t pad;
 };
+
 #define DRM_IOCTL_QXL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_QXL_ALLOC, struct drm_qxl_alloc)
 

@@ -64,7 +64,7 @@ qxl_ring_create(struct qxl_ring_header *header,
 		return NULL;
 
 	ring->ring = (struct ring *)header;
-	ring->element_size = element_size;
+	ring->element_size = __roundup_pow_of_two(element_size);
 	ring->n_elements = n_elements;
 	ring->prod_notify = prod_notify;
 	ring->push_event = push_event;

@@ -566,6 +566,8 @@ void qxl_ttm_fini(struct qxl_device *qdev)
 {
 	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_VRAM);
 	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV0);
+	if (qdev->ivdev)
+		ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV1);
 	ttm_bo_device_release(&qdev->mman.bdev);
 	qxl_ttm_global_fini(qdev);
 	DRM_INFO("qxl: ttm finalized\n");
