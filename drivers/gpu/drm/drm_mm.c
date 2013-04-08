@@ -761,13 +761,15 @@ int drm_mm_dump_table(struct seq_file *m, struct drm_mm *mm)
 	unsigned long total_used = 0, total_free = 0, total = 0;
 	unsigned long hole_start, hole_end, hole_size;
 
-	hole_start = drm_mm_hole_node_start(&mm->head_node);
-	hole_end = drm_mm_hole_node_end(&mm->head_node);
-	hole_size = hole_end - hole_start;
-	if (hole_size)
-		seq_printf(m, "0x%08lx-0x%08lx: 0x%08lx: free\n",
-				hole_start, hole_end, hole_size);
-	total_free += hole_size;
+	if (mm->head_node.hole_follows) {
+		hole_start = drm_mm_hole_node_start(&mm->head_node);
+		hole_end = drm_mm_hole_node_end(&mm->head_node);
+		hole_size = hole_end - hole_start;
+		if (hole_size)
+			seq_printf(m, "0x%08lx-0x%08lx: 0x%08lx: free\n",
+				   hole_start, hole_end, hole_size);
+		total_free += hole_size;
+	}
 
 	drm_mm_for_each_node(entry, mm) {
 		seq_printf(m, "0x%08lx-0x%08lx: 0x%08lx: used\n",
