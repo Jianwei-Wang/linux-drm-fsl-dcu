@@ -57,10 +57,14 @@
  * use the drm_gem_prime_{import,export} helpers.
  */
 
+#define PRIME_IMPORT 1
+#define PRIME_EXPORT 2
+
 struct drm_prime_member {
 	struct list_head entry;
 	struct dma_buf *dma_buf;
 	uint32_t handle;
+	int type;
 };
 
 static struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
@@ -506,7 +510,7 @@ void drm_prime_destroy_file_private(struct drm_prime_file_private *prime_fpriv)
 }
 EXPORT_SYMBOL(drm_prime_destroy_file_private);
 
-int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv, struct dma_buf *dma_buf, uint32_t handle)
+static int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv, struct dma_buf *dma_buf, uint32_t handle, int type)
 {
 	struct drm_prime_member *member;
 
@@ -516,13 +520,14 @@ int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv, struct 
 
 	member->dma_buf = dma_buf;
 	member->handle = handle;
+	member->type = type;
 	list_add(&member->entry, &prime_fpriv->head);
 	return 0;
 }
 
 int drm_prime_add_imported_buf_handle(struct drm_prime_file_private *prime_fpriv, struct dma_buf *dma_buf, uint32_t handle)
 {
-	return drm_prime_add_buf_handle(prime_fpriv, dma_buf, handle);
+	return drm_prime_add_buf_handle(prime_fpriv, dma_buf, handle, PRIME_IMPORT);
 }
 EXPORT_SYMBOL(drm_prime_add_imported_buf_handle);
 
@@ -530,7 +535,7 @@ static int drm_prime_add_exported_buf_handle(struct drm_prime_file_private *prim
 {
 	/* take a reference to the buf handle for this case */
 	get_dma_buf(dma_buf);
-	return drm_prime_add_buf_handle(prime_fpriv, dma_buf, handle);
+	return drm_prime_add_buf_handle(prime_fpriv, dma_buf, handle, PRIME_EXPORT);
 }
 
 int drm_prime_lookup_buf_handle(struct drm_prime_file_private *prime_fpriv, struct dma_buf *dma_buf, uint32_t *handle)
@@ -554,25 +559,15 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv, str
 	mutex_lock(&prime_fpriv->lock);
 	list_for_each_entry_safe(member, safe, &prime_fpriv->head, entry) {
 		if (member->dma_buf == dma_buf) {
+			if (member->type == PRIME_EXPORT)
+				dma_buf_put(dma_buf);
 			list_del(&member->entry);
 			kfree(member);
 		}
 	}
 	mutex_unlock(&prime_fpriv->lock);
 }
-
-void drm_prime_remove_imported_buf_handle(struct drm_prime_file_private *prime_fpriv, struct dma_buf *dma_buf)
-{
-	return drm_prime_remove_buf_handle(prime_fpriv, dma_buf);
-}
-EXPORT_SYMBOL(drm_prime_remove_imported_buf_handle);
-
-void drm_prime_remove_exported_buf_handle(struct drm_prime_file_private *prime_fpriv, struct dma_buf *dma_buf)
-{
-	drm_prime_remove_buf_handle(prime_fpriv, dma_buf);
-	dma_buf_put(dma_buf);
-}
-EXPORT_SYMBOL(drm_prime_remove_exported_buf_handle);
+EXPORT_SYMBOL(drm_prime_remove_buf_handle);
 
 
 
