@@ -96,11 +96,7 @@ static void drm_gem_dmabuf_release(struct dma_buf *dma_buf)
 {
 	struct drm_gem_object *obj = dma_buf->priv;
 
-	if (obj->export_dma_buf == dma_buf) {
-		/* drop the reference on the export fd holds */
-		obj->export_dma_buf = NULL;
-		drm_gem_object_unreference_unlocked(obj);
-	}
+	drm_gem_object_unreference_unlocked(obj);
 }
 
 static void *drm_gem_dmabuf_vmap(struct dma_buf *dma_buf)
@@ -207,7 +203,6 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	struct drm_gem_object *obj;
 	void *buf;
 	int ret;
-	struct dma_buf *dmabuf;
 	uint32_t exp_handle;
 
 	obj = drm_gem_object_lookup(dev, file_priv, handle);
@@ -216,15 +211,8 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 
 	mutex_lock(&file_priv->prime.lock);
 	/* re-export the original imported object */
-	if (obj->import_attach) {
-		dmabuf = obj->import_attach->dmabuf;
+	if (obj->dma_buf)
 		goto out_have_obj;
-	}
-
-	if (obj->export_dma_buf) {
-		dmabuf = obj->export_dma_buf;
-		goto out_have_obj;
-	}
 
 	buf = dev->driver->gem_prime_export(dev, obj, flags);
 	if (IS_ERR(buf)) {
@@ -234,13 +222,13 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 		ret = PTR_ERR(buf);
 		goto out;
 	}
-	obj->export_dma_buf = buf;
+	obj->dma_buf = buf;
 
 	/* if we've exported this buffer the cheat and add it to the import list
 	 * so we get the correct handle back
 	 */
 	ret = drm_prime_add_exported_buf_handle(&file_priv->prime,
-						obj->export_dma_buf, handle);
+						obj->dma_buf, handle);
 	if (ret)
 		goto out;
 
@@ -249,15 +237,15 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 	return 0;
 
 out_have_obj:
-	get_dma_buf(dmabuf);
+	get_dma_buf(obj->dma_buf);
 	ret = drm_prime_lookup_buf_handle(&file_priv->prime,
-					  dmabuf, &exp_handle);
+					  obj->dma_buf, &exp_handle);
 	if (WARN_ON(ret == -ENOENT || exp_handle != handle)) {
-		dma_buf_put(dmabuf);
+		dma_buf_put(obj->dma_buf);
 		ret = -EINVAL;
 		goto out;
 	}
-	*prime_fd = dma_buf_fd(dmabuf, flags);
+	*prime_fd = dma_buf_fd(obj->dma_buf, flags);
 out:
 	drm_gem_object_unreference_unlocked(obj);
 	mutex_unlock(&file_priv->prime.lock);
@@ -349,8 +337,9 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 	if (ret)
 		goto out_put;
 
+	obj->dma_buf = dma_buf;
 	ret = drm_prime_add_imported_buf_handle(&file_priv->prime,
-			dma_buf, *handle);
+						obj->dma_buf, *handle);
 	if (ret)
 		goto fail;
 
