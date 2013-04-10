@@ -209,7 +209,7 @@ drm_gem_remove_prime_handles(struct drm_gem_object *obj, struct drm_file *filp)
 				obj->import_attach->dmabuf);
 	}
 	if (obj->export_dma_buf) {
-		drm_prime_remove_imported_buf_handle(&filp->prime,
+		drm_prime_remove_exported_buf_handle(&filp->prime,
 				obj->export_dma_buf);
 	}
 }
