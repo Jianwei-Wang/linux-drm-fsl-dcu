@@ -183,6 +183,7 @@ struct drm_qxl_3d_transfer_get {
 	uint32_t res_handle;/* resource id */
 	uint32_t bo_handle;/* bo to get into */
 	struct drm_qxl_3d_box box;
+	uint32_t level;
 };
 
 struct drm_qxl_3d_wait {

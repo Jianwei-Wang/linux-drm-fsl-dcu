@@ -12,7 +12,6 @@ enum qxl_3d_cmd_type {
 	QXL_3D_FENCE,
 };
 
-
 struct qxl_3d_transfer_put {
 	QXLPHYSICAL data;
 	uint32_t res_handle;
@@ -25,6 +24,7 @@ struct qxl_3d_transfer_get {
 	QXLPHYSICAL data;
 	uint32_t res_handle;
 	struct drm_qxl_3d_box box;
+	int level;
 };
 
 struct qxl_3d_flush_buffer {

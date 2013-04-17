@@ -45,6 +45,7 @@ qxl_debugfs_irq_received(struct seq_file *m, void *data)
 	seq_printf(m, "%d\n", atomic_read(&qdev->irq_received_display));
 	seq_printf(m, "%d\n", atomic_read(&qdev->irq_received_cursor));
 	seq_printf(m, "%d\n", atomic_read(&qdev->irq_received_io_cmd));
+	seq_printf(m, "%d\n", atomic_read(&qdev->irq_received_3d));
 	seq_printf(m, "%d\n", qdev->irq_received_error);
 	return 0;
 }

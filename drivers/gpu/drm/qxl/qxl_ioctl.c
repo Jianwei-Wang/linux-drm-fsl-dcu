@@ -514,7 +514,7 @@ static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 	cmd.u.transfer_get.res_handle = args->res_handle;
 	cmd.u.transfer_get.box = args->box;
 	cmd.u.transfer_get.data = qxl_3d_bo_addr(qobj, 0);
-
+	cmd.u.transfer_get.level = args->level;
 	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
 
 	ret = qxl_3d_fence_emit(qdev, &fence);

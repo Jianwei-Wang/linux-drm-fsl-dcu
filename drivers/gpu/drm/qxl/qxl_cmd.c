@@ -42,6 +42,7 @@ struct qxl_ring {
 	int			prod_notify;
 	wait_queue_head_t      *push_event;
 	spinlock_t             lock;
+	void *bell;
 };
 
 void qxl_ring_free(struct qxl_ring *ring)
@@ -55,7 +56,8 @@ qxl_ring_create(struct qxl_ring_header *header,
 		int n_elements,
 		int prod_notify,
 		bool set_prod_notify,
-		wait_queue_head_t *push_event)
+		wait_queue_head_t *push_event,
+	        void *bell)
 {
 	struct qxl_ring *ring;
 
@@ -68,6 +70,7 @@ qxl_ring_create(struct qxl_ring_header *header,
 	ring->n_elements = n_elements;
 	ring->prod_notify = prod_notify;
 	ring->push_event = push_event;
+	ring->bell = bell;
 	if (set_prod_notify)
 		header->notify_on_prod = ring->n_elements;
 	spin_lock_init(&ring->lock);
@@ -137,9 +140,12 @@ int qxl_ring_push(struct qxl_ring *ring,
 
 	mb();
 
-	if (header->prod == header->notify_on_prod)
-		outb(0, ring->prod_notify);
-
+	if (header->prod == header->notify_on_prod) {
+		if (ring->prod_notify == -1) {
+			iowrite32(0x1, ring->bell);
+		} else
+			outb(0, ring->prod_notify);
+	}
 	spin_unlock_irqrestore(&ring->lock, flags);
 	return 0;
 }

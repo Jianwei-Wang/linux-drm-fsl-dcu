@@ -80,12 +80,14 @@ int qxl_irq_init(struct qxl_device *qdev)
 	init_waitqueue_head(&qdev->display_event);
 	init_waitqueue_head(&qdev->cursor_event);
 	init_waitqueue_head(&qdev->io_cmd_event);
+	init_waitqueue_head(&qdev->q3d_event);
 	INIT_WORK(&qdev->client_monitors_config_work,
 		  qxl_client_monitors_config_work_func);
 	atomic_set(&qdev->irq_received, 0);
 	atomic_set(&qdev->irq_received_display, 0);
 	atomic_set(&qdev->irq_received_cursor, 0);
 	atomic_set(&qdev->irq_received_io_cmd, 0);
+	atomic_set(&qdev->irq_received_3d, 0);
 	qdev->irq_received_error = 0;
 	ret = drm_irq_install(qdev->ddev);
 	qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;

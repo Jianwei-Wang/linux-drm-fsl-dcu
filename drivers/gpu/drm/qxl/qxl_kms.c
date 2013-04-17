@@ -122,8 +122,19 @@ int qxl_device_init(struct qxl_device *qdev,
 	qdev->ivdev = pci_get_device(0x1af4, 0x1110, NULL);
 
 	if (qdev->ivdev) {
+		int ret;
 		qdev->ivbase = pci_resource_start(qdev->ivdev, 2);
 		qdev->ivsize = pci_resource_len(qdev->ivdev, 2);
+
+		qdev->ivrbase = pci_resource_start(qdev->ivdev, 0);
+		qdev->ivrsize = pci_resource_len(qdev->ivdev, 0);
+
+		qdev->regs_3d_map = ioremap(qdev->ivrbase, qdev->ivrsize);
+
+		ret = pci_enable_msi(qdev->ivdev);
+		if (!ret) {
+			dev_info(qdev->dev,"3D device MSI enabled\n");
+		}
 	}
 
 	qdev->rom_base = pci_resource_start(pdev, 2);
@@ -169,7 +180,7 @@ int qxl_device_init(struct qxl_device *qdev,
 					     QXL_COMMAND_RING_SIZE,
 					     qdev->io_base + QXL_IO_NOTIFY_CMD,
 					     false,
-					     &qdev->display_event);
+					     &qdev->display_event, NULL);
 
 	qdev->cursor_ring = qxl_ring_create(
 				&(qdev->ram_header->cursor_ring_hdr),
@@ -177,13 +188,13 @@ int qxl_device_init(struct qxl_device *qdev,
 				QXL_CURSOR_RING_SIZE,
 				qdev->io_base + QXL_IO_NOTIFY_CMD,
 				false,
-				&qdev->cursor_event);
+				&qdev->cursor_event, NULL);
 
 	qdev->release_ring = qxl_ring_create(
 				&(qdev->ram_header->release_ring_hdr),
 				sizeof(uint64_t),
 				QXL_RELEASE_RING_SIZE, 0, true,
-				NULL);
+				NULL, NULL);
 
 	/* TODO - slot initialization should happen on reset. where is our
 	 * reset handler? */

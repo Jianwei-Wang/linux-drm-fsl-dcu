@@ -2,6 +2,47 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+void qxl_3d_irq_set_mask(struct qxl_device *qdev)
+{
+	uint32_t *rmap = qdev->regs_3d_map;
+	rmap[0] = 0x5;
+}
+
+void qxl_3d_ping(struct qxl_device *qdev)
+{
+	uint32_t *rmap = qdev->regs_3d_map;
+	rmap[4] = 0x1;
+	rmap[5] = 0x1;
+}
+
+irqreturn_t qxl_3d_irq_handler(DRM_IRQ_ARGS)
+{
+	struct drm_device *dev = (struct drm_device *) arg;
+	struct qxl_device *qdev = (struct qxl_device *)dev->dev_private;
+	uint32_t *rmap = qdev->regs_3d_map;
+	uint32_t pending;
+	uint32_t val;
+	pending = rmap[1];
+	if (pending) {
+		rmap[1] = 0;
+		val = xchg(&qdev->q3d_info.ram_3d_header->pad, 0);
+	
+		atomic_inc(&qdev->irq_received_3d);
+		printk("got 3d irq %08x %08x\n", pending, val);
+		if (val & 0x1) {
+			atomic_inc(&qdev->irq_received_3d);
+			wake_up_all(&qdev->q3d_event);
+		}
+		if (val & 0x4) {
+			qxl_3d_fence_process(qdev);
+		}
+		qxl_3d_irq_set_mask(qdev);
+		return IRQ_HANDLED;
+	}
+	return IRQ_NONE;
+}
+
+
 int qxl_3d_resource_id_get(struct qxl_device *qdev, uint32_t *resid)
 {
 	int handle;
@@ -38,6 +79,12 @@ int qxl_init_3d(struct qxl_device *qdev)
 	/* create an object for the 3D ring and pin it at 0. */
 	int ret;
 
+	ret = request_irq(qdev->ivdev->irq, qxl_3d_irq_handler, IRQF_SHARED,
+			  "qxl3d", qdev->ddev);
+	if (ret < 0) {
+		DRM_INFO("failed to setup 3D irq handler\n");
+	}
+
 	init_waitqueue_head(&qdev->q3d_info.fence_queue);
 	idr_init(&qdev->q3d_info.resource_idr);
 	spin_lock_init(&qdev->q3d_info.resource_idr_lock);
@@ -63,9 +110,9 @@ int qxl_init_3d(struct qxl_device *qdev)
 	qdev->q3d_info.iv3d_ring = qxl_ring_create(&(qdev->q3d_info.ram_3d_header->cmd_ring_hdr),
 					  sizeof(struct qxl_3d_command),
 					  QXL_COMMAND_RING_SIZE,
-					  0, 
+					  -1,
 					  false,
-					  &qdev->display_event);
+						   &qdev->q3d_event, qdev->regs_3d_map + 12);
 
 	DRM_INFO("3d version is %d %d\n", qdev->q3d_info.ram_3d_header->version, sizeof(struct qxl_3d_command));
 
@@ -78,6 +125,7 @@ int qxl_init_3d(struct qxl_device *qdev)
 
 	qxl_bo_unreserve(qdev->q3d_info.ringbo);
 
+	qxl_3d_irq_set_mask(qdev);
 	return 0;
 out_unreserve:
 	qxl_bo_unreserve(qdev->q3d_info.ringbo);

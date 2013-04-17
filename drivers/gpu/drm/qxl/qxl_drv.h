@@ -298,10 +298,12 @@ struct qxl_device {
 	atomic_t irq_received_display;
 	atomic_t irq_received_cursor;
 	atomic_t irq_received_io_cmd;
+	atomic_t irq_received_3d;
 	unsigned irq_received_error;
 	wait_queue_head_t display_event;
 	wait_queue_head_t cursor_event;
 	wait_queue_head_t io_cmd_event;
+	wait_queue_head_t q3d_event;
 	struct work_struct client_monitors_config_work;
 
 	/* debugfs */
@@ -331,6 +333,9 @@ struct qxl_device {
 	struct io_mapping *ivdev_mapping;
 
 	struct qxl_3d_info q3d_info;
+
+	resource_size_t ivrbase, ivrsize;
+	void *regs_3d_map;
 };
 
 /* forward declaration for QXL_INFO_IO */
@@ -353,7 +358,7 @@ struct qxl_ring *qxl_ring_create(struct qxl_ring_header *header,
 				 int n_elements,
 				 int prod_notify,
 				 bool set_prod_notify,
-				 wait_queue_head_t *push_event);
+				 wait_queue_head_t *push_event, void *bell);
 void qxl_ring_free(struct qxl_ring *ring);
 
 static inline void *
@@ -582,4 +587,5 @@ int qxl_3d_fence_emit(struct qxl_device *qdev,
 		      struct qxl_3d_fence **fence);
 int qxl_3d_wait(struct qxl_bo *bo, bool no_wait);
 int qxl_3d_resource_id_get(struct qxl_device *qdev, uint32_t *resid);
+void qxl_3d_ping(struct qxl_device *qdev);
 #endif
