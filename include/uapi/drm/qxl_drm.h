@@ -174,9 +174,9 @@ struct drm_qxl_3d_box {
 struct drm_qxl_3d_transfer_put {
 	uint32_t res_handle;
 	uint32_t bo_handle;
-	struct drm_qxl_3d_box box;
-	struct drm_qxl_3d_box transfer_box;
-	uint32_t level;
+	struct drm_qxl_3d_box dst_box;
+	uint32_t dst_level;
+	uint32_t src_stride;
 };
 
 struct drm_qxl_3d_transfer_get {

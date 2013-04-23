@@ -10,14 +10,17 @@ enum qxl_3d_cmd_type {
 	QXL_3D_TRANSFER_GET,
 	QXL_3D_TRANSFER_PUT,
 	QXL_3D_FENCE,
+	QXL_3D_SET_SCANOUT,
+	QXL_3D_FLUSH_BUFFER,
 };
 
+/* put a box of data from a BO into a tex/buffer resource */
 struct qxl_3d_transfer_put {
 	QXLPHYSICAL data;
 	uint32_t res_handle;
-	struct drm_qxl_3d_box box;
-	struct drm_qxl_3d_box transfer_box;
-	uint32_t level;
+	struct drm_qxl_3d_box dst_box; /* dst box */
+	uint32_t dst_level;
+	uint32_t src_stride;
 };
 
 struct qxl_3d_transfer_get {
@@ -25,10 +28,17 @@ struct qxl_3d_transfer_get {
 	uint32_t res_handle;
 	struct drm_qxl_3d_box box;
 	int level;
+	uint32_t dx, dy;
 };
 
 struct qxl_3d_flush_buffer {
 	uint32_t res_handle;
+	struct drm_qxl_3d_box box;
+};
+
+struct qxl_3d_set_scanout {
+	uint32_t res_handle;
+	struct drm_qxl_3d_box box;
 };
 
 struct qxl_3d_resource_create {
@@ -68,6 +78,8 @@ struct qxl_3d_command {
 		uint64_t fence_id;
 		struct qxl_3d_cmd_submit cmd_submit;
 		unsigned char pads[120];
+		struct qxl_3d_set_scanout set_scanout;
+		struct qxl_3d_flush_buffer flush_buffer;
 	} u;
 };
 

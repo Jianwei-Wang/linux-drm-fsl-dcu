@@ -109,6 +109,7 @@ int qxl_ring_push(struct qxl_ring *ring,
 	int idx, ret;
 	unsigned long flags;
 	spin_lock_irqsave(&ring->lock, flags);
+retry:
 	if (header->prod - header->cons == header->num_items) {
 		header->notify_on_cons = header->cons + 1;
 		mb();
@@ -123,8 +124,12 @@ int qxl_ring_push(struct qxl_ring *ring,
 				if (ret)
 					return ret;
 			} else {
-				wait_event(*ring->push_event,
-					   qxl_check_header(ring));
+				ret = wait_event_timeout(*ring->push_event,
+							 qxl_check_header(ring), HZ / 10);
+				if (ret == 0) {
+					spin_lock_irqsave(&ring->lock, flags);
+					goto retry;
+				}
 			}
 
 		}

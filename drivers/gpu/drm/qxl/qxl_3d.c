@@ -374,7 +374,39 @@ int qxl_3d_fence_emit(struct qxl_device *qdev,
 
 	return 0;
 }
-		     
+	
+int qxl_3d_set_front(struct qxl_device *qdev,
+		     struct qxl_framebuffer *fb, int x, int y,
+		     int width, int height)
+{
+	struct qxl_3d_command cmd;
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.type = QXL_3D_SET_SCANOUT;
+	cmd.u.set_scanout.res_handle = fb->res_3d_handle;
+	cmd.u.set_scanout.box.x = x;
+	cmd.u.set_scanout.box.y = y;
+	cmd.u.set_scanout.box.w = width;
+	cmd.u.set_scanout.box.h = height;
+	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+}
+
+int qxl_3d_dirty_front(struct qxl_device *qdev,
+		       struct qxl_framebuffer *fb, int x, int y,
+		       int width, int height)
+{
+	struct qxl_3d_command cmd;
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.type = QXL_3D_FLUSH_BUFFER;
+	cmd.u.flush_buffer.res_handle = fb->res_3d_handle;
+	cmd.u.flush_buffer.box.x = x;
+	cmd.u.flush_buffer.box.y = y;
+	cmd.u.flush_buffer.box.w = width;
+	cmd.u.flush_buffer.box.h = height;
+	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, false);
+
+}
+
+
 void qxl_3d_fence_process(struct qxl_device *qdev)
 {
 	bool wake = false;

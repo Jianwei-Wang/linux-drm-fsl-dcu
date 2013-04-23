@@ -566,6 +566,12 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 		  adjusted_mode->hdisplay,
 		  adjusted_mode->vdisplay);
 
+	if (qfb->res_3d_handle) {
+		qxl_3d_set_front(qdev, qfb, x, y, mode->hdisplay, mode->vdisplay);
+		return;
+	}
+		
+
 	recreate_primary = true;
 
 	width = mode->hdisplay;
@@ -967,13 +973,19 @@ int qxl_modeset_init(struct qxl_device *qdev)
 	/* primary surface must be created by this point, to allow
 	 * issuing command queue commands and having them read by
 	 * spice server. */
-	qxl_fbdev_init(qdev);
+	if (qxl_fb3d)
+		qxl_3d_fbdev_init(qdev);
+	else
+		qxl_fbdev_init(qdev);
 	return 0;
 }
 
 void qxl_modeset_fini(struct qxl_device *qdev)
 {
-	qxl_fbdev_fini(qdev);
+	if (qxl_fb3d)
+		qxl_3d_fbdev_fini(qdev);
+	else
+		qxl_fbdev_fini(qdev);
 	if (qdev->mode_info.mode_config_initialized) {
 		drm_mode_config_cleanup(qdev->ddev);
 		qdev->mode_info.mode_config_initialized = false;

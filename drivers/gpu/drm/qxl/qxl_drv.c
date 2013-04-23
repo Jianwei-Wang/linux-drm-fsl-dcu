@@ -47,9 +47,13 @@ static DEFINE_PCI_DEVICE_TABLE(pciidlist) = {
 MODULE_DEVICE_TABLE(pci, pciidlist);
 
 int qxl_modeset = -1;
+int qxl_fb3d = 0;
 
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, qxl_modeset, int, 0400);
+
+MODULE_PARM_DESC(fb3d, "Disable/Enable modesetting");
+module_param_named(fb3d, qxl_fb3d, int, 0400);
 
 static struct drm_driver qxl_driver;
 static struct pci_driver qxl_pci_driver;

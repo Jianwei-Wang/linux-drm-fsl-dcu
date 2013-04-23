@@ -550,9 +550,9 @@ static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.type = QXL_3D_TRANSFER_PUT;
 	cmd.u.transfer_put.res_handle = args->res_handle;
-	cmd.u.transfer_put.box = args->box;
-	cmd.u.transfer_put.transfer_box = args->transfer_box;
-	cmd.u.transfer_put.level = args->level;
+	cmd.u.transfer_put.dst_box = args->dst_box;
+	cmd.u.transfer_put.dst_level = args->dst_level;
+	cmd.u.transfer_put.src_stride = args->src_stride;
 	cmd.u.transfer_put.data = qxl_3d_bo_addr(qobj, 0);
 	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
 

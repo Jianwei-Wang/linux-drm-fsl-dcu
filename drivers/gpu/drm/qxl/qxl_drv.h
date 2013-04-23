@@ -157,6 +157,9 @@ struct qxl_output {
 struct qxl_framebuffer {
 	struct drm_framebuffer base;
 	struct drm_gem_object *obj;
+	int x1, y1, x2, y2; /* dirty rect */
+	spinlock_t dirty_lock;
+	uint32_t res_3d_handle;
 };
 
 #define to_qxl_crtc(x) container_of(x, struct qxl_crtc, base)
@@ -588,4 +591,14 @@ int qxl_3d_fence_emit(struct qxl_device *qdev,
 int qxl_3d_wait(struct qxl_bo *bo, bool no_wait);
 int qxl_3d_resource_id_get(struct qxl_device *qdev, uint32_t *resid);
 void qxl_3d_ping(struct qxl_device *qdev);
+
+extern int qxl_fb3d;
+int qxl_3d_fbdev_init(struct qxl_device *qdev);
+void qxl_3d_fbdev_fini(struct qxl_device *qdev);
+int qxl_3d_set_front(struct qxl_device *qdev,
+		     struct qxl_framebuffer *fb, int x, int y,
+		     int width, int height);
+int qxl_3d_dirty_front(struct qxl_device *qdev,
+		       struct qxl_framebuffer *fb, int x, int y,
+		       int width, int height);
 #endif
