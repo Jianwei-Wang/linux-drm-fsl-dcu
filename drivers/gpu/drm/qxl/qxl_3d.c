@@ -110,7 +110,7 @@ int qxl_init_3d(struct qxl_device *qdev)
 
 	qdev->q3d_info.iv3d_ring = qxl_ring_create(&(qdev->q3d_info.ram_3d_header->cmd_ring_hdr),
 					  sizeof(struct qxl_3d_command),
-					  QXL_COMMAND_RING_SIZE,
+					  QXL_3D_COMMAND_RING_SIZE,
 					  -1,
 					  false,
 						   &qdev->q3d_event, qdev->regs_3d_map + 12);

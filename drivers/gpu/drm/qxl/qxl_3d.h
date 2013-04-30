@@ -1,6 +1,8 @@
 #ifndef QXL_3D_H
 #define QXL_3D_H
 
+#define QXL_3D_COMMAND_RING_SIZE 64
+
 enum qxl_3d_cmd_type {
 	QXL_3D_CMD_NOP,
 	QXL_3D_CMD_CREATE_CONTEXT,
@@ -94,7 +96,7 @@ struct qxl_3d_ram {
 	uint32_t pad;
 	uint64_t last_fence;
 	struct qxl_ring_header  cmd_ring_hdr;
-	struct qxl_3d_command	cmd_ring[QXL_COMMAND_RING_SIZE];
+	struct qxl_3d_command	cmd_ring[QXL_3D_COMMAND_RING_SIZE];
 };
 
 struct qxl_3d_fence_driver {
