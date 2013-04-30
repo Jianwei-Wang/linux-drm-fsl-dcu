@@ -396,7 +396,7 @@ int
 qxl_framebuffer_init(struct drm_device *dev,
 		     struct qxl_framebuffer *rfb,
 		     struct drm_mode_fb_cmd2 *mode_cmd,
-		     struct drm_gem_object *obj);
+		     struct drm_gem_object *obj, uint32_t res_handle);
 void qxl_display_read_client_monitors_config(struct qxl_device *qdev);
 void qxl_send_monitors_config(struct qxl_device *qdev);
 
@@ -601,4 +601,6 @@ int qxl_3d_set_front(struct qxl_device *qdev,
 int qxl_3d_dirty_front(struct qxl_device *qdev,
 		       struct qxl_framebuffer *fb, int x, int y,
 		       int width, int height);
+int qxl_3d_surface_dirty(struct qxl_framebuffer *qfb, struct drm_clip_rect *clips,
+			 unsigned num_clips);
 #endif

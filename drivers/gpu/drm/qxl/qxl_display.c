@@ -426,6 +426,10 @@ int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 	struct qxl_bo *qobj;
 	int inc = 1;
 
+	if (qxl_fb3d) {
+		return qxl_3d_surface_dirty(fb, clips, num_clips);
+	}
+
 	qobj = gem_to_qxl_bo(qxl_fb->obj);
 	if (qxl_fb != qdev->active_user_framebuffer) {
 		DRM_INFO("%s: qxl_fb 0x%p != qdev->active_user_framebuffer 0x%p\n",
@@ -458,11 +462,13 @@ int
 qxl_framebuffer_init(struct drm_device *dev,
 		     struct qxl_framebuffer *qfb,
 		     struct drm_mode_fb_cmd2 *mode_cmd,
-		     struct drm_gem_object *obj)
+		     struct drm_gem_object *obj,
+		     uint32_t res_handle)
 {
 	int ret;
 
 	qfb->obj = obj;
+	qfb->res_3d_handle = res_handle;
 	ret = drm_framebuffer_init(dev, &qfb->base, &qxl_fb_funcs);
 	if (ret) {
 		qfb->obj = NULL;
@@ -568,7 +574,7 @@ static int qxl_crtc_mode_set(struct drm_crtc *crtc,
 
 	if (qfb->res_3d_handle) {
 		qxl_3d_set_front(qdev, qfb, x, y, mode->hdisplay, mode->vdisplay);
-		return;
+		return 0;
 	}
 		
 
@@ -896,18 +902,22 @@ qxl_user_framebuffer_create(struct drm_device *dev,
 			    struct drm_file *file_priv,
 			    struct drm_mode_fb_cmd2 *mode_cmd)
 {
-	struct drm_gem_object *obj;
+	struct drm_gem_object *obj = NULL;
 	struct qxl_framebuffer *qxl_fb;
 	struct qxl_device *qdev = dev->dev_private;
 	int ret;
-
-	obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
+	int handle = 0;
+	if (qxl_fb3d) {
+		handle = mode_cmd->handles[0];
+	} else {
+		obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
+	}
 
 	qxl_fb = kzalloc(sizeof(*qxl_fb), GFP_KERNEL);
 	if (qxl_fb == NULL)
 		return NULL;
 
-	ret = qxl_framebuffer_init(dev, qxl_fb, mode_cmd, obj);
+	ret = qxl_framebuffer_init(dev, qxl_fb, mode_cmd, obj, handle);
 	if (ret) {
 		kfree(qxl_fb);
 		drm_gem_object_unreference_unlocked(obj);

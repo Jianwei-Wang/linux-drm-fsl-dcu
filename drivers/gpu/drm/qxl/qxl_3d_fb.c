@@ -138,7 +138,42 @@ static int qxl_dirty_update(struct qxl_framebuffer *fb,
 	return 0;
 }
 
-static int qxl_create_3d_fb_res(struct qxl_device *qdev, struct qxl_framebuffer *fb)
+int qxl_3d_surface_dirty(struct qxl_framebuffer *qfb, struct drm_clip_rect *clips,
+				unsigned num_clips)
+{
+  struct qxl_device *qdev = qfb->base.dev->dev_private;
+
+  struct drm_clip_rect norect;
+  struct drm_clip_rect *clips_ptr;
+  int left, right, top, bottom;
+  int i;
+  int inc = 1;
+  if (!num_clips) {
+    num_clips = 1;
+    clips = &norect;
+    norect.x1 = norect.y1 = 0;
+    norect.x2 = qfb->base.width;
+    norect.y2 = qfb->base.height;
+  }
+  left = clips->x1;
+  right = clips->x2;
+  top = clips->y1;
+  bottom = clips->y2;
+
+  /* skip the first clip rect */
+  for (i = 1, clips_ptr = clips + inc;
+       i < num_clips; i++, clips_ptr += inc) {
+    left = min_t(int, left, (int)clips_ptr->x1);
+    right = max_t(int, right, (int)clips_ptr->x2);
+    top = min_t(int, top, (int)clips_ptr->y1);
+    bottom = max_t(int, bottom, (int)clips_ptr->y2);
+  }
+
+  qxl_3d_dirty_front(qdev, qfb, left, bottom, right - left, bottom - top);
+  return 0;
+}
+
+static int qxl_create_3d_fb_res(struct qxl_device *qdev, int width, int height, uint32_t *handle)
 {
 	int ret;
 	uint32_t res_id;
@@ -154,12 +189,12 @@ static int qxl_create_3d_fb_res(struct qxl_device *qdev, struct qxl_framebuffer 
 	cmd.u.res_create.target = 2;
 	cmd.u.res_create.format = 2;
 	cmd.u.res_create.bind = (1 << 1) | (1 << 14);
-	cmd.u.res_create.width = fb->base.width;
-	cmd.u.res_create.height = fb->base.height;
+	cmd.u.res_create.width = width;
+	cmd.u.res_create.height = height;
 	cmd.u.res_create.depth = 1;
 	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
 	
-	fb->res_3d_handle = res_id;
+	*handle = res_id;
 	return 0;
 }
 
@@ -290,6 +325,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 	int size;
 	int bpp = sizes->surface_bpp;
 	int depth = sizes->surface_depth;
+	uint32_t res_handle;
 
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
@@ -310,11 +346,12 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 
 	info->par = qfbdev;
 
-	qxl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj);
+	ret = qxl_create_3d_fb_res(qdev, mode_cmd.width, mode_cmd.height, &res_handle);
+
+	qxl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj, res_handle);
 
 	fb = &qfbdev->qfb.base;
 
-	ret = qxl_create_3d_fb_res(qdev, &qfbdev->qfb);
 
 	/* setup helper with fb data */
 	qfbdev->helper.fb = fb;

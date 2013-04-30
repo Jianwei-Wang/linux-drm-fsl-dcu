@@ -403,7 +403,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 
 	info->par = qfbdev;
 
-	qxl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj);
+	qxl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj, 0);
 
 	fb = &qfbdev->qfb.base;
 
