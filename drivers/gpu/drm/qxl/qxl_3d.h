@@ -12,6 +12,7 @@ enum qxl_3d_cmd_type {
 	QXL_3D_FENCE,
 	QXL_3D_SET_SCANOUT,
 	QXL_3D_FLUSH_BUFFER,
+	QXL_3D_RESOURCE_UNREF,
 };
 
 /* put a box of data from a BO into a tex/buffer resource */
@@ -55,6 +56,10 @@ struct qxl_3d_resource_create {
 	uint32_t pad;
 };
 
+struct qxl_3d_resource_unref {
+	uint32_t res_handle;
+};
+
 struct qxl_3d_ring_header {
 	uint32_t num_items;
 	uint32_t prod;
@@ -80,6 +85,7 @@ struct qxl_3d_command {
 		unsigned char pads[120];
 		struct qxl_3d_set_scanout set_scanout;
 		struct qxl_3d_flush_buffer flush_buffer;
+		struct qxl_3d_resource_unref res_unref;
 	} u;
 };
 

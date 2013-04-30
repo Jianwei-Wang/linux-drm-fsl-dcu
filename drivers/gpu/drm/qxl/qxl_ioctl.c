@@ -483,6 +483,13 @@ static int qxl_3d_resource_unref_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_resource_unref *ru = data;
+	struct qxl_3d_command cmd;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.type = QXL_3D_RESOURCE_UNREF;
+	cmd.u.res_unref.res_handle = ru->res_handle;
+	
+	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
 	return 0;
 }
 	
