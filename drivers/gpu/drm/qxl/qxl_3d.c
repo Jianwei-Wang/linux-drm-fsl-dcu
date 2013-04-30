@@ -69,6 +69,7 @@ static u32 qxl_3d_fence_read(struct qxl_device *qdev)
 
 void qxl_fini_3d(struct qxl_device *qdev)
 {
+	free_irq(qdev->ivdev->irq, qdev->ddev);
 	qxl_ring_free(qdev->q3d_info.iv3d_ring);
 
 	qxl_bo_unref(&qdev->q3d_info.ringbo);

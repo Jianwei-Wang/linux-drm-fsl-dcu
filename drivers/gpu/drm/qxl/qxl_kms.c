@@ -123,17 +123,21 @@ int qxl_device_init(struct qxl_device *qdev,
 
 	if (qdev->ivdev) {
 		int ret;
-		qdev->ivbase = pci_resource_start(qdev->ivdev, 2);
-		qdev->ivsize = pci_resource_len(qdev->ivdev, 2);
 
-		qdev->ivrbase = pci_resource_start(qdev->ivdev, 0);
-		qdev->ivrsize = pci_resource_len(qdev->ivdev, 0);
-
-		qdev->regs_3d_map = ioremap(qdev->ivrbase, qdev->ivrsize);
-
-		ret = pci_enable_msi(qdev->ivdev);
+		ret = pci_enable_device(qdev->ivdev);
 		if (!ret) {
-			dev_info(qdev->dev,"3D device MSI enabled\n");
+			qdev->ivbase = pci_resource_start(qdev->ivdev, 2);
+			qdev->ivsize = pci_resource_len(qdev->ivdev, 2);
+		
+			qdev->ivrbase = pci_resource_start(qdev->ivdev, 0);
+			qdev->ivrsize = pci_resource_len(qdev->ivdev, 0);
+
+			qdev->regs_3d_map = ioremap(qdev->ivrbase, qdev->ivrsize);
+
+			ret = pci_enable_msi(qdev->ivdev);
+			if (!ret) {
+				dev_info(qdev->dev,"3D device MSI enabled\n");
+			}
 		}
 	}
 
