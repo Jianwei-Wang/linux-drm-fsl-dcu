@@ -186,9 +186,10 @@ struct drm_qxl_3d_transfer_get {
 	uint32_t level;
 };
 
+#define QXL_3D_WAIT_NOWAIT 1 /* like it */
 struct drm_qxl_3d_wait {
 	uint32_t handle; /* 0 is an invalid handle */
-	uint32_t pad;
+        uint32_t flags;
 };
 
 #define DRM_IOCTL_QXL_ALLOC \
