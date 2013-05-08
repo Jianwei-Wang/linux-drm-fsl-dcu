@@ -177,6 +177,7 @@ struct drm_qxl_3d_transfer_put {
 	struct drm_qxl_3d_box dst_box;
 	uint32_t dst_level;
 	uint32_t src_stride;
+	uint32_t src_offset;
 };
 
 struct drm_qxl_3d_transfer_get {
@@ -184,6 +185,7 @@ struct drm_qxl_3d_transfer_get {
 	uint32_t bo_handle;/* bo to get into */
 	struct drm_qxl_3d_box box;
 	uint32_t level;
+	uint32_t dst_offset;
 };
 
 #define QXL_3D_WAIT_NOWAIT 1 /* like it */
