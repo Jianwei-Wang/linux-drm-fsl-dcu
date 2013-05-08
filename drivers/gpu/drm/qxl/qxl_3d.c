@@ -194,11 +194,13 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 		cmd.type = QXL_3D_CMD_SUBMIT;
 		cmd.u.cmd_submit.phy_addr = qxl_3d_bo_addr(qobj, 0);
 		cmd.u.cmd_submit.size = user_cmd.command_size;
+
+		ret = qxl_3d_fence_emit(qdev, &cmd, &fence);
+
 		qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
 	}
 
 
-	ret = qxl_3d_fence_emit(qdev, &fence);
 
 	spin_lock(&qobj->tbo.glob->lru_lock);
 	spin_lock(&qobj->tbo.bdev->fence_lock);
@@ -354,6 +356,7 @@ int qxl_3d_fence_wait(struct qxl_3d_fence *fence, bool intr)
 }
 
 int qxl_3d_fence_emit(struct qxl_device *qdev,
+		      struct qxl_3d_command *cmd,
 		      struct qxl_3d_fence **fence)
 {
 	*fence = kmalloc(sizeof(struct qxl_3d_fence), GFP_KERNEL);
@@ -365,13 +368,8 @@ int qxl_3d_fence_emit(struct qxl_device *qdev,
 	(*fence)->type = 1;
 	(*fence)->seq = ++qdev->q3d_info.fence_drv.sync_seq;
 
-	{
-	  struct qxl_3d_command cmd;
-	  memset(&cmd, 0, sizeof(cmd));
-	  cmd.type = QXL_3D_FENCE;
-	  cmd.u.fence_id = (*fence)->seq;
-	  qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
-	}
+	cmd->flags |= QXL_3D_COMMAND_EMIT_FENCE;
+	cmd->fence_id = (*fence)->seq;
 
 	return 0;
 }

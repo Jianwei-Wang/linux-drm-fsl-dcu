@@ -587,6 +587,7 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 int qxl_init_3d(struct qxl_device *qdev);
 void qxl_fini_3d(struct qxl_device *qdev);
 int qxl_3d_fence_emit(struct qxl_device *qdev,
+		      struct qxl_3d_command *cmd,
 		      struct qxl_3d_fence **fence);
 int qxl_3d_wait(struct qxl_bo *bo, bool no_wait);
 int qxl_3d_resource_id_get(struct qxl_device *qdev, uint32_t *resid);
