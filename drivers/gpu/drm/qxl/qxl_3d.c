@@ -175,7 +175,9 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 	if (ret)
 		goto out_free;
 
-	ret = qxl_bo_pin(qobj, QXL_GEM_DOMAIN_3D, NULL);
+	qxl_ttm_placement_from_domain(qobj, qobj->type);
+	ret = ttm_bo_validate(&qobj->tbo, &qobj->placement,
+			      true, false);
 	if (ret)
 		goto out_unresv;
 

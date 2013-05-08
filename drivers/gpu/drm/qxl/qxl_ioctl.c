@@ -514,6 +514,11 @@ static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto out;
 
+	qxl_ttm_placement_from_domain(qobj, qobj->type);
+	ret = ttm_bo_validate(&qobj->tbo, &qobj->placement,
+			      true, false);
+	if (unlikely(ret))
+		goto out_unres;
 	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.type = QXL_3D_TRANSFER_GET;
@@ -529,6 +534,7 @@ static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 
 	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
 
+out_unres:
 	qxl_bo_unreserve(qobj);
  out:
 	drm_gem_object_unreference_unlocked(gobj);
@@ -555,6 +561,12 @@ static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		goto out;
 
+	qxl_ttm_placement_from_domain(qobj, qobj->type);
+	ret = ttm_bo_validate(&qobj->tbo, &qobj->placement,
+			      true, false);
+	if (unlikely(ret))
+		goto out_unres;
+
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.type = QXL_3D_TRANSFER_PUT;
 	cmd.u.transfer_put.res_handle = args->res_handle;
@@ -570,6 +582,7 @@ static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 
 	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
 
+out_unres:
 	qxl_bo_unreserve(qobj);
  out:
 	drm_gem_object_unreference_unlocked(gobj);
