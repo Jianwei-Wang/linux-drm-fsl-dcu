@@ -584,7 +584,7 @@ static int qxl_3d_wait_ioctl(struct drm_device *dev, void *data,
 	struct drm_gem_object *gobj = NULL;
 	struct qxl_bo *qobj = NULL;
 	int ret;
-	bool wait = false;
+	bool nowait = false;
 	gobj = drm_gem_object_lookup(dev, file, args->handle);
 	if (gobj == NULL)
 		return -ENOENT;
@@ -597,8 +597,8 @@ static int qxl_3d_wait_ioctl(struct drm_device *dev, void *data,
 	}
 
 	if (args->flags & QXL_3D_WAIT_NOWAIT)
-	  wait = true;
-	ret = qxl_3d_wait(qobj, wait);
+	  nowait = true;
+	ret = qxl_3d_wait(qobj, nowait);
 out:
 	drm_gem_object_unreference_unlocked(gobj);
 	return ret;

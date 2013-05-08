@@ -22,24 +22,26 @@ irqreturn_t qxl_3d_irq_handler(DRM_IRQ_ARGS)
 	uint32_t *rmap = qdev->regs_3d_map;
 	uint32_t pending;
 	uint32_t val;
+	int retval = IRQ_NONE;
+ retry:
 	pending = rmap[1];
 	if (pending) {
 		rmap[1] = 0;
 		val = xchg(&qdev->q3d_info.ram_3d_header->pad, 0);
 	
 		atomic_inc(&qdev->irq_received_3d);
-		printk("got 3d irq %08x %08x\n", pending, val);
+		//	printk("got 3d irq %08x %08x\n", pending, val);
 		if (val & 0x1) {
-			atomic_inc(&qdev->irq_received_3d);
 			wake_up_all(&qdev->q3d_event);
 		}
 		if (val & 0x4) {
 			qxl_3d_fence_process(qdev);
 		}
-		qxl_3d_irq_set_mask(qdev);
-		return IRQ_HANDLED;
+		//	qxl_3d_irq_set_mask(qdev);
+		retval = IRQ_HANDLED;
+		goto retry;
 	}
-	return IRQ_NONE;
+	return retval;
 }
 
 

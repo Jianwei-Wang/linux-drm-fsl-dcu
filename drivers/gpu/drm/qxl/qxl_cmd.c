@@ -124,8 +124,8 @@ retry:
 				if (ret)
 					return ret;
 			} else {
-				ret = wait_event_timeout(*ring->push_event,
-							 qxl_check_header(ring), HZ / 10);
+			        ret = wait_event_timeout(*ring->push_event,
+							 qxl_check_header(ring), 100);
 				if (ret == 0) {
 					spin_lock_irqsave(&ring->lock, flags);
 					goto retry;
