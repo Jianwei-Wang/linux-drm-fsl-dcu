@@ -1,6 +1,9 @@
 #ifndef QXL_3D_H
 #define QXL_3D_H
 
+#include <linux/virtio.h>
+#include <linux/virtio_ring.h>
+
 #define QXL_3D_COMMAND_RING_SIZE 64
 
 enum qxl_3d_cmd_type {
@@ -118,6 +121,13 @@ struct qxl_3d_info {
 
 	struct idr	resource_idr;
 	spinlock_t resource_idr_lock;
+
+	/* virt io info */
+	void __iomem *ioaddr; /* bar 3 */
+	struct virtqueue *cmdq;
+	int cmd_num;
+	void *cmdqueue;
+	       
 };
 
 
@@ -126,6 +136,13 @@ struct qxl_3d_fence {
 	struct qxl_device *qdev;
 	struct kref kref;
 	uint64_t seq;
+};
+
+struct qxl_3d_vbuffer {
+	char *buf;
+	size_t size;
+	size_t len;
+	size_t offset;
 };
 
 struct qxl_3d_fence *qxl_3d_fence_ref(struct qxl_3d_fence *fence);

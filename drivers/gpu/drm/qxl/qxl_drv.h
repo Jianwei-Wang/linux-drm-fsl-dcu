@@ -245,6 +245,7 @@ struct qxl_device {
 	struct pci_dev			*pdev;
 	unsigned long flags;
 
+	struct virtio_device vdev;
 	resource_size_t vram_base, vram_size;
 	resource_size_t surfaceram_base, surfaceram_size;
 	resource_size_t rom_base, rom_size;
@@ -340,6 +341,8 @@ struct qxl_device {
 	resource_size_t ivrbase, ivrsize;
 	void *regs_3d_map;
 };
+
+#define vdev_to_qxl_dev(virt) container_of((virt), struct qxl_device, vdev)
 
 /* forward declaration for QXL_INFO_IO */
 void qxl_io_log(struct qxl_device *qdev, const char *fmt, ...);
@@ -594,6 +597,8 @@ int qxl_3d_resource_id_get(struct qxl_device *qdev, uint32_t *resid);
 void qxl_3d_ping(struct qxl_device *qdev);
 
 extern int qxl_fb3d;
+extern int qxl_3d_only;
+extern int qxl_3d_use_vring;
 int qxl_3d_fbdev_init(struct qxl_device *qdev);
 void qxl_3d_fbdev_fini(struct qxl_device *qdev);
 int qxl_3d_set_front(struct qxl_device *qdev,
@@ -604,4 +609,33 @@ int qxl_3d_dirty_front(struct qxl_device *qdev,
 		       int width, int height);
 int qxl_3d_surface_dirty(struct qxl_framebuffer *qfb, struct drm_clip_rect *clips,
 			 unsigned num_clips);
+
+
+struct qxl_3d_vbuffer;
+struct qxl_3d_command *qxl_3d_valloc_cmd_buf(struct qxl_device *qdev,
+					     struct qxl_3d_vbuffer **vbuffer_p);
+int qxl_3d_vadd_cmd_buf(struct qxl_device *qdev, struct qxl_3d_vbuffer *buf);
+
+static inline struct qxl_3d_command *qxl_3d_alloc_cmd(struct qxl_device *qdev,
+					       struct qxl_3d_command *cmd,
+					       struct qxl_3d_vbuffer **vbuf)
+{
+	if (qxl_3d_use_vring) {
+		return qxl_3d_valloc_cmd_buf(qdev, vbuf);
+	} else {
+		return cmd;
+	} 
+}
+
+static inline void qxl_3d_send_cmd(struct qxl_device *qdev,
+				   struct qxl_3d_command *cmd,
+				   struct qxl_3d_vbuffer *vbuf,
+				   bool intr)
+{
+	if (qxl_3d_use_vring)
+		qxl_3d_vadd_cmd_buf(qdev, vbuf);
+	else
+		qxl_ring_push(qdev->q3d_info.iv3d_ring, cmd, intr);
+
+}
 #endif

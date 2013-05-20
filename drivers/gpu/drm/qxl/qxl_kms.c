@@ -119,18 +119,26 @@ int qxl_device_init(struct qxl_device *qdev,
 	mutex_init(&qdev->surf_evict_mutex);
 	INIT_LIST_HEAD(&qdev->gem.objects);
 
-	qdev->ivdev = pci_get_device(0x1af4, 0x1110, NULL);
+	if (qxl_3d_only)
+	  qdev->ivdev = pdev;
+	else
+	  qdev->ivdev = pci_get_device(0x1af4, 0x1110, NULL);
 
 	if (qdev->ivdev) {
 		int ret;
 
 		ret = pci_enable_device(qdev->ivdev);
 		if (!ret) {
-			qdev->ivbase = pci_resource_start(qdev->ivdev, 2);
-			qdev->ivsize = pci_resource_len(qdev->ivdev, 2);
+			int vbase = 2, rbase = 0;
+
+			if (qxl_3d_only) {
+				rbase = 1;
+			}
+			qdev->ivbase = pci_resource_start(qdev->ivdev, vbase);
+			qdev->ivsize = pci_resource_len(qdev->ivdev, vbase);
 		
-			qdev->ivrbase = pci_resource_start(qdev->ivdev, 0);
-			qdev->ivrsize = pci_resource_len(qdev->ivdev, 0);
+			qdev->ivrbase = pci_resource_start(qdev->ivdev, rbase);
+			qdev->ivrsize = pci_resource_len(qdev->ivdev, rbase);
 
 			qdev->regs_3d_map = ioremap(qdev->ivrbase, qdev->ivrsize);
 
@@ -141,18 +149,20 @@ int qxl_device_init(struct qxl_device *qdev,
 		}
 	}
 
-	qdev->rom_base = pci_resource_start(pdev, 2);
-	qdev->rom_size = pci_resource_len(pdev, 2);
-	qdev->vram_base = pci_resource_start(pdev, 0);
-	qdev->surfaceram_base = pci_resource_start(pdev, 1);
-	qdev->surfaceram_size = pci_resource_len(pdev, 1);
-	qdev->io_base = pci_resource_start(pdev, 3);
+	if (!qxl_3d_only) {
+	  qdev->rom_base = pci_resource_start(pdev, 2);
+	  qdev->rom_size = pci_resource_len(pdev, 2);
+	  qdev->vram_base = pci_resource_start(pdev, 0);
+	  qdev->surfaceram_base = pci_resource_start(pdev, 1);
+	  qdev->surfaceram_size = pci_resource_len(pdev, 1);
+	  qdev->io_base = pci_resource_start(pdev, 3);
 
-	qdev->vram_mapping = io_mapping_create_wc(qdev->vram_base, pci_resource_len(pdev, 0));
-	qdev->surface_mapping = io_mapping_create_wc(qdev->surfaceram_base, qdev->surfaceram_size);
+	  qdev->vram_mapping = io_mapping_create_wc(qdev->vram_base, pci_resource_len(pdev, 0));
+	  qdev->surface_mapping = io_mapping_create_wc(qdev->surfaceram_base, qdev->surfaceram_size);
+	}
 	if (qdev->ivdev)
 		qdev->ivdev_mapping = io_mapping_create_wc(qdev->ivbase, qdev->ivsize);
-	DRM_DEBUG_KMS("qxl: vram %p-%p(%dM %dk), surface %p-%p(%dM %dk)\n",
+	DRM_DEBUG_KMS("qxl: 3donly %d vram %p-%p(%dM %dk), surface %p-%p(%dM %dk)\n", qxl_3d_only,
 		 (void *)qdev->vram_base, (void *)pci_resource_end(pdev, 0),
 		 (int)pci_resource_len(pdev, 0) / 1024 / 1024,
 		 (int)pci_resource_len(pdev, 0) / 1024,
@@ -161,13 +171,15 @@ int qxl_device_init(struct qxl_device *qdev,
 		 (int)qdev->surfaceram_size / 1024 / 1024,
 		 (int)qdev->surfaceram_size / 1024);
 
-	qdev->rom = ioremap(qdev->rom_base, qdev->rom_size);
-	if (!qdev->rom) {
-		pr_err("Unable to ioremap ROM\n");
-		return -ENOMEM;
+	if (!qxl_3d_only) {
+		qdev->rom = ioremap(qdev->rom_base, qdev->rom_size);
+		if (!qdev->rom) {
+			pr_err("Unable to ioremap ROM\n");
+			return -ENOMEM;
+		}
+		
+		qxl_check_device(qdev);
 	}
-
-	qxl_check_device(qdev);
 
 	r = qxl_bo_init(qdev);
 	if (r) {
@@ -175,43 +187,44 @@ int qxl_device_init(struct qxl_device *qdev,
 		return r;
 	}
 
-	qdev->ram_header = ioremap(qdev->vram_base +
-				   qdev->rom->ram_header_offset,
-				   sizeof(*qdev->ram_header));
+	if (!qxl_3d_only) {
+		qdev->ram_header = ioremap(qdev->vram_base +
+					   qdev->rom->ram_header_offset,
+					   sizeof(*qdev->ram_header));
 
-	qdev->command_ring = qxl_ring_create(&(qdev->ram_header->cmd_ring_hdr),
-					     sizeof(struct qxl_command),
-					     QXL_COMMAND_RING_SIZE,
-					     qdev->io_base + QXL_IO_NOTIFY_CMD,
-					     false,
-					     &qdev->display_event, NULL);
+		qdev->command_ring = qxl_ring_create(&(qdev->ram_header->cmd_ring_hdr),
+						     sizeof(struct qxl_command),
+						     QXL_COMMAND_RING_SIZE,
+						     qdev->io_base + QXL_IO_NOTIFY_CMD,
+						     false,
+						     &qdev->display_event, NULL);
 
-	qdev->cursor_ring = qxl_ring_create(
-				&(qdev->ram_header->cursor_ring_hdr),
-				sizeof(struct qxl_command),
-				QXL_CURSOR_RING_SIZE,
-				qdev->io_base + QXL_IO_NOTIFY_CMD,
-				false,
-				&qdev->cursor_event, NULL);
+		qdev->cursor_ring = qxl_ring_create(
+			&(qdev->ram_header->cursor_ring_hdr),
+			sizeof(struct qxl_command),
+			QXL_CURSOR_RING_SIZE,
+			qdev->io_base + QXL_IO_NOTIFY_CMD,
+			false,
+			&qdev->cursor_event, NULL);
 
-	qdev->release_ring = qxl_ring_create(
-				&(qdev->ram_header->release_ring_hdr),
-				sizeof(uint64_t),
-				QXL_RELEASE_RING_SIZE, 0, true,
-				NULL, NULL);
+		qdev->release_ring = qxl_ring_create(
+			&(qdev->ram_header->release_ring_hdr),
+			sizeof(uint64_t),
+			QXL_RELEASE_RING_SIZE, 0, true,
+			NULL, NULL);
 
-	/* TODO - slot initialization should happen on reset. where is our
-	 * reset handler? */
-	qdev->n_mem_slots = qdev->rom->slots_end;
-	qdev->slot_gen_bits = qdev->rom->slot_gen_bits;
-	qdev->slot_id_bits = qdev->rom->slot_id_bits;
-	qdev->va_slot_mask =
-		(~(uint64_t)0) >> (qdev->slot_id_bits + qdev->slot_gen_bits);
+		/* TODO - slot initialization should happen on reset. where is our
+		 * reset handler? */
+		qdev->n_mem_slots = qdev->rom->slots_end;
+		qdev->slot_gen_bits = qdev->rom->slot_gen_bits;
+		qdev->slot_id_bits = qdev->rom->slot_id_bits;
+		qdev->va_slot_mask =
+			(~(uint64_t)0) >> (qdev->slot_id_bits + qdev->slot_gen_bits);
 
-	qdev->mem_slots =
-		kmalloc(qdev->n_mem_slots * sizeof(struct qxl_memslot),
-			GFP_KERNEL);
-
+		qdev->mem_slots =
+			kmalloc(qdev->n_mem_slots * sizeof(struct qxl_memslot),
+				GFP_KERNEL);
+	}
 	idr_init(&qdev->release_idr);
 	spin_lock_init(&qdev->release_idr_lock);
 
@@ -223,7 +236,8 @@ int qxl_device_init(struct qxl_device *qdev,
 
 	/* reset the device into a known state - no memslots, no primary
 	 * created, no surfaces. */
-	qxl_io_reset(qdev);
+	if (!qxl_3d_only)
+		qxl_io_reset(qdev);
 
 	/* must initialize irq before first async io - slot creation */
 	r = qxl_irq_init(qdev);
@@ -239,19 +253,20 @@ int qxl_device_init(struct qxl_device *qdev,
 	 * Note that virtual is surface0. We rely on the single ioremap done
 	 * before.
 	 */
-	qdev->main_mem_slot = setup_slot(qdev, 0,
-		(unsigned long)qdev->vram_base,
-		(unsigned long)qdev->vram_base + qdev->rom->ram_header_offset);
-	qdev->surfaces_mem_slot = setup_slot(qdev, 1,
-		(unsigned long)qdev->surfaceram_base,
-		(unsigned long)qdev->surfaceram_base + qdev->surfaceram_size);
-	DRM_INFO("main mem slot %d [%lx,%x)\n",
-		qdev->main_mem_slot,
-		(unsigned long)qdev->vram_base, qdev->rom->ram_header_offset);
+	if (!qxl_3d_only) {
+		qdev->main_mem_slot = setup_slot(qdev, 0,
+						 (unsigned long)qdev->vram_base,
+						 (unsigned long)qdev->vram_base + qdev->rom->ram_header_offset);
+		qdev->surfaces_mem_slot = setup_slot(qdev, 1,
+						     (unsigned long)qdev->surfaceram_base,
+						     (unsigned long)qdev->surfaceram_base + qdev->surfaceram_size);
+		DRM_INFO("main mem slot %d [%lx,%x)\n",
+			 qdev->main_mem_slot,
+			 (unsigned long)qdev->vram_base, qdev->rom->ram_header_offset);
 
-
-	qdev->gc_queue = create_singlethread_workqueue("qxl_gc");
-	INIT_WORK(&qdev->gc_work, qxl_gc_work);
+		qdev->gc_queue = create_singlethread_workqueue("qxl_gc");
+		INIT_WORK(&qdev->gc_work, qxl_gc_work);
+	}
 
 	r = qxl_fb_init(qdev);
 	if (r)
@@ -266,13 +281,17 @@ void qxl_device_fini(struct qxl_device *qdev)
 		qxl_bo_unref(&qdev->current_release_bo[0]);
 	if (qdev->current_release_bo[1])
 		qxl_bo_unref(&qdev->current_release_bo[1]);
-	flush_workqueue(qdev->gc_queue);
-	destroy_workqueue(qdev->gc_queue);
-	qdev->gc_queue = NULL;
+	if (!qxl_3d_only) {
+	  flush_workqueue(qdev->gc_queue);
+	  destroy_workqueue(qdev->gc_queue);
+	  qdev->gc_queue = NULL;
+	}
 
-	qxl_ring_free(qdev->command_ring);
-	qxl_ring_free(qdev->cursor_ring);
-	qxl_ring_free(qdev->release_ring);
+	if (!qxl_3d_only) {
+	  qxl_ring_free(qdev->command_ring);
+	  qxl_ring_free(qdev->cursor_ring);
+	  qxl_ring_free(qdev->release_ring);
+	}
 
 	if (qdev->ivdev)
 		qxl_fini_3d(qdev);
@@ -280,10 +299,13 @@ void qxl_device_fini(struct qxl_device *qdev)
 	qxl_bo_fini(qdev);
 	if (qdev->ivdev)
 		io_mapping_free(qdev->ivdev_mapping);
-	io_mapping_free(qdev->surface_mapping);
-	io_mapping_free(qdev->vram_mapping);
-	iounmap(qdev->ram_header);
-	iounmap(qdev->rom);
+	
+	if (!qxl_3d_only) {
+	  io_mapping_free(qdev->surface_mapping);
+	  io_mapping_free(qdev->vram_mapping);
+	  iounmap(qdev->ram_header);
+	  iounmap(qdev->rom);
+	}
 	if (qdev->ivdev)
 		pci_dev_put(qdev->ivdev);
 	qdev->rom = NULL;

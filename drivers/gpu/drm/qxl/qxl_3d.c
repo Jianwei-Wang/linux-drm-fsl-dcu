@@ -1,28 +1,141 @@
 
+#include <linux/virtio.h>
+#include <linux/virtio_ring.h>
+#include <linux/virtio_pci.h>
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+extern int qxl_3d_use_vring;
+/* virtio config->get_features() implementation */
+static u32 vp_get_features(struct virtio_device *vdev)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+
+	/* When someone needs more than 32 feature bits, we'll need to
+	 * steal a bit to indicate that the rest are somewhere else. */
+	return ioread32(qdev->q3d_info.ioaddr + VIRTIO_PCI_HOST_FEATURES);
+}
+
+/* virtio config->finalize_features() implementation */
+static void vp_finalize_features(struct virtio_device *vdev)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+
+	/* Give virtio_ring a chance to accept features. */
+	vring_transport_features(vdev);
+
+	/* We only support 32 feature bits. */
+	BUILD_BUG_ON(ARRAY_SIZE(vdev->features) != 1);
+	iowrite32(vdev->features[0], qdev->q3d_info.ioaddr+VIRTIO_PCI_GUEST_FEATURES);
+}
+
+/* virtio config->get() implementation */
+static void vp_get(struct virtio_device *vdev, unsigned offset,
+		   void *buf, unsigned len)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+	void __iomem *ioaddr = qdev->q3d_info.ioaddr +
+				VIRTIO_PCI_CONFIG(qdev->ivdev) + offset;
+	u8 *ptr = buf;
+	int i;
+
+	for (i = 0; i < len; i++)
+		ptr[i] = ioread8(ioaddr + i);
+}
+
+/* the config->set() implementation.  it's symmetric to the config->get()
+ * implementation */
+static void vp_set(struct virtio_device *vdev, unsigned offset,
+		   const void *buf, unsigned len)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+	void __iomem *ioaddr = qdev->q3d_info.ioaddr +
+				VIRTIO_PCI_CONFIG(qdev->ivdev) + offset;
+	const u8 *ptr = buf;
+	int i;
+
+	for (i = 0; i < len; i++)
+		iowrite8(ptr[i], ioaddr + i);
+}
+
+/* config->{get,set}_status() implementations */
+static u8 vp_get_status(struct virtio_device *vdev)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+	return ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+}
+
+static void vp_set_status(struct virtio_device *vdev, u8 status)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+	/* We should never be setting status to 0. */
+	BUG_ON(status == 0);
+	iowrite8(status, qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+}
+
+static void vp_reset(struct virtio_device *vdev)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vdev);
+
+	/* 0 status means a reset. */
+	iowrite8(0, qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+	ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+}
+
+static const struct virtio_config_ops virtio_qxl_config_ops = {
+	.get		= vp_get,
+	.set		= vp_set,
+	.get_status	= vp_get_status,
+	.set_status	= vp_set_status,
+	 .reset		= vp_reset,
+	 //	.find_vqs	= vp_find_vqs,
+	 //	.del_vqs	= vp_del_vqs,
+	.get_features	= vp_get_features,
+	.finalize_features = vp_finalize_features,
+	 //	.bus_name	= vp_bus_name,
+	 //	.set_vq_affinity = vp_set_vq_affinity,
+};
+
+static irqreturn_t vp_vring_interrupt(int irq, struct qxl_device *qdev)
+{
+	irqreturn_t ret = IRQ_NONE;
+
+        if (vring_interrupt(irq, qdev->q3d_info.cmdq) == IRQ_HANDLED) {
+		ret = IRQ_HANDLED;
+	}
+	return ret;
+}
+
 void qxl_3d_irq_set_mask(struct qxl_device *qdev)
 {
-	uint32_t *rmap = qdev->regs_3d_map;
+  volatile uint32_t *rmap = qdev->regs_3d_map;
 	rmap[0] = 0x5;
 }
 
 void qxl_3d_ping(struct qxl_device *qdev)
 {
-	uint32_t *rmap = qdev->regs_3d_map;
+  volatile uint32_t *rmap = qdev->regs_3d_map;
+  static uint32_t ping_val;
 	rmap[4] = 0x1;
-	rmap[5] = 0x1;
+	rmap[5] = ping_val++;
 }
 
 irqreturn_t qxl_3d_irq_handler(DRM_IRQ_ARGS)
 {
 	struct drm_device *dev = (struct drm_device *) arg;
 	struct qxl_device *qdev = (struct qxl_device *)dev->dev_private;
-	uint32_t *rmap = qdev->regs_3d_map;
+	volatile uint32_t *rmap = qdev->regs_3d_map;
 	uint32_t pending;
 	uint32_t val;
 	int retval = IRQ_NONE;
+	u8 isr;
+	/* virt io first */
+	isr = ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_ISR);
+	if (!isr)
+		goto retry;
+
+	retval = vp_vring_interrupt(irq, qdev);
+
  retry:
 	pending = rmap[1];
 	if (pending) {
@@ -37,7 +150,7 @@ irqreturn_t qxl_3d_irq_handler(DRM_IRQ_ARGS)
 		if (val & 0x4) {
 			qxl_3d_fence_process(qdev);
 		}
-		//	qxl_3d_irq_set_mask(qdev);
+		//qxl_3d_irq_set_mask(qdev);
 		retval = IRQ_HANDLED;
 		goto retry;
 	}
@@ -72,26 +185,153 @@ static u32 qxl_3d_fence_read(struct qxl_device *qdev)
 void qxl_fini_3d(struct qxl_device *qdev)
 {
 	free_irq(qdev->ivdev->irq, qdev->ddev);
-	qxl_ring_free(qdev->q3d_info.iv3d_ring);
 
-	qxl_bo_unref(&qdev->q3d_info.ringbo);
+	if (!qxl_3d_use_vring) {
+		qxl_ring_free(qdev->q3d_info.iv3d_ring);
+		qxl_bo_unref(&qdev->q3d_info.ringbo);
+	}
 }
 
-int qxl_init_3d(struct qxl_device *qdev)
-{
-	/* create an object for the 3D ring and pin it at 0. */
-	int ret;
 
-	ret = request_irq(qdev->ivdev->irq, qxl_3d_irq_handler, IRQF_SHARED,
-			  "qxl3d", qdev->ddev);
-	if (ret < 0) {
-		DRM_INFO("failed to setup 3D irq handler\n");
+/* the notify function used when creating a virt queue */
+static void vp_notify(struct virtqueue *vq)
+{
+	struct qxl_device *qdev = vdev_to_qxl_dev(vq->vdev);
+
+	/* we write the queue's selector into the notification register to
+	 * signal the other end */
+	iowrite16(vq->index, qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_NOTIFY);
+}
+
+static struct virtqueue *setup_cmdq(struct qxl_device *qdev,
+				    void (*callback)(struct virtqueue *vq))
+{
+	struct virtqueue *vq;
+	u16 num;
+	unsigned long size;
+	iowrite16(0, qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_SEL);
+	num = ioread16(qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_NUM);
+	if (!num || ioread32(qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_PFN)) {
+		printk("queue setup failed %d\n", num);
+		return ERR_PTR(-ENOENT);
 	}
 
-	init_waitqueue_head(&qdev->q3d_info.fence_queue);
-	idr_init(&qdev->q3d_info.resource_idr);
-	spin_lock_init(&qdev->q3d_info.resource_idr_lock);
+	size = PAGE_ALIGN(vring_size(num, VIRTIO_PCI_VRING_ALIGN));
+	qdev->q3d_info.cmdqueue = alloc_pages_exact(size, GFP_KERNEL|__GFP_ZERO);
+	if (qdev->q3d_info.cmdqueue == NULL) {
+		printk("cq alloc failed %d\n", size);
+		return ERR_PTR(-ENOMEM);
+	}
 
+	iowrite32(virt_to_phys(qdev->q3d_info.cmdqueue) >> VIRTIO_PCI_QUEUE_ADDR_SHIFT, qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_PFN);
+
+	vq = vring_new_virtqueue(0, num, VIRTIO_PCI_VRING_ALIGN, &qdev->vdev,
+				 true, qdev->q3d_info.cmdqueue, vp_notify,
+				 callback, "qxlvirt");
+	if (!vq) {
+		printk("new virtqueue failed\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	DRM_INFO("virtqueue setup %d\n", num);
+	return vq;
+}
+
+static void qdev_virq_cb(struct virtqueue *vq)
+{
+	printk("%s\n", __func__);
+}
+
+static void free_vbuf(struct qxl_3d_vbuffer *vbuf)
+{
+	kfree(vbuf);
+}
+
+struct qxl_3d_vbuffer *allocate_vbuf(struct virtqueue *vq)
+{
+	struct qxl_3d_vbuffer *vbuf;
+
+	vbuf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!vbuf)
+		goto fail;
+
+	vbuf->len = 0;
+	vbuf->offset = 0;
+	vbuf->buf = (void *)(vbuf + 1);
+	vbuf->size = PAGE_SIZE;
+	return vbuf;
+fail:
+	return ERR_PTR(-ENOMEM);
+}
+
+struct qxl_3d_command *qxl_3d_valloc_cmd_buf(struct qxl_device *qdev,
+					     struct qxl_3d_vbuffer **vbuffer_p)
+{
+	struct qxl_3d_vbuffer *vbuf;
+
+	vbuf = allocate_vbuf(qdev->q3d_info.cmdq);
+	if (IS_ERR(vbuf))
+		return ERR_CAST(vbuf);
+
+	*vbuffer_p = vbuf;
+	return (struct qxl_3d_command *)vbuf->buf;
+}
+
+static void reclaim_vbufs(struct virtqueue *vq)
+{
+	struct qxl_3d_vbuffer *vbuf;
+	unsigned int len;
+	while ((vbuf = virtqueue_get_buf(vq, &len))) {
+		free_vbuf(vbuf);
+	}
+}
+
+static int vadd_buf(struct virtqueue *vq, struct qxl_3d_vbuffer *buf)
+{
+	struct scatterlist sg[1];
+	int ret;
+	sg_init_one(sg, buf->buf, buf->size);
+	ret = virtqueue_add_buf(vq, sg, 0, 1, buf, GFP_ATOMIC);
+	virtqueue_kick(vq);
+	if (!ret)
+		ret = vq->num_free;
+	return ret;
+}
+
+int qxl_3d_vadd_cmd_buf(struct qxl_device *qdev, struct qxl_3d_vbuffer *buf)
+{
+	reclaim_vbufs(qdev->q3d_info.cmdq);
+	return vadd_buf(qdev->q3d_info.cmdq, buf);
+}
+
+static void virtio_qxl_release_dev(struct device *_d)
+{
+	/*
+	 * No need for a release method as we allocate/free
+	 * all devices together with the pci devices.
+	 * Provide an empty one to avoid getting a warning from core.
+	 */
+}
+
+static int qxl_init_3d_vring(struct qxl_device *qdev)
+{
+	struct qxl_3d_vbuffer *tbuf;
+	uint32_t *dwp;
+	qdev->q3d_info.cmdq = setup_cmdq(qdev, qdev_virq_cb);
+	printk("cmdq at %p\n", qdev->q3d_info.cmdq);
+
+	tbuf = allocate_vbuf(qdev->q3d_info.cmdq);
+
+	dwp = tbuf->buf;
+	dwp[0] = 0xdeadbeef;
+
+	vadd_buf(qdev->q3d_info.cmdq, tbuf);
+	return 0;
+}
+
+static int qxl_init_3d_qring(struct qxl_device *qdev)
+{
+	int ret;
 	ret = qxl_bo_create(qdev, sizeof(struct qxl_3d_ram), true,
 			    QXL_GEM_DOMAIN_3D, NULL, &qdev->q3d_info.ringbo);
 
@@ -114,7 +354,7 @@ int qxl_init_3d(struct qxl_device *qdev)
 					  sizeof(struct qxl_3d_command),
 					  QXL_3D_COMMAND_RING_SIZE,
 					  -1,
-					  false,
+					  true,
 						   &qdev->q3d_event, qdev->regs_3d_map + 12);
 
 	DRM_INFO("3d version is %d %d\n", qdev->q3d_info.ram_3d_header->version, sizeof(struct qxl_3d_command));
@@ -124,16 +364,62 @@ int qxl_init_3d(struct qxl_device *qdev)
 		struct qxl_3d_command cmd;
 		cmd.type = 0xdeadbeef;
 		qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, false);
+		if (qxl_3d_only)
+		  qxl_3d_ping(qdev);
 	}
 
 	qxl_bo_unreserve(qdev->q3d_info.ringbo);
-
-	qxl_3d_irq_set_mask(qdev);
 	return 0;
 out_unreserve:
 	qxl_bo_unreserve(qdev->q3d_info.ringbo);
 out_unref:
 	qxl_bo_unref(&qdev->q3d_info.ringbo);
+	return ret;
+}
+
+int qxl_init_3d(struct qxl_device *qdev)
+{
+	/* create an object for the 3D ring and pin it at 0. */
+	int ret;
+
+	qdev->vdev.dev.parent = &qdev->ivdev->dev;
+	qdev->vdev.dev.release = virtio_qxl_release_dev;
+	qdev->vdev.config = &virtio_qxl_config_ops;
+
+	/* grab bar 3 */
+	qdev->q3d_info.ioaddr = pci_iomap(qdev->ivdev, 3, 0);
+
+	pci_msi_off(qdev->ivdev);
+	pci_set_master(qdev->ivdev);
+
+	ret = register_virtio_device(&qdev->vdev);
+	if (ret)
+		printk("error registering virtio %d\n", ret);
+
+	if (!qxl_3d_only) {
+		ret = request_irq(qdev->ivdev->irq, qxl_3d_irq_handler, IRQF_SHARED,
+				  "qxl3d", qdev->ddev);
+		if (ret < 0) {
+			DRM_INFO("failed to setup 3D irq handler\n");
+		}
+	}
+
+	init_waitqueue_head(&qdev->q3d_info.fence_queue);
+	idr_init(&qdev->q3d_info.resource_idr);
+	spin_lock_init(&qdev->q3d_info.resource_idr_lock);
+
+	if (!qxl_3d_use_vring) {
+		ret = qxl_init_3d_qring(qdev);
+		if (ret)
+			goto fail;
+	} else {
+		ret = qxl_init_3d_vring(qdev);
+		if (ret)
+			goto fail;
+	}
+	qxl_3d_irq_set_mask(qdev);
+	return 0;
+fail:
 	return ret;
 }
 	  
@@ -194,14 +480,17 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 	qxl_bo_kunmap(qobj);
 
 	{
-		struct qxl_3d_command cmd;
-		cmd.type = QXL_3D_CMD_SUBMIT;
-		cmd.u.cmd_submit.phy_addr = qxl_3d_bo_addr(qobj, 0);
-		cmd.u.cmd_submit.size = user_cmd.command_size;
+		struct qxl_3d_command cmd, *cmd_p;
+		struct qxl_3d_vbuffer *vbuf;
+
+		cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+		cmd_p->type = QXL_3D_CMD_SUBMIT;
+		cmd_p->u.cmd_submit.phy_addr = qxl_3d_bo_addr(qobj, 0);
+		cmd_p->u.cmd_submit.size = user_cmd.command_size;
 
 		ret = qxl_3d_fence_emit(qdev, &cmd, &fence);
 
-		qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+		qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 	}
 
 
@@ -382,30 +671,36 @@ int qxl_3d_set_front(struct qxl_device *qdev,
 		     struct qxl_framebuffer *fb, int x, int y,
 		     int width, int height)
 {
-	struct qxl_3d_command cmd;
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.type = QXL_3D_SET_SCANOUT;
-	cmd.u.set_scanout.res_handle = fb->res_3d_handle;
-	cmd.u.set_scanout.box.x = x;
-	cmd.u.set_scanout.box.y = y;
-	cmd.u.set_scanout.box.w = width;
-	cmd.u.set_scanout.box.h = height;
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
+
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
+	cmd_p->type = QXL_3D_SET_SCANOUT;
+	cmd_p->u.set_scanout.res_handle = fb->res_3d_handle;
+	cmd_p->u.set_scanout.box.x = x;
+	cmd_p->u.set_scanout.box.y = y;
+	cmd_p->u.set_scanout.box.w = width;
+	cmd_p->u.set_scanout.box.h = height;
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 }
 
 int qxl_3d_dirty_front(struct qxl_device *qdev,
 		       struct qxl_framebuffer *fb, int x, int y,
 		       int width, int height)
 {
-	struct qxl_3d_command cmd;
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.type = QXL_3D_FLUSH_BUFFER;
-	cmd.u.flush_buffer.res_handle = fb->res_3d_handle;
-	cmd.u.flush_buffer.box.x = x;
-	cmd.u.flush_buffer.box.y = y;
-	cmd.u.flush_buffer.box.w = width;
-	cmd.u.flush_buffer.box.h = height;
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, false);
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
+
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
+	cmd_p->type = QXL_3D_FLUSH_BUFFER;
+	cmd_p->u.flush_buffer.res_handle = fb->res_3d_handle;
+	cmd_p->u.flush_buffer.box.x = x;
+	cmd_p->u.flush_buffer.box.y = y;
+	cmd_p->u.flush_buffer.box.w = width;
+	cmd_p->u.flush_buffer.box.h = height;
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 
 }
 

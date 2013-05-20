@@ -51,6 +51,11 @@ int qxl_gem_object_create(struct qxl_device *qdev, int size,
 	struct qxl_bo *qbo;
 	int r;
 
+	if (qxl_3d_only && initial_domain != 3) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+	  
 	*obj = NULL;
 	/* At least align on page size */
 	if (alignment < PAGE_SIZE)

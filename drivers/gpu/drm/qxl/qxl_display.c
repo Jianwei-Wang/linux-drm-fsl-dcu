@@ -738,7 +738,8 @@ static void qxl_enc_commit(struct drm_encoder *encoder)
 {
 	struct qxl_device *qdev = encoder->dev->dev_private;
 
-	qxl_write_monitors_config_for_encoder(qdev, encoder);
+	if (!qxl_3d_only)
+	  qxl_write_monitors_config_for_encoder(qdev, encoder);
 	DRM_DEBUG("\n");
 }
 
@@ -948,21 +949,24 @@ int qxl_modeset_init(struct qxl_device *qdev)
 				   max_allowed * sizeof(struct qxl_head);
 
 	drm_mode_config_init(qdev->ddev);
-	ret = qxl_gem_object_create(qdev, monitors_config_size, 0,
-				    QXL_GEM_DOMAIN_VRAM,
-				    false, false, NULL, &gobj);
-	if (ret) {
-		DRM_ERROR("%s: failed to create gem ret=%d\n", __func__, ret);
-		return -ENOMEM;
-	}
-	qdev->monitors_config_bo = gem_to_qxl_bo(gobj);
-	qxl_bo_kmap(qdev->monitors_config_bo, NULL);
-	qdev->monitors_config = qdev->monitors_config_bo->kptr;
-	qdev->ram_header->monitors_config =
-		qxl_bo_physical_address(qdev, qdev->monitors_config_bo, 0);
 
-	memset(qdev->monitors_config, 0, monitors_config_size);
-	qdev->monitors_config->max_allowed = max_allowed;
+	if (!qxl_3d_only) {
+	  ret = qxl_gem_object_create(qdev, monitors_config_size, 0,
+				      QXL_GEM_DOMAIN_VRAM,
+				      false, false, NULL, &gobj);
+	  if (ret) {
+	    DRM_ERROR("%s: failed to create gem ret=%d\n", __func__, ret);
+	    return -ENOMEM;
+	  }
+	  qdev->monitors_config_bo = gem_to_qxl_bo(gobj);
+	  qxl_bo_kmap(qdev->monitors_config_bo, NULL);
+	  qdev->monitors_config = qdev->monitors_config_bo->kptr;
+	  qdev->ram_header->monitors_config =
+	    qxl_bo_physical_address(qdev, qdev->monitors_config_bo, 0);
+	  
+	  memset(qdev->monitors_config, 0, monitors_config_size);
+	  qdev->monitors_config->max_allowed = max_allowed;
+	}
 
 	qdev->ddev->mode_config.funcs = (void *)&qxl_mode_funcs;
 

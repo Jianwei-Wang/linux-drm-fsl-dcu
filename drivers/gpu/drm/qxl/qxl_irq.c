@@ -25,11 +25,16 @@
 
 #include "qxl_drv.h"
 
+irqreturn_t qxl_3d_irq_handler(DRM_IRQ_ARGS);
+
 irqreturn_t qxl_irq_handler(DRM_IRQ_ARGS)
 {
 	struct drm_device *dev = (struct drm_device *) arg;
 	struct qxl_device *qdev = (struct qxl_device *)dev->dev_private;
 	uint32_t pending;
+
+	if (qxl_3d_only)
+	  return qxl_3d_irq_handler(irq, arg);
 
 	pending = xchg(&qdev->ram_header->int_pending, 0);
 	if (!pending)
@@ -91,7 +96,8 @@ int qxl_irq_init(struct qxl_device *qdev)
 	atomic_set(&qdev->irq_received_3d, 0);
 	qdev->irq_received_error = 0;
 	ret = drm_irq_install(qdev->ddev);
-	qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;
+	if (!qxl_3d_only)
+	  qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed installing irq: %d\n", ret);
 		return 1;

@@ -523,27 +523,29 @@ int qxl_ttm_init(struct qxl_device *qdev)
 		DRM_ERROR("failed initializing buffer object driver(%d).\n", r);
 		return r;
 	}
-	/* NOTE: this includes the framebuffer (aka surface 0) */
-	num_io_pages = qdev->rom->ram_header_offset / PAGE_SIZE;
-	r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_VRAM,
-			   num_io_pages);
-	if (r) {
-		DRM_ERROR("Failed initializing VRAM heap.\n");
-		return r;
-	}
-	r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_PRIV0,
-			   qdev->surfaceram_size / PAGE_SIZE);
-	if (r) {
-		DRM_ERROR("Failed initializing Surfaces heap.\n");
-		return r;
-	}
-	DRM_INFO("qxl: %uM of VRAM memory size\n",
-		 (unsigned)qdev->vram_size / (1024 * 1024));
-	DRM_INFO("qxl: %luM of IO pages memory ready (VRAM domain)\n",
-		 ((unsigned)num_io_pages * PAGE_SIZE) / (1024 * 1024));
-	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
-		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
 
+	if (!qxl_3d_only) {
+		/* NOTE: this includes the framebuffer (aka surface 0) */
+		num_io_pages = qdev->rom->ram_header_offset / PAGE_SIZE;
+		r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_VRAM,
+				   num_io_pages);
+		if (r) {
+			DRM_ERROR("Failed initializing VRAM heap.\n");
+			return r;
+		}
+		r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_PRIV0,
+				   qdev->surfaceram_size / PAGE_SIZE);
+		if (r) {
+			DRM_ERROR("Failed initializing Surfaces heap.\n");
+			return r;
+		}
+		DRM_INFO("qxl: %uM of VRAM memory size\n",
+			 (unsigned)qdev->vram_size / (1024 * 1024));
+		DRM_INFO("qxl: %luM of IO pages memory ready (VRAM domain)\n",
+			 ((unsigned)num_io_pages * PAGE_SIZE) / (1024 * 1024));
+		if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
+			qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
+	}
 	if (qdev->ivdev) {
 		r = ttm_bo_init_mm(&qdev->mman.bdev, TTM_PL_PRIV1,
 				   qdev->ivsize / PAGE_SIZE);
@@ -564,8 +566,10 @@ int qxl_ttm_init(struct qxl_device *qdev)
 
 void qxl_ttm_fini(struct qxl_device *qdev)
 {
-	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_VRAM);
-	ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV0);
+	if (!qxl_3d_only) {
+		ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_VRAM);
+		ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV0);
+	}
 	if (qdev->ivdev)
 		ttm_bo_clean_mm(&qdev->mman.bdev, TTM_PL_PRIV1);
 	ttm_bo_device_release(&qdev->mman.bdev);
@@ -601,10 +605,12 @@ static int qxl_ttm_debugfs_init(struct qxl_device *qdev)
 	int types = QXL_DEBUGFS_MEM_TYPES;
 	if (!qdev->ivdev)
 		types--;
+	if (qxl_3d_only)
+		types = 1;
 	for (i = 0; i < types; i++) {
-		if (i == 0)
+		if (i == 0 && !qxl_3d_only)
 			sprintf(qxl_mem_types_names[i], "qxl_mem_mm");
-		else if (i == 1)
+		else if (i == 1 && !qxl_3d_only)
 			sprintf(qxl_mem_types_names[i], "qxl_surf_mm");
 		else
 			sprintf(qxl_mem_types_names[i], "qxl_3d_mm");

@@ -150,6 +150,7 @@ retry:
 			iowrite32(0x1, ring->bell);
 		} else
 			outb(0, ring->prod_notify);
+		header->notify_on_prod = header->prod + ring->n_elements;
 	}
 	spin_unlock_irqrestore(&ring->lock, flags);
 	return 0;
@@ -427,6 +428,8 @@ void qxl_io_log(struct qxl_device *qdev, const char *fmt, ...)
 {
 	va_list args;
 
+	if (qxl_3d_only)
+	  return;
 	va_start(args, fmt);
 	vsnprintf(qdev->ram_header->log_buf, QXL_LOG_BUF_SIZE, fmt, args);
 	va_end(args);

@@ -112,25 +112,28 @@ static int qxl_dirty_update(struct qxl_framebuffer *fb,
 	spin_unlock_irqrestore(&fb->dirty_lock, flags);
 
 	{
-		struct qxl_3d_command cmd;
+		struct qxl_3d_command cmd, *cmd_p;
+		struct qxl_3d_vbuffer *vbuf;
 		uint32_t offset;
-		cmd.type = QXL_3D_TRANSFER_PUT;
-		cmd.u.transfer_put.res_handle = fb->res_3d_handle;
 
-		cmd.u.transfer_put.dst_box.x = x;
-		cmd.u.transfer_put.dst_box.y = y;
-		cmd.u.transfer_put.dst_box.z = 0;
-		cmd.u.transfer_put.dst_box.w = x2 - x + 1;
-		cmd.u.transfer_put.dst_box.h = y2 - y + 1;
-		cmd.u.transfer_put.dst_box.d = 1;
+		cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+		cmd_p->type = QXL_3D_TRANSFER_PUT;
+		cmd_p->u.transfer_put.res_handle = fb->res_3d_handle;
+
+		cmd_p->u.transfer_put.dst_box.x = x;
+		cmd_p->u.transfer_put.dst_box.y = y;
+		cmd_p->u.transfer_put.dst_box.z = 0;
+		cmd_p->u.transfer_put.dst_box.w = x2 - x + 1;
+		cmd_p->u.transfer_put.dst_box.h = y2 - y + 1;
+		cmd_p->u.transfer_put.dst_box.d = 1;
 		
-		cmd.u.transfer_put.dst_level = 0;
-		cmd.u.transfer_put.src_stride = fb->base.pitches[0];
+		cmd_p->u.transfer_put.dst_level = 0;
+		cmd_p->u.transfer_put.src_stride = fb->base.pitches[0];
 
 		offset = (y * fb->base.pitches[0]) + x * bpp;
-		cmd.u.transfer_put.data = qxl_3d_bo_addr(qobj, offset);
+		cmd_p->u.transfer_put.data = qxl_3d_bo_addr(qobj, offset);
 
-		qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, false);
+		qxl_3d_send_cmd(qdev, cmd_p, vbuf, false);
 
 	}
 	qxl_3d_dirty_front(qdev, fb, x, y, x2 - x + 1, y2 - y + 1);
@@ -177,23 +180,25 @@ static int qxl_create_3d_fb_res(struct qxl_device *qdev, int width, int height, 
 {
 	int ret;
 	uint32_t res_id;
-	struct qxl_3d_command cmd;
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
 
 	ret = qxl_3d_resource_id_get(qdev, &res_id);
 	if (ret)
 		return ret;
 
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.type = QXL_3D_CMD_CREATE_RESOURCE;
-	cmd.u.res_create.handle = res_id;
-	cmd.u.res_create.target = 2;
-	cmd.u.res_create.format = 2;
-	cmd.u.res_create.bind = (1 << 1) | (1 << 14);
-	cmd.u.res_create.width = width;
-	cmd.u.res_create.height = height;
-	cmd.u.res_create.depth = 1;
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
 	
+	cmd_p->type = QXL_3D_CMD_CREATE_RESOURCE;
+	cmd_p->u.res_create.handle = res_id;
+	cmd_p->u.res_create.target = 2;
+	cmd_p->u.res_create.format = 2;
+	cmd_p->u.res_create.bind = (1 << 1) | (1 << 14);
+	cmd_p->u.res_create.width = width;
+	cmd_p->u.res_create.height = height;
+	cmd_p->u.res_create.depth = 1;
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 	*handle = res_id;
 	return 0;
 }

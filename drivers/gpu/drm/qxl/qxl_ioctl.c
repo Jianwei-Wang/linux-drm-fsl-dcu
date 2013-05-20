@@ -451,7 +451,8 @@ static int qxl_3d_resource_create_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_resource_create *rc = data;
-	struct qxl_3d_command cmd;
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
 	int ret;
 	uint32_t res_id;
 
@@ -459,20 +460,21 @@ static int qxl_3d_resource_create_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		return ret;
 
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.type = QXL_3D_CMD_CREATE_RESOURCE;
-	cmd.u.res_create.handle = res_id;
-	cmd.u.res_create.target = rc->target;
-	cmd.u.res_create.format = rc->format;
-	cmd.u.res_create.bind = rc->bind;
-	cmd.u.res_create.width = rc->width;
-	cmd.u.res_create.height = rc->height;
-	cmd.u.res_create.depth = rc->depth;
-	cmd.u.res_create.array_size = rc->array_size;
-	cmd.u.res_create.last_level = rc->last_level;
-	cmd.u.res_create.nr_samples = rc->nr_samples;
-	
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
+	cmd_p->type = QXL_3D_CMD_CREATE_RESOURCE;
+	cmd_p->u.res_create.handle = res_id;
+	cmd_p->u.res_create.target = rc->target;
+	cmd_p->u.res_create.format = rc->format;
+	cmd_p->u.res_create.bind = rc->bind;
+	cmd_p->u.res_create.width = rc->width;
+	cmd_p->u.res_create.height = rc->height;
+	cmd_p->u.res_create.depth = rc->depth;
+	cmd_p->u.res_create.array_size = rc->array_size;
+	cmd_p->u.res_create.last_level = rc->last_level;
+	cmd_p->u.res_create.nr_samples = rc->nr_samples;
+
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 
 	rc->res_handle = res_id;
 	return 0;
@@ -483,13 +485,15 @@ static int qxl_3d_resource_unref_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_resource_unref *ru = data;
-	struct qxl_3d_command cmd;
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
 
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.type = QXL_3D_RESOURCE_UNREF;
-	cmd.u.res_unref.res_handle = ru->res_handle;
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
+	cmd_p->type = QXL_3D_RESOURCE_UNREF;
+	cmd_p->u.res_unref.res_handle = ru->res_handle;
 	
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 	return 0;
 }
 	
@@ -498,7 +502,8 @@ static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_transfer_get *args = data;
-	struct qxl_3d_command cmd;
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
 	struct drm_gem_object *gobj = NULL;
 	struct qxl_bo *qobj = NULL;
 	struct qxl_3d_fence *fence;
@@ -519,18 +524,20 @@ static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 			      true, false);
 	if (unlikely(ret))
 		goto out_unres;
-	memset(&cmd, 0, sizeof(cmd));
 
-	cmd.type = QXL_3D_TRANSFER_GET;
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
 
-	cmd.u.transfer_get.res_handle = args->res_handle;
-	cmd.u.transfer_get.box = args->box;
-	cmd.u.transfer_get.data = qxl_3d_bo_addr(qobj, args->dst_offset);
-	cmd.u.transfer_get.level = args->level;
+	cmd_p->type = QXL_3D_TRANSFER_GET;
+
+	cmd_p->u.transfer_get.res_handle = args->res_handle;
+	cmd_p->u.transfer_get.box = args->box;
+	cmd_p->u.transfer_get.data = qxl_3d_bo_addr(qobj, args->dst_offset);
+	cmd_p->u.transfer_get.level = args->level;
 
 	ret = qxl_3d_fence_emit(qdev, &cmd, &fence);
 
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 
 	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
 
@@ -546,7 +553,8 @@ static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 {
 	struct qxl_device *qdev = dev->dev_private;
 	struct drm_qxl_3d_transfer_put *args = data;
-	struct qxl_3d_command cmd;
+	struct qxl_3d_command cmd, *cmd_p;
+	struct qxl_3d_vbuffer *vbuf;
 	struct drm_gem_object *gobj = NULL;
 	struct qxl_bo *qobj = NULL;
 	struct qxl_3d_fence *fence;
@@ -567,18 +575,17 @@ static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret))
 		goto out_unres;
 
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.type = QXL_3D_TRANSFER_PUT;
-	cmd.u.transfer_put.res_handle = args->res_handle;
-	cmd.u.transfer_put.dst_box = args->dst_box;
-	cmd.u.transfer_put.dst_level = args->dst_level;
-	cmd.u.transfer_put.src_stride = args->src_stride;
-	cmd.u.transfer_put.data = qxl_3d_bo_addr(qobj, args->src_offset);
+	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	memset(cmd_p, 0, sizeof(cmd));
+	cmd_p->type = QXL_3D_TRANSFER_PUT;
+	cmd_p->u.transfer_put.res_handle = args->res_handle;
+	cmd_p->u.transfer_put.dst_box = args->dst_box;
+	cmd_p->u.transfer_put.dst_level = args->dst_level;
+	cmd_p->u.transfer_put.src_stride = args->src_stride;
+	cmd_p->u.transfer_put.data = qxl_3d_bo_addr(qobj, args->src_offset);
 
 	ret = qxl_3d_fence_emit(qdev, &cmd, &fence);
-
-	qxl_ring_push(qdev->q3d_info.iv3d_ring, &cmd, true);
-
+	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 
 	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
 

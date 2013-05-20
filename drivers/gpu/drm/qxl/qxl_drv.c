@@ -42,6 +42,8 @@ static DEFINE_PCI_DEVICE_TABLE(pciidlist) = {
 	  0xffff00, 0 },
 	{ 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_OTHER << 8,
 	  0xffff00, 0 },
+	{ 0x1b36, 0x3d, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_VGA << 8,
+	  0xffff00, 0 },
 	{ 0, 0, 0 },
 };
 MODULE_DEVICE_TABLE(pci, pciidlist);
@@ -49,11 +51,18 @@ MODULE_DEVICE_TABLE(pci, pciidlist);
 int qxl_modeset = -1;
 int qxl_fb3d = 0;
 
+int qxl_3d_only = 0;
+
+int qxl_3d_use_vring = 0;
+
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, qxl_modeset, int, 0400);
 
 MODULE_PARM_DESC(fb3d, "Disable/Enable modesetting");
 module_param_named(fb3d, qxl_fb3d, int, 0400);
+
+MODULE_PARM_DESC(vring, "vring enable");
+module_param_named(vring, qxl_3d_use_vring, int, 0400);
 
 static struct drm_driver qxl_driver;
 static struct pci_driver qxl_pci_driver;
@@ -61,10 +70,14 @@ static struct pci_driver qxl_pci_driver;
 static int
 qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	if (pdev->revision < 4) {
+	if (pdev->revision < 4 && pdev->device != 0x3d) {
 		DRM_ERROR("qxl too old, doesn't support client_monitors_config,"
 			  " use xf86-video-qxl in user mode");
 		return -EINVAL; /* TODO: ENODEV ? */
+	}
+	if (pdev->device == 0x3d) {
+		qxl_fb3d = 1;
+		qxl_3d_only = 1;
 	}
 	return drm_get_pci_dev(pdev, ent, &qxl_driver);
 }
