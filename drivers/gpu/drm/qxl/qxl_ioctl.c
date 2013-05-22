@@ -460,7 +460,7 @@ static int qxl_3d_resource_create_ioctl(struct drm_device *dev, void *data,
 	if (ret)
 		return ret;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 	cmd_p->type = QXL_3D_CMD_CREATE_RESOURCE;
 	cmd_p->u.res_create.handle = res_id;
@@ -488,7 +488,7 @@ static int qxl_3d_resource_unref_ioctl(struct drm_device *dev, void *data,
 	struct qxl_3d_command cmd, *cmd_p;
 	struct qxl_3d_vbuffer *vbuf;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 	cmd_p->type = QXL_3D_RESOURCE_UNREF;
 	cmd_p->u.res_unref.res_handle = ru->res_handle;
@@ -525,17 +525,17 @@ static int qxl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret))
 		goto out_unres;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, qobj, true, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 
 	cmd_p->type = QXL_3D_TRANSFER_GET;
 
 	cmd_p->u.transfer_get.res_handle = args->res_handle;
 	cmd_p->u.transfer_get.box = args->box;
-	cmd_p->u.transfer_get.data = qxl_3d_bo_addr(qobj, args->dst_offset);
 	cmd_p->u.transfer_get.level = args->level;
 
-	ret = qxl_3d_fence_emit(qdev, &cmd, &fence);
+	qxl_3d_set_data(vbuf, qobj, args->dst_offset, &cmd_p->u.transfer_get.data);
+	ret = qxl_3d_fence_emit(qdev, cmd_p, &fence);
 
 	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 
@@ -575,16 +575,17 @@ static int qxl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret))
 		goto out_unres;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, qobj, false, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 	cmd_p->type = QXL_3D_TRANSFER_PUT;
 	cmd_p->u.transfer_put.res_handle = args->res_handle;
 	cmd_p->u.transfer_put.dst_box = args->dst_box;
 	cmd_p->u.transfer_put.dst_level = args->dst_level;
 	cmd_p->u.transfer_put.src_stride = args->src_stride;
-	cmd_p->u.transfer_put.data = qxl_3d_bo_addr(qobj, args->src_offset);
 
-	ret = qxl_3d_fence_emit(qdev, &cmd, &fence);
+	qxl_3d_set_data(vbuf, qobj, args->src_offset, &cmd_p->u.transfer_put.data);
+
+	ret = qxl_3d_fence_emit(qdev, cmd_p, &fence);
 	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
 
 	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);

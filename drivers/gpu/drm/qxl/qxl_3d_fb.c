@@ -116,7 +116,7 @@ static int qxl_dirty_update(struct qxl_framebuffer *fb,
 		struct qxl_3d_vbuffer *vbuf;
 		uint32_t offset;
 
-		cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+		cmd_p = qxl_3d_alloc_cmd(qdev, qobj, false, &cmd, &vbuf);
 		cmd_p->type = QXL_3D_TRANSFER_PUT;
 		cmd_p->u.transfer_put.res_handle = fb->res_3d_handle;
 
@@ -131,8 +131,7 @@ static int qxl_dirty_update(struct qxl_framebuffer *fb,
 		cmd_p->u.transfer_put.src_stride = fb->base.pitches[0];
 
 		offset = (y * fb->base.pitches[0]) + x * bpp;
-		cmd_p->u.transfer_put.data = qxl_3d_bo_addr(qobj, offset);
-
+		qxl_3d_set_data(vbuf, qobj, offset, &cmd_p->u.transfer_put.data);
 		qxl_3d_send_cmd(qdev, cmd_p, vbuf, false);
 
 	}
@@ -187,7 +186,7 @@ static int qxl_create_3d_fb_res(struct qxl_device *qdev, int width, int height, 
 	if (ret)
 		return ret;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 	
 	cmd_p->type = QXL_3D_CMD_CREATE_RESOURCE;

@@ -125,6 +125,7 @@ struct qxl_bo {
 	struct qxl_fence fence; /* per bo fence  - list of releases */
 	struct qxl_release *surf_create;
 	atomic_t reserve_count;
+	struct sg_table *sgt;
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
@@ -613,19 +614,37 @@ int qxl_3d_surface_dirty(struct qxl_framebuffer *qfb, struct drm_clip_rect *clip
 
 struct qxl_3d_vbuffer;
 struct qxl_3d_command *qxl_3d_valloc_cmd_buf(struct qxl_device *qdev,
+					     struct qxl_bo *qobj,
+					     bool inout,
 					     struct qxl_3d_vbuffer **vbuffer_p);
 int qxl_3d_vadd_cmd_buf(struct qxl_device *qdev, struct qxl_3d_vbuffer *buf);
 
 static inline struct qxl_3d_command *qxl_3d_alloc_cmd(struct qxl_device *qdev,
-					       struct qxl_3d_command *cmd,
-					       struct qxl_3d_vbuffer **vbuf)
+						      struct qxl_bo *bo,
+						      bool inout,
+						      struct qxl_3d_command *cmd,
+						      struct qxl_3d_vbuffer **vbuf)
 {
 	if (qxl_3d_use_vring) {
-		return qxl_3d_valloc_cmd_buf(qdev, vbuf);
+		return qxl_3d_valloc_cmd_buf(qdev, bo, inout, vbuf);
 	} else {
 		return cmd;
 	} 
 }
+
+extern struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo);
+
+static inline void qxl_3d_set_data(struct qxl_3d_vbuffer *vbuf,
+				   struct qxl_bo *bo,
+				   uint32_t offset,
+				   uint64_t *cmdw)
+{
+	uint64_t val = offset;
+	if (!qxl_3d_use_vring) 
+		val += bo->tbo.offset;
+	*cmdw = val;
+}
+
 
 static inline void qxl_3d_send_cmd(struct qxl_device *qdev,
 				   struct qxl_3d_command *cmd,
@@ -638,4 +657,5 @@ static inline void qxl_3d_send_cmd(struct qxl_device *qdev,
 		qxl_ring_push(qdev->q3d_info.iv3d_ring, cmd, intr);
 
 }
+u32 qxl_3d_fence_read(struct qxl_device *qdev);
 #endif

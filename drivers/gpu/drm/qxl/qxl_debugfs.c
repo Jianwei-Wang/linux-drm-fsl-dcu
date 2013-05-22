@@ -57,9 +57,13 @@ qxl_debugfs_buffers_info(struct seq_file *m, void *data)
 	struct qxl_device *qdev = node->minor->dev->dev_private;
 	struct qxl_bo *bo;
 
+	if (qdev->ivdev)
+	  seq_printf(m, "fence read %d %ld %lld\n", qxl_3d_fence_read(qdev), atomic64_read(&qdev->q3d_info.fence_drv.last_seq), qdev->q3d_info.fence_drv.sync_seq);
+	
 	list_for_each_entry(bo, &qdev->gem.objects, list) {
-		seq_printf(m, "size %ld, pc %d, sync obj %p, num releases %d\n",
-			   (unsigned long)bo->gem_base.size, bo->pin_count,
+		seq_printf(m, "size %ld, dom: %d pc %d, sync obj %p, num releases %d\n",
+			   (unsigned long)bo->gem_base.size, bo->type,
+			   bo->pin_count,
 			   bo->tbo.sync_obj, bo->fence.num_active_releases);
 	}
 	return 0;

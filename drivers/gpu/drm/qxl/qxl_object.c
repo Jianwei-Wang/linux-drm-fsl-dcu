@@ -35,6 +35,8 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	bo = container_of(tbo, struct qxl_bo, tbo);
 	qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 
+	if (bo->sgt)
+		qxl_bo_free_sg_table(bo);
 	qxl_surface_evict(qdev, bo, false);
 	qxl_fence_fini(&bo->fence);
 	mutex_lock(&qdev->gem.mutex);
@@ -63,8 +65,12 @@ void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain)
 		qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_VRAM;
 	if (domain == QXL_GEM_DOMAIN_SURFACE)
 		qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_PRIV0;
-	if (domain == QXL_GEM_DOMAIN_3D)
-		qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_PRIV1;
+	if (domain == QXL_GEM_DOMAIN_3D) {
+		if (qxl_3d_use_vring) 
+			qbo->placements[c++] = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
+		else
+			qbo->placements[c++] = TTM_PL_FLAG_CACHED | TTM_PL_FLAG_PRIV1;
+	}
 	if (domain == QXL_GEM_DOMAIN_CPU)
 		qbo->placements[c++] = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
 	if (!c)
@@ -236,6 +242,13 @@ int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
 	int r, i;
 
+	if (domain == QXL_GEM_DOMAIN_3D && qxl_3d_use_vring) {
+		bo->pin_count++;
+		if (gpu_addr)
+			*gpu_addr = NULL;
+		return 0;
+	}
+
 	if (bo->pin_count) {
 		bo->pin_count++;
 		if (gpu_addr)
@@ -368,4 +381,41 @@ int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
 	if (ret)
 		return ret;
 	return 0;
+}
+
+int qxl_bo_get_sg_table(struct qxl_device *qdev,
+		      struct qxl_bo *bo)
+{
+	struct sg_table *sg = NULL;
+	int i;
+	int ret;
+	struct page **pages = bo->tbo.ttm->pages;
+	int nr_pages = bo->tbo.num_pages;
+
+	/* wtf swapping */
+	if (bo->sgt)
+		return 0;
+
+	if (bo->tbo.ttm->state == tt_unpopulated)
+		bo->tbo.ttm->bdev->driver->ttm_tt_populate(bo->tbo.ttm);
+	bo->sgt = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	if (!bo->sgt)
+		goto out;
+
+	ret = sg_alloc_table_from_pages(bo->sgt, pages, nr_pages, 0,
+					nr_pages << PAGE_SHIFT, GFP_KERNEL);
+	if (ret)
+		goto out;
+	return 0;
+out:
+	kfree(bo->sgt);
+	bo->sgt = NULL;
+	return -ENOMEM;
+}
+
+void qxl_bo_free_sg_table(struct qxl_bo *bo)
+{
+	sg_free_table(bo->sgt);
+	kfree(bo->sgt);
+	bo->sgt = NULL;
 }

@@ -143,6 +143,10 @@ struct qxl_3d_vbuffer {
 	size_t size;
 	size_t len;
 	size_t offset;
+	struct qxl_bo *bo;
+	bool inout;
+	int sgpages;
+	struct scatterlist sg[0];
 };
 
 struct qxl_3d_fence *qxl_3d_fence_ref(struct qxl_3d_fence *fence);
