@@ -616,17 +616,21 @@ struct qxl_3d_vbuffer;
 struct qxl_3d_command *qxl_3d_valloc_cmd_buf(struct qxl_device *qdev,
 					     struct qxl_bo *qobj,
 					     bool inout,
+					     u32 *base_offset,
+					     u32 max_bo_len,
 					     struct qxl_3d_vbuffer **vbuffer_p);
 int qxl_3d_vadd_cmd_buf(struct qxl_device *qdev, struct qxl_3d_vbuffer *buf);
 
 static inline struct qxl_3d_command *qxl_3d_alloc_cmd(struct qxl_device *qdev,
 						      struct qxl_bo *bo,
 						      bool inout,
+						      u32 *base_offset, /* can be modified */
+						      u32 max_bo_len,
 						      struct qxl_3d_command *cmd,
 						      struct qxl_3d_vbuffer **vbuf)
 {
 	if (qxl_3d_use_vring) {
-		return qxl_3d_valloc_cmd_buf(qdev, bo, inout, vbuf);
+		return qxl_3d_valloc_cmd_buf(qdev, bo, inout, base_offset, max_bo_len, vbuf);
 	} else {
 		return cmd;
 	} 

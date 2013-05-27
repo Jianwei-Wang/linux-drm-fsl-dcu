@@ -78,6 +78,22 @@ struct qxl_3d_cmd_submit {
 };
 
 #define QXL_3D_COMMAND_EMIT_FENCE (1 << 0)
+struct qxl_3d_command_ring {
+	uint32_t type;
+	uint32_t flags;
+	uint64_t fence_id;
+	union qxl_3d_cmds_ring {
+		struct qxl_3d_resource_create res_create;
+		struct qxl_3d_transfer_put transfer_put;
+		struct qxl_3d_transfer_get transfer_get;
+		struct qxl_3d_cmd_submit cmd_submit;
+		unsigned char pads[112];
+		struct qxl_3d_set_scanout set_scanout;
+		struct qxl_3d_flush_buffer flush_buffer;
+		struct qxl_3d_resource_unref res_unref;
+	} u;
+};
+
 struct qxl_3d_command {
 	uint32_t type;
 	uint32_t flags;
@@ -87,7 +103,6 @@ struct qxl_3d_command {
 		struct qxl_3d_transfer_put transfer_put;
 		struct qxl_3d_transfer_get transfer_get;
 		struct qxl_3d_cmd_submit cmd_submit;
-		unsigned char pads[112];
 		struct qxl_3d_set_scanout set_scanout;
 		struct qxl_3d_flush_buffer flush_buffer;
 		struct qxl_3d_resource_unref res_unref;
@@ -141,11 +156,15 @@ struct qxl_3d_fence {
 struct qxl_3d_vbuffer {
 	char *buf;
 	size_t size;
-	size_t len;
-	size_t offset;
+
+	size_t bo_max_len;
+	size_t bo_start_offset;
+	size_t bo_user_offset;
 	struct qxl_bo *bo;
+
 	bool inout;
 	int sgpages;
+	int firstsg;
 	struct scatterlist sg[0];
 };
 

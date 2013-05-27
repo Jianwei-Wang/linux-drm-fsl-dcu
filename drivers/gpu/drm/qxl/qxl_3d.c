@@ -154,7 +154,7 @@ virt_retry:
 			rmap[1] = 0;
 			val = xchg(&qdev->q3d_info.ram_3d_header->pad, 0);
 			atomic_inc(&qdev->irq_received_3d);
-		//	printk("got 3d irq %08x %08x\n", pending, val);
+			//	printk("got 3d irq %08x %08x\n", pending, val);
 			if (val & 0x1) {
 				wake_up_all(&qdev->q3d_event);
 			}
@@ -269,11 +269,12 @@ static void free_vbuf(struct qxl_3d_vbuffer *vbuf)
 
 struct qxl_3d_vbuffer *allocate_vbuf(struct qxl_device *qdev,
 				     struct qxl_bo *bo,
-				     int size, bool inout)
+				     int size, bool inout, u32 *base_offset, u32 max_bo_len)
 {
 	struct virtqueue *vq = qdev->q3d_info.cmdq;
-	struct qxl_3d_vbuffer *vbuf;
+	struct qxl_3d_vbuffer *vbuf = NULL;
 	int sgpages = bo ? bo->tbo.num_pages : 0;
+	int ret;
 
 	sgpages++;
 	
@@ -281,31 +282,63 @@ struct qxl_3d_vbuffer *allocate_vbuf(struct qxl_device *qdev,
 	if (!vbuf)
 		goto fail;
 
-	vbuf->len = 0;
-	vbuf->offset = 0;
 	vbuf->buf = (void *)vbuf + sizeof(*vbuf) + sizeof(struct scatterlist) * sgpages;
 	vbuf->inout = inout;
 	vbuf->sgpages = sgpages;
 	vbuf->size = size;
+
 	if (bo) {
+		struct scatterlist *sg;
+		unsigned int i;
+		uint32_t offset = 0;
 		vbuf->bo = qxl_bo_ref(bo);
-		qxl_bo_get_sg_table(qdev, bo);
+		vbuf->bo_max_len = max_bo_len;
+		/* TODO work out offset */
+		ret = qxl_bo_get_sg_table(qdev, bo);
+		if (ret || !bo->sgt) {
+			DRM_ERROR("failed to allocate sgt %d\n", ret);
+			goto fail;
+		}
+
+		if (base_offset) {
+			vbuf->bo_start_offset = *base_offset;
+
+			/* find sgt offset */
+			/* work out how far into the SG mapping we actually need to send */
+			offset = bo->sgt->sgl->offset;
+			for_each_sg(bo->sgt->sgl, sg, bo->sgt->nents, i) {
+				if (offset + sg->length > vbuf->bo_start_offset)
+					break;
+				offset += sg->length;
+			}
+			if (i > bo->sgt->nents)
+				return ERR_PTR(-EINVAL);
+			*base_offset -= offset;
+			vbuf->bo_user_offset = *base_offset;
+			vbuf->bo_start_offset = offset;
+		} else
+			vbuf->bo_start_offset = 0;
 	} else {
 		vbuf->bo = NULL;
+		vbuf->bo_max_len = 0;
+		vbuf->bo_start_offset = 0;
 	}
 	return vbuf;
 fail:
+	kfree(vbuf);
 	return ERR_PTR(-ENOMEM);
 }
 
 struct qxl_3d_command *qxl_3d_valloc_cmd_buf(struct qxl_device *qdev,
 					     struct qxl_bo *qobj,
 					     bool inout,
+					     u32 *base_offset,
+					     u32 max_bo_len,
 					     struct qxl_3d_vbuffer **vbuffer_p)
 {
 	struct qxl_3d_vbuffer *vbuf;
 
-	vbuf = allocate_vbuf(qdev, qobj, sizeof(struct qxl_3d_command), inout);
+	vbuf = allocate_vbuf(qdev, qobj, sizeof(struct qxl_3d_command), inout, base_offset, max_bo_len);
 	if (IS_ERR(vbuf))
 		return ERR_CAST(vbuf);
 	*vbuffer_p = vbuf;
@@ -321,14 +354,23 @@ static void reclaim_vbufs(struct virtqueue *vq)
 	}
 }
 
-static void virt_map_sgt(struct scatterlist *sg,
-			 struct sg_table *sgt, unsigned int *p_idx)
+static void virt_map_sgt(struct scatterlist *sg, struct qxl_3d_vbuffer *buf,
+			 unsigned int *p_idx)
 {
 	struct scatterlist *sg_elem;
 	int i;
 	int idx = *p_idx;
-	for_each_sg(sgt->sgl, sg_elem, sgt->nents, i)
+	uint32_t offset = buf->bo->sgt->sgl->offset;
+	for_each_sg(buf->bo->sgt->sgl, sg_elem, buf->bo->sgt->nents, i) {
+		if (offset + sg_elem->length <= buf->bo_start_offset)
+			goto skip;
 		sg[idx++] = *sg_elem;
+		if (buf->bo_max_len)
+			if (offset + sg_elem->length > buf->bo_start_offset + buf->bo_user_offset + buf->bo_max_len)
+				break;
+	skip:
+		offset += sg_elem->length;
+	}
 
 	*p_idx = idx;
 }
@@ -337,22 +379,31 @@ static int vadd_buf(struct virtqueue *vq, struct qxl_3d_vbuffer *buf)
 {
 	struct scatterlist *sg = buf->sg;
 	int ret;
-	int idx = 0, outcnt = 0, incnt = 0;
+	int idx = 0, outcnt = 0, incnt = 0, old_idx;
 
 	/* always put the command into in */
 	sg_set_buf(&sg[idx++], buf->buf, buf->size);
 	if (buf->inout == true)
 		incnt = idx;
-	if (buf->bo)
-		virt_map_sgt(sg, buf->bo->sgt, &idx);
+	if (buf->bo) {
+		old_idx = idx;
+		virt_map_sgt(sg, buf, &idx);
+
+	}
 	if (buf->inout == true)
 		outcnt = idx - incnt;
 	else
 		incnt = idx;
+ retry:
 	ret = virtqueue_add_buf(vq, sg, outcnt, incnt, buf, GFP_ATOMIC);
 
-	if (vq->num_free == 2)
-		virtqueue_kick(vq);
+	if (ret == -ENOSPC) {
+	  reclaim_vbufs(vq);
+	  //	  usleep_range(50, 500);
+	  goto retry;
+	}
+	if (vq->num_free < 8)
+	  virtqueue_kick(vq);
 	if (!ret)
 		ret = vq->num_free;
 	return ret;
@@ -380,7 +431,7 @@ static int qxl_init_3d_vring(struct qxl_device *qdev)
 	qdev->q3d_info.cmdq = setup_cmdq(qdev, qdev_virq_cb);
 	printk("cmdq at %p\n", qdev->q3d_info.cmdq);
 
-	tbuf = allocate_vbuf(qdev, NULL, sizeof(struct qxl_3d_command), false);
+	tbuf = allocate_vbuf(qdev, NULL, sizeof(struct qxl_3d_command), false, 0, 0);
 
 	dwp = tbuf->buf;
 	dwp[0] = 0xdeadbeef;
@@ -411,7 +462,7 @@ static int qxl_init_3d_qring(struct qxl_device *qdev)
 		goto out_unreserve;
 
 	qdev->q3d_info.iv3d_ring = qxl_ring_create(&(qdev->q3d_info.ram_3d_header->cmd_ring_hdr),
-					  sizeof(struct qxl_3d_command),
+					  sizeof(struct qxl_3d_command_ring),
 					  QXL_3D_COMMAND_RING_SIZE,
 					  -1,
 					  true,
@@ -557,7 +608,7 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 		return -EFAULT;
 	/* allocate a command bo */
 	
-	printk("user cmd size %d\n", user_cmd.command_size);
+	//printk("user cmd size %d\n", user_cmd.command_size);
 
 	ret = qxl_gem_object_create(qdev, user_cmd.command_size,
 				    0, QXL_GEM_DOMAIN_3D, false,
@@ -594,7 +645,7 @@ int qxl_execbuffer_3d(struct drm_device *dev,
 		struct qxl_3d_command cmd, *cmd_p;
 		struct qxl_3d_vbuffer *vbuf;
 
-		cmd_p = qxl_3d_alloc_cmd(qdev, qobj, false, &cmd, &vbuf);
+		cmd_p = qxl_3d_alloc_cmd(qdev, qobj, false, NULL, 0, &cmd, &vbuf);
 		cmd_p->type = QXL_3D_CMD_SUBMIT;
 		cmd_p->u.cmd_submit.size = user_cmd.command_size;
 
@@ -787,7 +838,7 @@ int qxl_3d_set_front(struct qxl_device *qdev,
 	struct qxl_3d_command cmd, *cmd_p;
 	struct qxl_3d_vbuffer *vbuf;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 	cmd_p->type = QXL_3D_SET_SCANOUT;
 	cmd_p->u.set_scanout.res_handle = fb->res_3d_handle;
@@ -796,6 +847,7 @@ int qxl_3d_set_front(struct qxl_device *qdev,
 	cmd_p->u.set_scanout.box.w = width;
 	cmd_p->u.set_scanout.box.h = height;
 	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
+	return 0;
 }
 
 int qxl_3d_dirty_front(struct qxl_device *qdev,
@@ -805,7 +857,7 @@ int qxl_3d_dirty_front(struct qxl_device *qdev,
 	struct qxl_3d_command cmd, *cmd_p;
 	struct qxl_3d_vbuffer *vbuf;
 
-	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, &cmd, &vbuf);
+	cmd_p = qxl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &cmd, &vbuf);
 	memset(cmd_p, 0, sizeof(cmd));
 	cmd_p->type = QXL_3D_FLUSH_BUFFER;
 	cmd_p->u.flush_buffer.res_handle = fb->res_3d_handle;
@@ -814,7 +866,7 @@ int qxl_3d_dirty_front(struct qxl_device *qdev,
 	cmd_p->u.flush_buffer.box.w = width;
 	cmd_p->u.flush_buffer.box.h = height;
 	qxl_3d_send_cmd(qdev, cmd_p, vbuf, true);
-
+	return 0;
 }
 
 
