@@ -130,7 +130,7 @@ struct qxl_bo {
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 
 struct qxl_gem {
-	struct mutex		mutex;
+	spinlock_t lock;
 	struct list_head	objects;
 };
 

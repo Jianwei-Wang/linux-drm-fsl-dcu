@@ -113,7 +113,7 @@ int qxl_device_init(struct qxl_device *qdev,
 	qdev->pdev = pdev;
 	qdev->flags = flags;
 
-	mutex_init(&qdev->gem.mutex);
+	spin_lock_init(&qdev->gem.lock);
 	mutex_init(&qdev->update_area_mutex);
 	mutex_init(&qdev->release_mutex);
 	mutex_init(&qdev->surf_evict_mutex);

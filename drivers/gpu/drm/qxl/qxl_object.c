@@ -39,9 +39,9 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 		qxl_bo_free_sg_table(bo);
 	qxl_surface_evict(qdev, bo, false);
 	qxl_fence_fini(&bo->fence);
-	mutex_lock(&qdev->gem.mutex);
+	spin_lock(&qdev->gem.lock);
 	list_del_init(&bo->list);
-	mutex_unlock(&qdev->gem.mutex);
+	spin_unlock(&qdev->gem.lock);
 	drm_gem_object_release(&bo->gem_base);
 	kfree(bo);
 }
@@ -301,9 +301,9 @@ void qxl_bo_force_delete(struct qxl_device *qdev)
 		dev_err(qdev->dev, "%p %p %lu %lu force free\n",
 			&bo->gem_base, bo, (unsigned long)bo->gem_base.size,
 			*((unsigned long *)&bo->gem_base.refcount));
-		mutex_lock(&qdev->gem.mutex);
+		spin_lock(&qdev->gem.lock);
 		list_del_init(&bo->list);
-		mutex_unlock(&qdev->gem.mutex);
+		spin_unlock(&qdev->gem.lock);
 		/* this should unref the ttm bo */
 		drm_gem_object_unreference(&bo->gem_base);
 		mutex_unlock(&qdev->ddev->struct_mutex);
