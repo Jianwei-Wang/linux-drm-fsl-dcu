@@ -142,7 +142,9 @@ struct qxl_3d_info {
 	struct virtqueue *cmdq;
 	int cmd_num;
 	void *cmdqueue;
-	       
+	spinlock_t cmdq_lock;
+	wait_queue_head_t cmd_ack_queue;
+	struct work_struct dequeue_work;
 };
 
 
