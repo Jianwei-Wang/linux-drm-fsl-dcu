@@ -37,8 +37,10 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 
 	if (bo->sgt)
 		qxl_bo_free_sg_table(bo);
-	qxl_surface_evict(qdev, bo, false);
-	qxl_fence_fini(&bo->fence);
+	if (bo->type != QXL_GEM_DOMAIN_3D) {
+		qxl_surface_evict(qdev, bo, false);
+		qxl_fence_fini(&bo->fence);
+	}
 	spin_lock(&qdev->gem.lock);
 	list_del_init(&bo->list);
 	spin_unlock(&qdev->gem.lock);
