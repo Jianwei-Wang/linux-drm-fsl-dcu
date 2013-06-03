@@ -15,4 +15,5 @@ header-y += savage_drm.h
 header-y += sis_drm.h
 header-y += tegra_drm.h
 header-y += via_drm.h
+header-y += virgl_drm.h
 header-y += vmwgfx_drm.h
