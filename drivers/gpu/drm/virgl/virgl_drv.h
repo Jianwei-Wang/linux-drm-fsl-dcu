@@ -164,8 +164,8 @@ struct virgl_device {
 	struct fb_info			*fbdev_info;
 	struct virgl_framebuffer	*fbdev_qfb;
 
-	atomic_t irq_received_3d;
-	wait_queue_head_t q3d_event;
+	atomic_t irq_count_vbuf;
+	atomic_t irq_count_fence;
 
 	/* debugfs */
 	struct virgl_debugfs	debugfs[VIRGL_DEBUGFS_MAX_COMPONENTS];

@@ -94,8 +94,8 @@ static struct drm_driver virgl_driver = {
 	.dumb_map_offset = virgl_mode_dumb_mmap,
 	.dumb_destroy = virgl_mode_dumb_destroy,
 #if defined(CONFIG_DEBUG_FS)
-	/*	.debugfs_init = virgl_debugfs_init,
-		.debugfs_cleanup = virgl_debugfs_takedown, */
+	.debugfs_init = virgl_debugfs_init,
+	.debugfs_cleanup = virgl_debugfs_takedown,
 #endif
 	.gem_init_object = virgl_gem_object_init,
 	.gem_free_object = virgl_gem_object_free,
