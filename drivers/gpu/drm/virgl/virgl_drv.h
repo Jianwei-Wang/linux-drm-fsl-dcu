@@ -300,7 +300,11 @@ static inline struct virgl_3d_command *virgl_3d_alloc_cmd(struct virgl_device *q
 						      u32 max_bo_len,
 						      struct virgl_3d_vbuffer **vbuf)
 {
-	return virgl_3d_valloc_cmd_buf(qdev, bo, inout, base_offset, max_bo_len, vbuf);
+	struct virgl_3d_command *cmd = virgl_3d_valloc_cmd_buf(qdev, bo, inout, base_offset, max_bo_len, vbuf);
+	if (!IS_ERR(cmd)) {
+		memset(cmd, 0, sizeof(struct virgl_3d_command));
+	}
+	return cmd;
 }
 
 extern struct virgl_bo *virgl_bo_ref(struct virgl_bo *bo);

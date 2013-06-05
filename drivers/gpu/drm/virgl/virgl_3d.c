@@ -291,17 +291,19 @@ fail:
 }
 
 struct virgl_3d_command *virgl_3d_valloc_cmd_buf(struct virgl_device *qdev,
-					     struct virgl_bo *qobj,
-					     bool inout,
-					     u32 *base_offset,
-					     u32 max_bo_len,
-					     struct virgl_3d_vbuffer **vbuffer_p)
+						 struct virgl_bo *qobj,
+						 bool inout,
+						 u32 *base_offset,
+						 u32 max_bo_len,
+						 struct virgl_3d_vbuffer **vbuffer_p)
 {
 	struct virgl_3d_vbuffer *vbuf;
 
 	vbuf = allocate_vbuf(qdev, qobj, sizeof(struct virgl_3d_command), inout, base_offset, max_bo_len);
-	if (IS_ERR(vbuf))
+	if (IS_ERR(vbuf)) {
+		*vbuffer_p = NULL;
 		return ERR_CAST(vbuf);
+	}
 	*vbuffer_p = vbuf;
 	return (struct virgl_3d_command *)vbuf->buf;
 }
@@ -553,9 +555,12 @@ int virgl_execbuffer_3d(struct drm_device *dev,
 
 	{
 		struct virgl_3d_command *cmd_p;
-		struct virgl_3d_vbuffer *vbuf;
+		struct virgl_3d_vbuffer *vbuf = NULL;
 
 		cmd_p = virgl_3d_alloc_cmd(qdev, qobj, false, NULL, 0, &vbuf);
+		if (IS_ERR(cmd_p))
+			goto out_unresv;
+
 		cmd_p->type = VIRGL_CMD_SUBMIT;
 		cmd_p->u.cmd_submit.size = execbuffer->size;
 
@@ -747,7 +752,8 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 	struct virgl_3d_vbuffer *vbuf;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
-	memset(cmd_p, 0, sizeof(*cmd_p));
+	if (IS_ERR(cmd_p))
+		return PTR_ERR(cmd_p);
 	cmd_p->type = VIRGL_SET_SCANOUT;
 	cmd_p->u.set_scanout.res_handle = fb->res_3d_handle;
 	cmd_p->u.set_scanout.box.x = x;
@@ -766,7 +772,8 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 	struct virgl_3d_vbuffer *vbuf;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
-	memset(cmd_p, 0, sizeof(*cmd_p));
+	if (IS_ERR(cmd_p))
+		return PTR_ERR(cmd_p);
 	cmd_p->type = VIRGL_FLUSH_BUFFER;
 	cmd_p->u.flush_buffer.res_handle = fb->res_3d_handle;
 	cmd_p->u.flush_buffer.box.x = x;
