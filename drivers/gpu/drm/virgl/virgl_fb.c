@@ -192,8 +192,6 @@ static int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int heig
 		return ret;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
-	memset(cmd_p, 0, sizeof(*cmd_p));
-	
 	cmd_p->type = VIRGL_CMD_CREATE_RESOURCE;
 	cmd_p->u.res_create.handle = res_id;
 	cmd_p->u.res_create.target = 2;

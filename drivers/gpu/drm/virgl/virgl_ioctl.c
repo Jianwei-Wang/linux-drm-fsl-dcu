@@ -165,7 +165,6 @@ static int virgl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 		goto out_unres;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, qobj, true, &offset, 0, &vbuf);
-	memset(cmd_p, 0, sizeof(*cmd_p));
 
 	cmd_p->type = VIRGL_TRANSFER_GET;
 
