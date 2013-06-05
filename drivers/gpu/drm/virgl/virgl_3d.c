@@ -483,7 +483,7 @@ int virgl_init_3d(struct virgl_device *qdev)
 	qdev->vdev.id.device = 0x3d;
 	register_virtio_driver(&virgl_virtio_driver);
 	/* grab bar 3 */
-	qdev->q3d_info.ioaddr = pci_iomap(qdev->pdev, 3, 0);
+	qdev->q3d_info.ioaddr = pci_iomap(qdev->pdev, 0, 0);
 
 	pci_msi_off(qdev->pdev);
 	pci_set_master(qdev->pdev);
