@@ -42,8 +42,6 @@ static DEFINE_PCI_DEVICE_TABLE(pciidlist) = {
 	  0xffff00, 0 },
 	{ 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_OTHER << 8,
 	  0xffff00, 0 },
-	{ 0x1b36, 0x3d, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_VGA << 8,
-	  0xffff00, 0 },
 	{ 0, 0, 0 },
 };
 MODULE_DEVICE_TABLE(pci, pciidlist);
