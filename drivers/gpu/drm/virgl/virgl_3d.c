@@ -365,16 +365,15 @@ static int vadd_buf(struct virgl_device *qdev,
 	/* always put the command into in */
 	sg_set_buf(&sg[idx++], buf->buf, buf->size);
 	if (buf->inout == true)
-		incnt = idx;
+		outcnt = idx;
 	if (buf->bo) {
 		old_idx = idx;
 		virt_map_sgt(sg, buf, &idx);
-
 	}
 	if (buf->inout == true)
-		outcnt = idx - incnt;
+		incnt = idx - outcnt;
 	else
-		incnt = idx;
+		outcnt = idx;
 
 	spin_lock(&qdev->q3d_info.cmdq_lock);
  retry:
