@@ -122,13 +122,15 @@ virt_retry:
 	isr = ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_ISR);
 	if (!isr)
 		return retval;
-	if (isr & 0x1)
+	if (isr & 0x1) {
+		atomic_inc(&qdev->irq_count_vbuf);
 		retval = vp_vring_interrupt(irq, qdev);
-	if (isr & 0x10)
-		wake_up_all(&qdev->q3d_event);
-	if (isr & 0x20)
+	}
+	if (isr & 0x20) {
+		atomic_inc(&qdev->irq_count_fence);
 		virgl_3d_fence_process(qdev);
-	retval = IRQ_HANDLED;
+		retval = IRQ_HANDLED;
+	}
 	goto virt_retry;
 }
 
@@ -829,8 +831,8 @@ int virgl_irq_init(struct virgl_device *qdev)
 {
 	int ret;
 
-	init_waitqueue_head(&qdev->q3d_event);
-	atomic_set(&qdev->irq_received_3d, 0);
+	atomic_set(&qdev->irq_count_vbuf, 0);
+	atomic_set(&qdev->irq_count_fence, 0);
 
 	ret = drm_irq_install(qdev->ddev);
 	if (unlikely(ret != 0)) {
