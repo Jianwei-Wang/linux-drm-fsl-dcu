@@ -210,6 +210,8 @@ struct virgl_device {
 	spinlock_t cmdq_lock;
 	wait_queue_head_t cmd_ack_queue;
 	struct work_struct dequeue_work;
+
+	uint32_t num_alloc, num_freed;
 };
 
 #define vdev_to_virgl_dev(virt) container_of((virt), struct virgl_device, vdev)

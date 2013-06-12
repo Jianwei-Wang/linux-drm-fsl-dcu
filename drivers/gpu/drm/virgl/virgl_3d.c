@@ -5,8 +5,6 @@
 #include "virgl_drv.h"
 #include "virgl_object.h"
 
-static bool reclaim_vbufs(struct virtqueue *vq);
-
 /* virtio config->get_features() implementation */
 static u32 vp_get_features(struct virtio_device *vdev)
 {
@@ -302,14 +300,14 @@ struct virgl_command *virgl_alloc_cmd_buf(struct virgl_device *qdev,
 	return (struct virgl_command *)vbuf->buf;
 }
 
-static bool reclaim_vbufs(struct virtqueue *vq)
+static int reclaim_vbufs(struct virtqueue *vq)
 {
 	struct virgl_vbuffer *vbuf;
 	unsigned int len;
-	bool freed = false;
+	int freed = 0;
 	while ((vbuf = virtqueue_get_buf(vq, &len))) {
 		free_vbuf(vbuf);
-		freed = true;
+		freed++;
 	}
 	return freed;
 }
@@ -318,11 +316,14 @@ void virgl_dequeue_work_func(struct work_struct *work)
 {
 	struct virgl_device *qdev = container_of(work, struct virgl_device,
 					       dequeue_work);
-	
+	int ret;
 	spin_lock(&qdev->cmdq_lock);
 	do {
 		virtqueue_disable_cb(qdev->cmdq);
-		reclaim_vbufs(qdev->cmdq);
+		ret = reclaim_vbufs(qdev->cmdq);
+		if (ret == 0)
+			printk("cleaned 0 buffers wierd\n");
+		qdev->num_freed += ret;
 	} while (!virtqueue_enable_cb(qdev->cmdq));
 	spin_unlock(&qdev->cmdq_lock);
 	wake_up(&qdev->cmd_ack_queue);
@@ -379,12 +380,16 @@ int virgl_queue_cmd_buf(struct virgl_device *qdev,
 		wait_event(qdev->cmd_ack_queue, vq->num_free);
 		spin_lock(&qdev->cmdq_lock);
 		goto retry;
-	} else
+	} else {
+		qdev->num_alloc++;
 		virtqueue_kick(vq);
-	
+	}
+
 	spin_unlock(&qdev->cmdq_lock);
+
 	if (!ret)
 		ret = vq->num_free;
+	
 	return ret;
 }
 
