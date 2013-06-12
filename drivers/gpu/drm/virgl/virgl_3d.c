@@ -128,7 +128,7 @@ virt_retry:
 	}
 	if (isr & 0x20) {
 		atomic_inc(&qdev->irq_count_fence);
-		virgl_3d_fence_process(qdev);
+		virgl_fence_process(qdev);
 		retval = IRQ_HANDLED;
 	}
 	goto virt_retry;
@@ -154,7 +154,7 @@ fail:
 	return idr_ret;
 }
 
-u32 virgl_3d_fence_read(struct virgl_device *qdev)
+u32 virgl_fence_read(struct virgl_device *qdev)
 {
 	return ioread32(qdev->q3d_info.ioaddr + 20);
 }
@@ -220,7 +220,7 @@ static void qdev_virq_cb(struct virtqueue *vq)
 
 }
 
-static void free_vbuf(struct virgl_3d_vbuffer *vbuf)
+static void free_vbuf(struct virgl_vbuffer *vbuf)
 {
 	if (vbuf->bo)
 		virgl_bo_unref(&vbuf->bo);
@@ -228,12 +228,12 @@ static void free_vbuf(struct virgl_3d_vbuffer *vbuf)
 	kfree(vbuf);
 }
 
-struct virgl_3d_vbuffer *allocate_vbuf(struct virgl_device *qdev,
+struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 				     struct virgl_bo *bo,
 				     int size, bool inout, u32 *base_offset, u32 max_bo_len)
 {
 	struct virtqueue *vq = qdev->q3d_info.cmdq;
-	struct virgl_3d_vbuffer *vbuf = NULL;
+	struct virgl_vbuffer *vbuf = NULL;
 	int sgpages = bo ? bo->tbo.num_pages : 0;
 	int ret;
 
@@ -295,9 +295,9 @@ struct virgl_3d_command *virgl_3d_valloc_cmd_buf(struct virgl_device *qdev,
 						 bool inout,
 						 u32 *base_offset,
 						 u32 max_bo_len,
-						 struct virgl_3d_vbuffer **vbuffer_p)
+						 struct virgl_vbuffer **vbuffer_p)
 {
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 
 	vbuf = allocate_vbuf(qdev, qobj, sizeof(struct virgl_3d_command), inout, base_offset, max_bo_len);
 	if (IS_ERR(vbuf)) {
@@ -310,7 +310,7 @@ struct virgl_3d_command *virgl_3d_valloc_cmd_buf(struct virgl_device *qdev,
 
 static bool reclaim_vbufs(struct virtqueue *vq)
 {
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 	unsigned int len;
 	bool freed = false;
 	while ((vbuf = virtqueue_get_buf(vq, &len))) {
@@ -334,7 +334,7 @@ static void q3d_dequeue_work_func(struct work_struct *work)
 	wake_up(&qdev->q3d_info.cmd_ack_queue);
 }
 
-static void virt_map_sgt(struct scatterlist *sg, struct virgl_3d_vbuffer *buf,
+static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf,
 			 unsigned int *p_idx)
 {
 	struct scatterlist *sg_elem;
@@ -356,7 +356,7 @@ static void virt_map_sgt(struct scatterlist *sg, struct virgl_3d_vbuffer *buf,
 }
 
 static int vadd_buf(struct virgl_device *qdev,
-		    struct virtqueue *vq, struct virgl_3d_vbuffer *buf)
+		    struct virtqueue *vq, struct virgl_vbuffer *buf)
 {
 	struct scatterlist *sg = buf->sg;
 	int ret;
@@ -393,7 +393,7 @@ static int vadd_buf(struct virgl_device *qdev,
 	return ret;
 }
 
-int virgl_3d_vadd_cmd_buf(struct virgl_device *qdev, struct virgl_3d_vbuffer *buf)
+int virgl_3d_vadd_cmd_buf(struct virgl_device *qdev, struct virgl_vbuffer *buf)
 {
 	return vadd_buf(qdev, qdev->q3d_info.cmdq, buf);
 }
@@ -409,7 +409,7 @@ static void virtio_virgl_release_dev(struct device *_d)
 
 static int virgl_init_3d_vring(struct virgl_device *qdev)
 {
-	struct virgl_3d_vbuffer *tbuf;
+	struct virgl_vbuffer *tbuf;
 	uint32_t *dwp;
 	qdev->q3d_info.cmdq = setup_cmdq(qdev, qdev_virq_cb);
 	printk("cmdq at %p\n", qdev->q3d_info.cmdq);
@@ -513,7 +513,7 @@ int virgl_execbuffer_3d(struct drm_device *dev,
 {
 	struct virgl_device *qdev = dev->dev_private;	
 	struct drm_gem_object *gobj;
-	struct virgl_3d_fence *fence;
+	struct virgl_fence *fence;
 	struct virgl_bo *qobj;
 	void *optr;
 	void *osyncobj;
@@ -554,7 +554,7 @@ int virgl_execbuffer_3d(struct drm_device *dev,
 
 	{
 		struct virgl_3d_command *cmd_p;
-		struct virgl_3d_vbuffer *vbuf = NULL;
+		struct virgl_vbuffer *vbuf = NULL;
 
 		cmd_p = virgl_3d_alloc_cmd(qdev, qobj, false, NULL, 0, &vbuf);
 		if (IS_ERR(cmd_p))
@@ -564,7 +564,7 @@ int virgl_execbuffer_3d(struct drm_device *dev,
 		cmd_p->u.cmd_submit.size = execbuffer->size;
 
 		virgl_3d_set_data(0, &cmd_p->u.cmd_submit.phy_addr);
-		ret = virgl_3d_fence_emit(qdev, cmd_p, &fence);
+		ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 		virgl_3d_send_cmd(qdev, vbuf);
 	}
@@ -593,43 +593,43 @@ out_free:
 	return ret;
 }
 
-static void virgl_3d_fence_destroy(struct kref *kref)
+static void virgl_fence_destroy(struct kref *kref)
 {
-	struct virgl_3d_fence *fence;
+	struct virgl_fence *fence;
 
-	fence = container_of(kref, struct virgl_3d_fence, kref);
+	fence = container_of(kref, struct virgl_fence, kref);
 	kfree(fence);
 }
 
-struct virgl_3d_fence *virgl_3d_fence_ref(struct virgl_3d_fence *fence)
+struct virgl_fence *virgl_fence_ref(struct virgl_fence *fence)
 {
 	kref_get(&fence->kref);
 	return fence;
 }
 
-void virgl_3d_fence_unref(struct virgl_3d_fence **fence)
+void virgl_fence_unref(struct virgl_fence **fence)
 {
-	struct virgl_3d_fence *tmp = *fence;
+	struct virgl_fence *tmp = *fence;
 
 	*fence = NULL;
 	if (tmp) {
-		kref_put(&tmp->kref, virgl_3d_fence_destroy);
+		kref_put(&tmp->kref, virgl_fence_destroy);
 	}
 }
 
-static bool virgl_3d_fence_seq_signaled(struct virgl_device *qdev, u64 seq)
+static bool virgl_fence_seq_signaled(struct virgl_device *qdev, u64 seq)
 {
 	if (atomic64_read(&qdev->q3d_info.fence_drv.last_seq) >= seq)
 		return true;
 
-	virgl_3d_fence_process(qdev);
+	virgl_fence_process(qdev);
 
 	if (atomic64_read(&qdev->q3d_info.fence_drv.last_seq) >= seq)
 		return true;
 	return false;
 }
 
-static int virgl_3d_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
+static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 				 bool intr)
 {
   	unsigned long timeout, last_activity;
@@ -657,11 +657,11 @@ static int virgl_3d_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 		//		radeon_irq_kms_sw_irq_get(rdev, ring);
 		if (intr) {
 			r = wait_event_interruptible_timeout(qdev->q3d_info.fence_queue,
-				(signaled = virgl_3d_fence_seq_signaled(qdev, target_seq)),
+				(signaled = virgl_fence_seq_signaled(qdev, target_seq)),
 				timeout);
                 } else {
 			r = wait_event_timeout(qdev->q3d_info.fence_queue,
-				(signaled = virgl_3d_fence_seq_signaled(qdev, target_seq)),
+				(signaled = virgl_fence_seq_signaled(qdev, target_seq)),
 				timeout);
 		}
 		//		radeon_irq_kms_sw_irq_put(rdev, ring);
@@ -691,7 +691,7 @@ static int virgl_3d_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 	return 0;
 }
 
-bool virgl_3d_fence_signaled(struct virgl_3d_fence *fence)
+bool virgl_fence_signaled(struct virgl_fence *fence)
 {
 	if (!fence)
 		return true;
@@ -699,14 +699,14 @@ bool virgl_3d_fence_signaled(struct virgl_3d_fence *fence)
 	if (fence->seq == VIRGL_FENCE_SIGNALED_SEQ)
 		return true;
 
-	if (virgl_3d_fence_seq_signaled(fence->qdev, fence->seq)) {
+	if (virgl_fence_seq_signaled(fence->qdev, fence->seq)) {
 		fence->seq = VIRGL_FENCE_SIGNALED_SEQ;
 		return true;
 	}
 	return false;
 }
 
-int virgl_3d_fence_wait(struct virgl_3d_fence *fence, bool intr)
+int virgl_fence_wait(struct virgl_fence *fence, bool intr)
 {
 	int r;
 
@@ -714,7 +714,7 @@ int virgl_3d_fence_wait(struct virgl_3d_fence *fence, bool intr)
 		return -EINVAL;
 
 	virtqueue_kick(fence->qdev->q3d_info.cmdq);
-	r = virgl_3d_fence_wait_seq(fence->qdev, fence->seq,
+	r = virgl_fence_wait_seq(fence->qdev, fence->seq,
 				  intr);
 	if (r)
 		return r;
@@ -725,11 +725,11 @@ int virgl_3d_fence_wait(struct virgl_3d_fence *fence, bool intr)
 
 }
 
-int virgl_3d_fence_emit(struct virgl_device *qdev,
+int virgl_fence_emit(struct virgl_device *qdev,
 		      struct virgl_3d_command *cmd,
-		      struct virgl_3d_fence **fence)
+		      struct virgl_fence **fence)
 {
-	*fence = kmalloc(sizeof(struct virgl_3d_fence), GFP_KERNEL);
+	*fence = kmalloc(sizeof(struct virgl_fence), GFP_KERNEL);
 	if ((*fence) == NULL)
 		return -ENOMEM;
 
@@ -748,7 +748,7 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 		     int width, int height)
 {
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	if (IS_ERR(cmd_p))
@@ -768,7 +768,7 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 		       int width, int height)
 {
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	if (IS_ERR(cmd_p))
@@ -784,7 +784,7 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 }
 
 
-void virgl_3d_fence_process(struct virgl_device *qdev)
+void virgl_fence_process(struct virgl_device *qdev)
 {
 	bool wake = false;
 	u64 last_seq, last_emitted, seq;
@@ -793,7 +793,7 @@ void virgl_3d_fence_process(struct virgl_device *qdev)
 	last_seq = atomic64_read(&qdev->q3d_info.fence_drv.last_seq);
 	do {
 		last_emitted = qdev->q3d_info.fence_drv.sync_seq;
-		seq = virgl_3d_fence_read(qdev);
+		seq = virgl_fence_read(qdev);
 		seq |= last_seq & 0xffffffff00000000LL;
 		if (seq < last_seq) {
 			seq &= 0xffffffff;

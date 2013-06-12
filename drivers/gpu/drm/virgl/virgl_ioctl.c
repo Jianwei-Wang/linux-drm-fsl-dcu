@@ -90,7 +90,7 @@ static int virgl_3d_resource_create_ioctl(struct drm_device *dev, void *data,
 	struct virgl_device *qdev = dev->dev_private;
 	struct drm_virgl_3d_resource_create *rc = data;
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 	int ret;
 	uint32_t res_id;
 
@@ -124,7 +124,7 @@ static int virgl_3d_resource_unref_ioctl(struct drm_device *dev, void *data,
 	struct virgl_device *qdev = dev->dev_private;
 	struct drm_virgl_3d_resource_unref *ru = data;
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 
 	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
@@ -141,10 +141,10 @@ static int virgl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 	struct virgl_device *qdev = dev->dev_private;
 	struct drm_virgl_3d_transfer_get *args = data;
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 	struct drm_gem_object *gobj = NULL;
 	struct virgl_bo *qobj = NULL;
-	struct virgl_3d_fence *fence;
+	struct virgl_fence *fence;
 	int ret;
 	u32 offset = args->dst_offset;
 
@@ -173,7 +173,7 @@ static int virgl_3d_transfer_get_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.transfer_get.level = args->level;
 
 	virgl_3d_set_data(offset, &cmd_p->u.transfer_get.data);
-	ret = virgl_3d_fence_emit(qdev, cmd_p, &fence);
+	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 	virgl_3d_send_cmd(qdev, vbuf);
 
@@ -192,10 +192,10 @@ static int virgl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 	struct virgl_device *qdev = dev->dev_private;
 	struct drm_virgl_3d_transfer_put *args = data;
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 	struct drm_gem_object *gobj = NULL;
 	struct virgl_bo *qobj = NULL;
-	struct virgl_3d_fence *fence;
+	struct virgl_fence *fence;
 	int ret;
 	u32 offset = args->src_offset;
 	u32 max_size = 0;
@@ -230,7 +230,7 @@ static int virgl_3d_transfer_put_ioctl(struct drm_device *dev, void *data,
 
 	virgl_3d_set_data(offset, &cmd_p->u.transfer_put.data);
 
-	ret = virgl_3d_fence_emit(qdev, cmd_p, &fence);
+	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 	virgl_3d_send_cmd(qdev, vbuf);
 
 	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);

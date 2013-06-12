@@ -107,6 +107,34 @@ struct virgl_framebuffer {
 #define drm_encoder_to_virgl_output(x) container_of(x, struct virgl_output, base)
 #define to_virgl_framebuffer(x) container_of(x, struct virgl_framebuffer, base)
 
+struct virgl_3d_fence_driver {
+	atomic64_t last_seq;
+	uint64_t last_activity;
+	bool initialized;
+	uint64_t			sync_seq;
+};
+
+struct virgl_fence {
+	struct virgl_device *qdev;
+	struct kref kref;
+	uint64_t seq;
+};
+
+struct virgl_vbuffer {
+	char *buf;
+	size_t size;
+
+	size_t bo_max_len;
+	size_t bo_start_offset;
+	size_t bo_user_offset;
+	struct virgl_bo *bo;
+
+	bool inout;
+	int sgpages;
+	int firstsg;
+	struct scatterlist sg[0];
+};
+
 struct virgl_mman {
 	struct ttm_bo_global_ref        bo_global_ref;
 	struct drm_global_reference	mem_global_ref;
@@ -145,6 +173,23 @@ int virgl_debugfs_add_files(struct virgl_device *rdev,
 int virgl_debugfs_fence_init(struct virgl_device *rdev);
 
 struct virgl_device;
+
+struct virgl_3d_info {
+	struct virgl_3d_fence_driver fence_drv;
+	wait_queue_head_t		fence_queue;
+
+	struct idr	resource_idr;
+	spinlock_t resource_idr_lock;
+
+	/* virt io info */
+	void __iomem *ioaddr; /* bar 3 */
+	struct virtqueue *cmdq;
+	int cmd_num;
+	void *cmdqueue;
+	spinlock_t cmdq_lock;
+	wait_queue_head_t cmd_ack_queue;
+	struct work_struct dequeue_work;
+};
 
 struct virgl_device {
 	struct device			*dev;
@@ -265,9 +310,9 @@ int virgl_execbuffer_3d(struct drm_device *dev,
 		      struct drm_file *drm_file);
 int virgl_init_3d(struct virgl_device *qdev);
 void virgl_fini_3d(struct virgl_device *qdev);
-int virgl_3d_fence_emit(struct virgl_device *qdev,
+int virgl_fence_emit(struct virgl_device *qdev,
 		      struct virgl_3d_command *cmd,
-		      struct virgl_3d_fence **fence);
+		      struct virgl_fence **fence);
 int virgl_3d_wait(struct virgl_bo *bo, bool no_wait);
 int virgl_3d_resource_id_get(struct virgl_device *qdev, uint32_t *resid);
 void virgl_3d_ping(struct virgl_device *qdev);
@@ -284,21 +329,20 @@ int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *
 			 unsigned num_clips);
 
 
-struct virgl_3d_vbuffer;
 struct virgl_3d_command *virgl_3d_valloc_cmd_buf(struct virgl_device *qdev,
 					     struct virgl_bo *qobj,
 					     bool inout,
 					     u32 *base_offset,
 					     u32 max_bo_len,
-					     struct virgl_3d_vbuffer **vbuffer_p);
-int virgl_3d_vadd_cmd_buf(struct virgl_device *qdev, struct virgl_3d_vbuffer *buf);
+					     struct virgl_vbuffer **vbuffer_p);
+int virgl_3d_vadd_cmd_buf(struct virgl_device *qdev, struct virgl_vbuffer *buf);
 
 static inline struct virgl_3d_command *virgl_3d_alloc_cmd(struct virgl_device *qdev,
 						      struct virgl_bo *bo,
 						      bool inout,
 						      u32 *base_offset, /* can be modified */
 						      u32 max_bo_len,
-						      struct virgl_3d_vbuffer **vbuf)
+						      struct virgl_vbuffer **vbuf)
 {
 	struct virgl_3d_command *cmd = virgl_3d_valloc_cmd_buf(qdev, bo, inout, base_offset, max_bo_len, vbuf);
 	if (!IS_ERR(cmd)) {
@@ -317,9 +361,22 @@ static inline void virgl_3d_set_data(uint32_t offset,
 
 
 static inline void virgl_3d_send_cmd(struct virgl_device *qdev,
-				     struct virgl_3d_vbuffer *vbuf)
+				     struct virgl_vbuffer *vbuf)
 {
 	virgl_3d_vadd_cmd_buf(qdev, vbuf);
 }
-u32 virgl_3d_fence_read(struct virgl_device *qdev);
+
+/* virgl fence */
+struct virgl_fence *virgl_fence_ref(struct virgl_fence *fence);
+void virgl_fence_unref(struct virgl_fence **fence);
+ 
+bool virgl_fence_signaled(struct virgl_fence *fence);
+int virgl_fence_wait(struct virgl_fence *fence, bool interruptible);
+void virgl_fence_process(struct virgl_device *qdev);
+
+#define VIRGL_FENCE_SIGNALED_SEQ 0LL
+#define VIRGL_FENCE_JIFFIES_TIMEOUT		(HZ / 2)
+
+
+u32 virgl_fence_read(struct virgl_device *qdev);
 #endif
