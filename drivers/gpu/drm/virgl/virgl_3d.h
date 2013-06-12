@@ -65,14 +65,6 @@ struct virgl_3d_resource_unref {
 	uint32_t res_handle;
 };
 
-struct virgl_3d_ring_header {
-	uint32_t num_items;
-	uint32_t prod;
-	uint32_t notify_on_prod;
-	uint32_t cons;
-	uint32_t notify_on_cons;
-};
-
 struct virgl_3d_cmd_submit {
 	uint64_t phy_addr;
 	uint32_t size;
@@ -94,62 +86,5 @@ struct virgl_3d_command {
 		struct virgl_3d_resource_unref res_unref;
 	} u;
 };
-
-struct virgl_3d_fence_driver {
-	atomic64_t last_seq;
-	uint64_t last_activity;
-	bool initialized;
-	uint64_t			sync_seq;
-};
-
-struct virgl_3d_info {
-	struct virgl_3d_fence_driver fence_drv;
-	wait_queue_head_t		fence_queue;
-
-	struct idr	resource_idr;
-	spinlock_t resource_idr_lock;
-
-	/* virt io info */
-	void __iomem *ioaddr; /* bar 3 */
-	struct virtqueue *cmdq;
-	int cmd_num;
-	void *cmdqueue;
-	spinlock_t cmdq_lock;
-	wait_queue_head_t cmd_ack_queue;
-	struct work_struct dequeue_work;
-};
-
-
-struct virgl_3d_fence {
-	struct virgl_device *qdev;
-	struct kref kref;
-	uint64_t seq;
-};
-
-struct virgl_3d_vbuffer {
-	char *buf;
-	size_t size;
-
-	size_t bo_max_len;
-	size_t bo_start_offset;
-	size_t bo_user_offset;
-	struct virgl_bo *bo;
-
-	bool inout;
-	int sgpages;
-	int firstsg;
-	struct scatterlist sg[0];
-};
-
-struct virgl_3d_fence *virgl_3d_fence_ref(struct virgl_3d_fence *fence);
-void virgl_3d_fence_unref(struct virgl_3d_fence **fence);
- 
-bool virgl_3d_fence_signaled(struct virgl_3d_fence *fence);
-int virgl_3d_fence_wait(struct virgl_3d_fence *fence, bool interruptible);
-void virgl_3d_fence_process(struct virgl_device *qdev);
-
-#define VIRGL_FENCE_SIGNALED_SEQ 0LL
-#define VIRGL_FENCE_JIFFIES_TIMEOUT		(HZ / 2)
-
 
 #endif

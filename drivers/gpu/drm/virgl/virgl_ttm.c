@@ -336,7 +336,7 @@ static int virgl_bo_move(struct ttm_buffer_object *bo,
 static int virgl_sync_obj_wait(void *sync_obj,
 			     bool lazy, bool interruptible)
 {
-	return virgl_3d_fence_wait((struct virgl_3d_fence *)sync_obj, interruptible);
+	return virgl_fence_wait((struct virgl_fence *)sync_obj, interruptible);
 }
 
 static int virgl_sync_obj_flush(void *sync_obj)
@@ -346,17 +346,17 @@ static int virgl_sync_obj_flush(void *sync_obj)
 
 static void virgl_sync_obj_unref(void **sync_obj)
 {
-	virgl_3d_fence_unref((struct virgl_3d_fence **)sync_obj);
+	virgl_fence_unref((struct virgl_fence **)sync_obj);
 }
 
 static void *virgl_sync_obj_ref(void *sync_obj)
 {
-	return virgl_3d_fence_ref((struct virgl_3d_fence *)sync_obj);
+	return virgl_fence_ref((struct virgl_fence *)sync_obj);
 }
 
 static bool virgl_sync_obj_signaled(void *sync_obj)
 {
-	return virgl_3d_fence_signaled((struct virgl_3d_fence *)sync_obj);
+	return virgl_fence_signaled((struct virgl_fence *)sync_obj);
 }
 
 static void virgl_bo_move_notify(struct ttm_buffer_object *bo,

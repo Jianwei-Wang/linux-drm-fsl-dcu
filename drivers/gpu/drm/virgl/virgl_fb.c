@@ -113,7 +113,7 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 
 	{
 		struct virgl_3d_command *cmd_p;
-		struct virgl_3d_vbuffer *vbuf;
+		struct virgl_vbuffer *vbuf;
 		uint32_t offset;
 		uint32_t max_len;
 		uint32_t w = x2 - x + 1;
@@ -185,7 +185,7 @@ static int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int heig
 	int ret;
 	uint32_t res_id;
 	struct virgl_3d_command *cmd_p;
-	struct virgl_3d_vbuffer *vbuf;
+	struct virgl_vbuffer *vbuf;
 
 	ret = virgl_3d_resource_id_get(qdev, &res_id);
 	if (ret)
