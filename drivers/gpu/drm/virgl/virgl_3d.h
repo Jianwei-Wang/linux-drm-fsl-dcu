@@ -7,8 +7,6 @@
 typedef uint64_t VIRGLPHYSICAL;
 /* specification for the 3D command processor */
 
-#define VIRGL_COMMAND_RING_SIZE 64
-
 enum virgl_3d_cmd_type {
 	VIRGL_CMD_NOP,
 	VIRGL_CMD_CREATE_CONTEXT,
