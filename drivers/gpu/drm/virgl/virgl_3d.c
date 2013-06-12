@@ -692,7 +692,6 @@ int virgl_fence_wait(struct virgl_fence *fence, bool intr)
 	if (fence == NULL)
 		return -EINVAL;
 
-	virtqueue_kick(fence->qdev->cmdq);
 	r = virgl_fence_wait_seq(fence->qdev, fence->seq,
 				  intr);
 	if (r)
