@@ -112,8 +112,6 @@ irqreturn_t virgl_irq_handler(DRM_IRQ_ARGS)
 {
 	struct drm_device *dev = (struct drm_device *) arg;
 	struct virgl_device *qdev = (struct virgl_device *)dev->dev_private;
-	uint32_t pending;
-	uint32_t val;
 	int retval = IRQ_NONE;
 	u8 isr;
 	
@@ -193,7 +191,6 @@ static struct virtqueue *setup_cmdq(struct virgl_device *qdev,
 	size = PAGE_ALIGN(vring_size(num, VIRTIO_PCI_VRING_ALIGN));
 	qdev->cmdqueue = alloc_pages_exact(size, GFP_KERNEL|__GFP_ZERO);
 	if (qdev->cmdqueue == NULL) {
-		printk("cq alloc failed %d\n", size);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -216,7 +213,6 @@ static void qdev_virq_cb(struct virtqueue *vq)
 	struct virgl_device *qdev = vdev_to_virgl_dev(vq->vdev);
 
 	schedule_work(&qdev->dequeue_work);
-
 }
 
 static void free_vbuf(struct virgl_vbuffer *vbuf)
@@ -231,8 +227,7 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 				     struct virgl_bo *bo,
 				     int size, bool inout, u32 *base_offset, u32 max_bo_len)
 {
-	struct virtqueue *vq = qdev->cmdq;
-	struct virgl_vbuffer *vbuf = NULL;
+	struct virgl_vbuffer *vbuf;
 	int sgpages = bo ? bo->tbo.num_pages : 0;
 	int ret;
 
@@ -619,7 +614,6 @@ static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 {
   	unsigned long timeout, last_activity;
 	uint64_t seq;
-	unsigned i;
 	bool signaled;
 	int r;
 
