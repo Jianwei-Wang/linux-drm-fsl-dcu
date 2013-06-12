@@ -39,9 +39,15 @@ int virgl_device_init(struct virgl_device *qdev,
 	qdev->ddev = ddev;
 	qdev->pdev = pdev;
 	qdev->flags = flags;
+	qdev->ioaddr = pci_iomap(qdev->pdev, 0, 0);
 
 	spin_lock_init(&qdev->gem.lock);
 	INIT_LIST_HEAD(&qdev->gem.objects);
+	INIT_WORK(&qdev->dequeue_work, virgl_dequeue_work_func);
+	init_waitqueue_head(&qdev->fence_queue);
+	init_waitqueue_head(&qdev->cmd_ack_queue);
+	idr_init(&qdev->resource_idr);
+	spin_lock_init(&qdev->resource_idr_lock);
 
 	r = pci_enable_msi(qdev->pdev);
 	if (!r) {
@@ -59,7 +65,8 @@ int virgl_device_init(struct virgl_device *qdev,
 	if (r)
 		return r;
 
-	r = virgl_init_3d(qdev);
+
+	r = virgl_virtio_init(qdev);
 	if (r) {
 		DRM_INFO("3D failed to init %d\n", r);
 		return r;
@@ -74,7 +81,7 @@ int virgl_device_init(struct virgl_device *qdev,
 
 void virgl_device_fini(struct virgl_device *qdev)
 {
-	virgl_fini_3d(qdev);
+	virgl_virtio_fini(qdev);
 
 	virgl_bo_fini(qdev);
 }

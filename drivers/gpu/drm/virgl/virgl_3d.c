@@ -12,7 +12,7 @@ static u32 vp_get_features(struct virtio_device *vdev)
 {
 	struct virgl_device *qdev = vdev_to_virgl_dev(vdev);
 	u32 ret;
-	ret =  ioread32(qdev->q3d_info.ioaddr + VIRTIO_PCI_HOST_FEATURES);
+	ret =  ioread32(qdev->ioaddr + VIRTIO_PCI_HOST_FEATURES);
 	/* When someone needs more than 32 feature bits, we'll need to
 	 * steal a bit to indicate that the rest are somewhere else. */
 	return ret;
@@ -28,7 +28,7 @@ static void vp_finalize_features(struct virtio_device *vdev)
 
 	/* We only support 32 feature bits. */
 	BUILD_BUG_ON(ARRAY_SIZE(vdev->features) != 1);
-	iowrite32(vdev->features[0], qdev->q3d_info.ioaddr+VIRTIO_PCI_GUEST_FEATURES);
+	iowrite32(vdev->features[0], qdev->ioaddr+VIRTIO_PCI_GUEST_FEATURES);
 }
 
 /* virtio config->get() implementation */
@@ -36,7 +36,7 @@ static void vp_get(struct virtio_device *vdev, unsigned offset,
 		   void *buf, unsigned len)
 {
 	struct virgl_device *qdev = vdev_to_virgl_dev(vdev);
-	void __iomem *ioaddr = qdev->q3d_info.ioaddr +
+	void __iomem *ioaddr = qdev->ioaddr +
 				VIRTIO_PCI_CONFIG(qdev->pdev) + offset;
 	u8 *ptr = buf;
 	int i;
@@ -51,7 +51,7 @@ static void vp_set(struct virtio_device *vdev, unsigned offset,
 		   const void *buf, unsigned len)
 {
 	struct virgl_device *qdev = vdev_to_virgl_dev(vdev);
-	void __iomem *ioaddr = qdev->q3d_info.ioaddr +
+	void __iomem *ioaddr = qdev->ioaddr +
 				VIRTIO_PCI_CONFIG(qdev->pdev) + offset;
 	const u8 *ptr = buf;
 	int i;
@@ -64,7 +64,7 @@ static void vp_set(struct virtio_device *vdev, unsigned offset,
 static u8 vp_get_status(struct virtio_device *vdev)
 {
 	struct virgl_device *qdev = vdev_to_virgl_dev(vdev);
-	return ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+	return ioread8(qdev->ioaddr + VIRTIO_PCI_STATUS);
 }
 
 static void vp_set_status(struct virtio_device *vdev, u8 status)
@@ -72,7 +72,7 @@ static void vp_set_status(struct virtio_device *vdev, u8 status)
 	struct virgl_device *qdev = vdev_to_virgl_dev(vdev);
 	/* We should never be setting status to 0. */
 	BUG_ON(status == 0);
-	iowrite8(status, qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+	iowrite8(status, qdev->ioaddr + VIRTIO_PCI_STATUS);
 }
 
 static void vp_reset(struct virtio_device *vdev)
@@ -80,8 +80,8 @@ static void vp_reset(struct virtio_device *vdev)
 	struct virgl_device *qdev = vdev_to_virgl_dev(vdev);
 
 	/* 0 status means a reset. */
-	iowrite8(0, qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
-	ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_STATUS);
+	iowrite8(0, qdev->ioaddr + VIRTIO_PCI_STATUS);
+	ioread8(qdev->ioaddr + VIRTIO_PCI_STATUS);
 }
 
 static const struct virtio_config_ops virtio_virgl_config_ops = {
@@ -102,7 +102,7 @@ static irqreturn_t vp_vring_interrupt(int irq, struct virgl_device *qdev)
 {
 	irqreturn_t ret = IRQ_NONE;
 
-        if (vring_interrupt(irq, qdev->q3d_info.cmdq) == IRQ_HANDLED) {
+        if (vring_interrupt(irq, qdev->cmdq) == IRQ_HANDLED) {
 		ret = IRQ_HANDLED;
 	}
 	return ret;
@@ -119,7 +119,7 @@ irqreturn_t virgl_irq_handler(DRM_IRQ_ARGS)
 	
 virt_retry:
 	/* virt io first */
-	isr = ioread8(qdev->q3d_info.ioaddr + VIRTIO_PCI_ISR);
+	isr = ioread8(qdev->ioaddr + VIRTIO_PCI_ISR);
 	if (!isr)
 		return retval;
 	if (isr & 0x1) {
@@ -135,17 +135,17 @@ virt_retry:
 }
 
 
-int virgl_3d_resource_id_get(struct virgl_device *qdev, uint32_t *resid)
+int virgl_resource_id_get(struct virgl_device *qdev, uint32_t *resid)
 {
 	int handle;
 	int idr_ret = -ENOMEM;
 again:
-	if (idr_pre_get(&qdev->q3d_info.resource_idr, GFP_KERNEL) == 0) {
+	if (idr_pre_get(&qdev->resource_idr, GFP_KERNEL) == 0) {
 		goto fail;
 	}
-	spin_lock(&qdev->q3d_info.resource_idr_lock);
-	idr_ret = idr_get_new_above(&qdev->q3d_info.resource_idr, NULL, 1, &handle);
-	spin_unlock(&qdev->q3d_info.resource_idr_lock);
+	spin_lock(&qdev->resource_idr_lock);
+	idr_ret = idr_get_new_above(&qdev->resource_idr, NULL, 1, &handle);
+	spin_unlock(&qdev->resource_idr_lock);
 	if (idr_ret == -EAGAIN)
 		goto again;
 
@@ -156,12 +156,11 @@ fail:
 
 u32 virgl_fence_read(struct virgl_device *qdev)
 {
-	return ioread32(qdev->q3d_info.ioaddr + 20);
+	return ioread32(qdev->ioaddr + 20);
 }
 
-void virgl_fini_3d(struct virgl_device *qdev)
+void virgl_virtio_fini(struct virgl_device *qdev)
 {
-	free_irq(qdev->pdev->irq, qdev->ddev);
 }
 
 
@@ -172,7 +171,7 @@ static void vp_notify(struct virtqueue *vq)
 
 	/* we write the queue's selector into the notification register to
 	 * signal the other end */
-	iowrite16(vq->index, qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_NOTIFY);
+	iowrite16(vq->index, qdev->ioaddr + VIRTIO_PCI_QUEUE_NOTIFY);
 }
 
 static struct virtqueue *setup_cmdq(struct virgl_device *qdev,
@@ -182,26 +181,26 @@ static struct virtqueue *setup_cmdq(struct virgl_device *qdev,
 	u16 num;
 	unsigned long size;
 
-	spin_lock_init(&qdev->q3d_info.cmdq_lock);
+	spin_lock_init(&qdev->cmdq_lock);
 
-	iowrite16(0, qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_SEL);
-	num = ioread16(qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_NUM);
-	if (!num || ioread32(qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_PFN)) {
+	iowrite16(0, qdev->ioaddr + VIRTIO_PCI_QUEUE_SEL);
+	num = ioread16(qdev->ioaddr + VIRTIO_PCI_QUEUE_NUM);
+	if (!num || ioread32(qdev->ioaddr + VIRTIO_PCI_QUEUE_PFN)) {
 		printk("queue setup failed %d\n", num);
 		return ERR_PTR(-ENOENT);
 	}
 
 	size = PAGE_ALIGN(vring_size(num, VIRTIO_PCI_VRING_ALIGN));
-	qdev->q3d_info.cmdqueue = alloc_pages_exact(size, GFP_KERNEL|__GFP_ZERO);
-	if (qdev->q3d_info.cmdqueue == NULL) {
+	qdev->cmdqueue = alloc_pages_exact(size, GFP_KERNEL|__GFP_ZERO);
+	if (qdev->cmdqueue == NULL) {
 		printk("cq alloc failed %d\n", size);
 		return ERR_PTR(-ENOMEM);
 	}
 
-	iowrite32(virt_to_phys(qdev->q3d_info.cmdqueue) >> VIRTIO_PCI_QUEUE_ADDR_SHIFT, qdev->q3d_info.ioaddr + VIRTIO_PCI_QUEUE_PFN);
+	iowrite32(virt_to_phys(qdev->cmdqueue) >> VIRTIO_PCI_QUEUE_ADDR_SHIFT, qdev->ioaddr + VIRTIO_PCI_QUEUE_PFN);
 
 	vq = vring_new_virtqueue(0, num, VIRTIO_PCI_VRING_ALIGN, &qdev->vdev,
-				 true, qdev->q3d_info.cmdqueue, vp_notify,
+				 true, qdev->cmdqueue, vp_notify,
 				 callback, "virglvirt");
 	if (!vq) {
 		printk("new virtqueue failed\n");
@@ -216,7 +215,7 @@ static void qdev_virq_cb(struct virtqueue *vq)
 {
 	struct virgl_device *qdev = vdev_to_virgl_dev(vq->vdev);
 
-	schedule_work(&qdev->q3d_info.dequeue_work);
+	schedule_work(&qdev->dequeue_work);
 
 }
 
@@ -232,7 +231,7 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 				     struct virgl_bo *bo,
 				     int size, bool inout, u32 *base_offset, u32 max_bo_len)
 {
-	struct virtqueue *vq = qdev->q3d_info.cmdq;
+	struct virtqueue *vq = qdev->cmdq;
 	struct virgl_vbuffer *vbuf = NULL;
 	int sgpages = bo ? bo->tbo.num_pages : 0;
 	int ret;
@@ -290,22 +289,22 @@ fail:
 	return ERR_PTR(-ENOMEM);
 }
 
-struct virgl_3d_command *virgl_3d_valloc_cmd_buf(struct virgl_device *qdev,
-						 struct virgl_bo *qobj,
-						 bool inout,
-						 u32 *base_offset,
-						 u32 max_bo_len,
-						 struct virgl_vbuffer **vbuffer_p)
+struct virgl_command *virgl_alloc_cmd_buf(struct virgl_device *qdev,
+					     struct virgl_bo *qobj,
+					     bool inout,
+					     u32 *base_offset,
+					     u32 max_bo_len,
+					     struct virgl_vbuffer **vbuffer_p)
 {
 	struct virgl_vbuffer *vbuf;
 
-	vbuf = allocate_vbuf(qdev, qobj, sizeof(struct virgl_3d_command), inout, base_offset, max_bo_len);
+	vbuf = allocate_vbuf(qdev, qobj, sizeof(struct virgl_command), inout, base_offset, max_bo_len);
 	if (IS_ERR(vbuf)) {
 		*vbuffer_p = NULL;
 		return ERR_CAST(vbuf);
 	}
 	*vbuffer_p = vbuf;
-	return (struct virgl_3d_command *)vbuf->buf;
+	return (struct virgl_command *)vbuf->buf;
 }
 
 static bool reclaim_vbufs(struct virtqueue *vq)
@@ -320,18 +319,18 @@ static bool reclaim_vbufs(struct virtqueue *vq)
 	return freed;
 }
 
-static void q3d_dequeue_work_func(struct work_struct *work)
+void virgl_dequeue_work_func(struct work_struct *work)
 {
 	struct virgl_device *qdev = container_of(work, struct virgl_device,
-					       q3d_info.dequeue_work);
+					       dequeue_work);
 	
-	spin_lock(&qdev->q3d_info.cmdq_lock);
+	spin_lock(&qdev->cmdq_lock);
 	do {
-		virtqueue_disable_cb(qdev->q3d_info.cmdq);
-		reclaim_vbufs(qdev->q3d_info.cmdq);
-	} while (!virtqueue_enable_cb(qdev->q3d_info.cmdq));
-	spin_unlock(&qdev->q3d_info.cmdq_lock);
-	wake_up(&qdev->q3d_info.cmd_ack_queue);
+		virtqueue_disable_cb(qdev->cmdq);
+		reclaim_vbufs(qdev->cmdq);
+	} while (!virtqueue_enable_cb(qdev->cmdq));
+	spin_unlock(&qdev->cmdq_lock);
+	wake_up(&qdev->cmd_ack_queue);
 }
 
 static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf,
@@ -355,9 +354,10 @@ static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf,
 	*p_idx = idx;
 }
 
-static int vadd_buf(struct virgl_device *qdev,
-		    struct virtqueue *vq, struct virgl_vbuffer *buf)
+int virgl_queue_cmd_buf(struct virgl_device *qdev,
+			struct virgl_vbuffer *buf)
 {
+	struct virtqueue *vq = qdev->cmdq;
 	struct scatterlist *sg = buf->sg;
 	int ret;
 	int idx = 0, outcnt = 0, incnt = 0, old_idx;
@@ -375,27 +375,22 @@ static int vadd_buf(struct virgl_device *qdev,
 	else
 		outcnt = idx;
 
-	spin_lock(&qdev->q3d_info.cmdq_lock);
+	spin_lock(&qdev->cmdq_lock);
  retry:
 	ret = virtqueue_add_buf(vq, sg, outcnt, incnt, buf, GFP_ATOMIC);
 	if (ret == -ENOSPC) {
 		virtqueue_kick(vq);
-		spin_unlock(&qdev->q3d_info.cmdq_lock);
-		wait_event(qdev->q3d_info.cmd_ack_queue, vq->num_free);
-		spin_lock(&qdev->q3d_info.cmdq_lock);
+		spin_unlock(&qdev->cmdq_lock);
+		wait_event(qdev->cmd_ack_queue, vq->num_free);
+		spin_lock(&qdev->cmdq_lock);
 		goto retry;
 	} else
 		virtqueue_kick(vq);
 	
-	spin_unlock(&qdev->q3d_info.cmdq_lock);
+	spin_unlock(&qdev->cmdq_lock);
 	if (!ret)
 		ret = vq->num_free;
 	return ret;
-}
-
-int virgl_3d_vadd_cmd_buf(struct virgl_device *qdev, struct virgl_vbuffer *buf)
-{
-	return vadd_buf(qdev, qdev->q3d_info.cmdq, buf);
 }
 
 static void virtio_virgl_release_dev(struct device *_d)
@@ -407,19 +402,19 @@ static void virtio_virgl_release_dev(struct device *_d)
 	 */
 }
 
-static int virgl_init_3d_vring(struct virgl_device *qdev)
+static int virgl_init_vring(struct virgl_device *qdev)
 {
 	struct virgl_vbuffer *tbuf;
 	uint32_t *dwp;
-	qdev->q3d_info.cmdq = setup_cmdq(qdev, qdev_virq_cb);
-	printk("cmdq at %p\n", qdev->q3d_info.cmdq);
+	qdev->cmdq = setup_cmdq(qdev, qdev_virq_cb);
+	printk("cmdq at %p\n", qdev->cmdq);
 
-	tbuf = allocate_vbuf(qdev, NULL, sizeof(struct virgl_3d_command), false, 0, 0);
+	tbuf = allocate_vbuf(qdev, NULL, sizeof(struct virgl_command), false, 0, 0);
 
 	dwp = (uint32_t *)tbuf->buf;
 	dwp[0] = 0xdeadbeef;
 
-	vadd_buf(qdev, qdev->q3d_info.cmdq, tbuf);
+	virgl_queue_cmd_buf(qdev, tbuf);
 	return 0;
 }
 
@@ -471,7 +466,7 @@ static struct virtio_driver virgl_virtio_driver = {
 #endif
 };
 	
-int virgl_init_3d(struct virgl_device *qdev)
+int virgl_virtio_init(struct virgl_device *qdev)
 {
 	/* create an object for the 3D ring and pin it at 0. */
 	int ret;
@@ -482,8 +477,6 @@ int virgl_init_3d(struct virgl_device *qdev)
 	qdev->vdev.id.vendor = 0x1af4;
 	qdev->vdev.id.device = 0x3d;
 	register_virtio_driver(&virgl_virtio_driver);
-	/* grab bar 3 */
-	qdev->q3d_info.ioaddr = pci_iomap(qdev->pdev, 0, 0);
 
 	pci_msi_off(qdev->pdev);
 	pci_set_master(qdev->pdev);
@@ -492,13 +485,7 @@ int virgl_init_3d(struct virgl_device *qdev)
 	if (ret)
 		printk("error registering virtio %d\n", ret);
 
-	INIT_WORK(&qdev->q3d_info.dequeue_work, q3d_dequeue_work_func);
-	init_waitqueue_head(&qdev->q3d_info.fence_queue);
-	init_waitqueue_head(&qdev->q3d_info.cmd_ack_queue);
-	idr_init(&qdev->q3d_info.resource_idr);
-	spin_lock_init(&qdev->q3d_info.resource_idr_lock);
-
-	ret = virgl_init_3d_vring(qdev);
+	ret = virgl_init_vring(qdev);
 	if (ret)
 		goto fail;
 
@@ -507,9 +494,9 @@ fail:
 	return ret;
 }
 	  
-int virgl_execbuffer_3d(struct drm_device *dev,
-		      struct drm_virgl_execbuffer *execbuffer,
-		      struct drm_file *drm_file)
+int virgl_execbuffer(struct drm_device *dev,
+		     struct drm_virgl_execbuffer *execbuffer,
+		     struct drm_file *drm_file)
 {
 	struct virgl_device *qdev = dev->dev_private;	
 	struct drm_gem_object *gobj;
@@ -553,23 +540,21 @@ int virgl_execbuffer_3d(struct drm_device *dev,
 	virgl_bo_kunmap(qobj);
 
 	{
-		struct virgl_3d_command *cmd_p;
+		struct virgl_command *cmd_p;
 		struct virgl_vbuffer *vbuf = NULL;
 
-		cmd_p = virgl_3d_alloc_cmd(qdev, qobj, false, NULL, 0, &vbuf);
+		cmd_p = virgl_alloc_cmd(qdev, qobj, false, NULL, 0, &vbuf);
 		if (IS_ERR(cmd_p))
 			goto out_unresv;
 
 		cmd_p->type = VIRGL_CMD_SUBMIT;
 		cmd_p->u.cmd_submit.size = execbuffer->size;
 
-		virgl_3d_set_data(0, &cmd_p->u.cmd_submit.phy_addr);
+		cmd_p->u.cmd_submit.phy_addr = 0;
 		ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
-		virgl_3d_send_cmd(qdev, vbuf);
+		virgl_queue_cmd_buf(qdev, vbuf);
 	}
-
-
 
 	spin_lock(&qobj->tbo.glob->lru_lock);
 	spin_lock(&qobj->tbo.bdev->fence_lock);
@@ -619,12 +604,12 @@ void virgl_fence_unref(struct virgl_fence **fence)
 
 static bool virgl_fence_seq_signaled(struct virgl_device *qdev, u64 seq)
 {
-	if (atomic64_read(&qdev->q3d_info.fence_drv.last_seq) >= seq)
+	if (atomic64_read(&qdev->fence_drv.last_seq) >= seq)
 		return true;
 
 	virgl_fence_process(qdev);
 
-	if (atomic64_read(&qdev->q3d_info.fence_drv.last_seq) >= seq)
+	if (atomic64_read(&qdev->fence_drv.last_seq) >= seq)
 		return true;
 	return false;
 }
@@ -638,29 +623,29 @@ static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 	bool signaled;
 	int r;
 
-	while (target_seq > atomic64_read(&qdev->q3d_info.fence_drv.last_seq)) {
+	while (target_seq > atomic64_read(&qdev->fence_drv.last_seq)) {
 
 		timeout = jiffies - VIRGL_FENCE_JIFFIES_TIMEOUT;
-		if (time_after(qdev->q3d_info.fence_drv.last_activity, timeout)) {
+		if (time_after(qdev->fence_drv.last_activity, timeout)) {
 			/* the normal case, timeout is somewhere before last_activity */
-			timeout = qdev->q3d_info.fence_drv.last_activity - timeout;
+			timeout = qdev->fence_drv.last_activity - timeout;
 		} else {
 			/* either jiffies wrapped around, or no fence was signaled in the last 500ms
 			 * anyway we will just wait for the minimum amount and then check for a lockup
 			 */
 			timeout = 1;
 		}
-		seq = atomic64_read(&qdev->q3d_info.fence_drv.last_seq);
+		seq = atomic64_read(&qdev->fence_drv.last_seq);
 		/* Save current last activity valuee, used to check for GPU lockups */
-		last_activity = qdev->q3d_info.fence_drv.last_activity;
+		last_activity = qdev->fence_drv.last_activity;
 
 		//		radeon_irq_kms_sw_irq_get(rdev, ring);
 		if (intr) {
-			r = wait_event_interruptible_timeout(qdev->q3d_info.fence_queue,
+			r = wait_event_interruptible_timeout(qdev->fence_queue,
 				(signaled = virgl_fence_seq_signaled(qdev, target_seq)),
 				timeout);
                 } else {
-			r = wait_event_timeout(qdev->q3d_info.fence_queue,
+			r = wait_event_timeout(qdev->fence_queue,
 				(signaled = virgl_fence_seq_signaled(qdev, target_seq)),
 				timeout);
 		}
@@ -677,12 +662,12 @@ static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 			}
 
 			/* check if sequence value has changed since last_activity */
-			if (seq != atomic64_read(&qdev->q3d_info.fence_drv.last_seq)) {
+			if (seq != atomic64_read(&qdev->fence_drv.last_seq)) {
 				continue;
 			}
 
 			/* test if somebody else has already decided that this is a lockup */
-			if (last_activity != qdev->q3d_info.fence_drv.last_activity) {
+			if (last_activity != qdev->fence_drv.last_activity) {
 				continue;
 			}
 
@@ -713,7 +698,7 @@ int virgl_fence_wait(struct virgl_fence *fence, bool intr)
 	if (fence == NULL)
 		return -EINVAL;
 
-	virtqueue_kick(fence->qdev->q3d_info.cmdq);
+	virtqueue_kick(fence->qdev->cmdq);
 	r = virgl_fence_wait_seq(fence->qdev, fence->seq,
 				  intr);
 	if (r)
@@ -726,7 +711,7 @@ int virgl_fence_wait(struct virgl_fence *fence, bool intr)
 }
 
 int virgl_fence_emit(struct virgl_device *qdev,
-		      struct virgl_3d_command *cmd,
+		      struct virgl_command *cmd,
 		      struct virgl_fence **fence)
 {
 	*fence = kmalloc(sizeof(struct virgl_fence), GFP_KERNEL);
@@ -735,7 +720,7 @@ int virgl_fence_emit(struct virgl_device *qdev,
 
 	kref_init(&((*fence)->kref));
 	(*fence)->qdev = qdev;
-	(*fence)->seq = ++qdev->q3d_info.fence_drv.sync_seq;
+	(*fence)->seq = ++qdev->fence_drv.sync_seq;
 
 	cmd->flags |= VIRGL_COMMAND_EMIT_FENCE;
 	cmd->fence_id = (*fence)->seq;
@@ -747,10 +732,10 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 		     struct virgl_framebuffer *fb, int x, int y,
 		     int width, int height)
 {
-	struct virgl_3d_command *cmd_p;
+	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
 
-	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	if (IS_ERR(cmd_p))
 		return PTR_ERR(cmd_p);
 	cmd_p->type = VIRGL_SET_SCANOUT;
@@ -759,7 +744,7 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 	cmd_p->u.set_scanout.box.y = y;
 	cmd_p->u.set_scanout.box.w = width;
 	cmd_p->u.set_scanout.box.h = height;
-	virgl_3d_send_cmd(qdev, vbuf);
+	virgl_queue_cmd_buf(qdev, vbuf);
 	return 0;
 }
 
@@ -767,10 +752,10 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 		       struct virgl_framebuffer *fb, int x, int y,
 		       int width, int height)
 {
-	struct virgl_3d_command *cmd_p;
+	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
 
-	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	if (IS_ERR(cmd_p))
 		return PTR_ERR(cmd_p);
 	cmd_p->type = VIRGL_FLUSH_BUFFER;
@@ -779,7 +764,7 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 	cmd_p->u.flush_buffer.box.y = y;
 	cmd_p->u.flush_buffer.box.w = width;
 	cmd_p->u.flush_buffer.box.h = height;
-	virgl_3d_send_cmd(qdev, vbuf);
+	virgl_queue_cmd_buf(qdev, vbuf);
 	return 0;
 }
 
@@ -790,9 +775,9 @@ void virgl_fence_process(struct virgl_device *qdev)
 	u64 last_seq, last_emitted, seq;
 	unsigned count_loop = 0;
 
-	last_seq = atomic64_read(&qdev->q3d_info.fence_drv.last_seq);
+	last_seq = atomic64_read(&qdev->fence_drv.last_seq);
 	do {
-		last_emitted = qdev->q3d_info.fence_drv.sync_seq;
+		last_emitted = qdev->fence_drv.sync_seq;
 		seq = virgl_fence_read(qdev);
 		seq |= last_seq & 0xffffffff00000000LL;
 		if (seq < last_seq) {
@@ -808,16 +793,16 @@ void virgl_fence_process(struct virgl_device *qdev)
 			break;
 
 		}
-	} while (atomic64_xchg(&qdev->q3d_info.fence_drv.last_seq, seq) > seq);
+	} while (atomic64_xchg(&qdev->fence_drv.last_seq, seq) > seq);
 
 	if (wake) {
-		qdev->q3d_info.fence_drv.last_activity = jiffies;
-		wake_up_all(&qdev->q3d_info.fence_queue);
+		qdev->fence_drv.last_activity = jiffies;
+		wake_up_all(&qdev->fence_queue);
 	}
 	
 }
 
-int virgl_3d_wait(struct virgl_bo *bo, bool no_wait)
+int virgl_wait(struct virgl_bo *bo, bool no_wait)
 {
 	int r;
 

@@ -34,7 +34,6 @@
 #include "virgl_drv.h"
 
 #include "virgl_object.h"
-#include "virgl_3d.h"
 #include "drm_fb_helper.h"
 
 struct virgl_fbdev {
@@ -112,7 +111,7 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 	spin_unlock_irqrestore(&fb->dirty_lock, flags);
 
 	{
-		struct virgl_3d_command *cmd_p;
+		struct virgl_command *cmd_p;
 		struct virgl_vbuffer *vbuf;
 		uint32_t offset;
 		uint32_t max_len;
@@ -121,7 +120,7 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 
 		max_len = w * bpp + h * fb->base.pitches[0];
 		offset = (y * fb->base.pitches[0]) + x * bpp;
-		cmd_p = virgl_3d_alloc_cmd(qdev, qobj, false, &offset, max_len, &vbuf);
+		cmd_p = virgl_alloc_cmd(qdev, qobj, false, &offset, max_len, &vbuf);
 		cmd_p->type = VIRGL_TRANSFER_PUT;
 		cmd_p->u.transfer_put.res_handle = fb->res_3d_handle;
 
@@ -135,9 +134,9 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 		cmd_p->u.transfer_put.dst_level = 0;
 		cmd_p->u.transfer_put.src_stride = fb->base.pitches[0];
 
+		cmd_p->u.transfer_put.data = offset;
 
-		virgl_3d_set_data(offset, &cmd_p->u.transfer_put.data);
-		virgl_3d_send_cmd(qdev, vbuf);
+		virgl_queue_cmd_buf(qdev, vbuf);
 
 	}
 	virgl_3d_dirty_front(qdev, fb, x, y, x2 - x + 1, y2 - y + 1);
@@ -184,14 +183,14 @@ static int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int heig
 {
 	int ret;
 	uint32_t res_id;
-	struct virgl_3d_command *cmd_p;
+	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
 
-	ret = virgl_3d_resource_id_get(qdev, &res_id);
+	ret = virgl_resource_id_get(qdev, &res_id);
 	if (ret)
 		return ret;
 
-	cmd_p = virgl_3d_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	cmd_p->type = VIRGL_CMD_CREATE_RESOURCE;
 	cmd_p->u.res_create.handle = res_id;
 	cmd_p->u.res_create.target = 2;
@@ -200,7 +199,7 @@ static int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int heig
 	cmd_p->u.res_create.width = width;
 	cmd_p->u.res_create.height = height;
 	cmd_p->u.res_create.depth = 1;
-	virgl_3d_send_cmd(qdev, vbuf);
+	virgl_queue_cmd_buf(qdev, vbuf);
 	*handle = res_id;
 	return 0;
 }
