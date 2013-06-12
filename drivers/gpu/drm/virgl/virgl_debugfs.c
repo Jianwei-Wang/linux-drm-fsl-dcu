@@ -42,8 +42,8 @@ virgl_debugfs_irq_info(struct seq_file *m, void *data)
 
 	seq_printf(m, "irqs: vring: %d fence: %d\n", atomic_read(&qdev->irq_count_vbuf), atomic_read(&qdev->irq_count_fence));
 	seq_printf(m, "fence %d %ld %lld\n", virgl_fence_read(qdev),
-		   atomic64_read(&qdev->q3d_info.fence_drv.last_seq),
-		   qdev->q3d_info.fence_drv.sync_seq);
+		   atomic64_read(&qdev->fence_drv.last_seq),
+		   qdev->fence_drv.sync_seq);
 	return 0;
 }
 
