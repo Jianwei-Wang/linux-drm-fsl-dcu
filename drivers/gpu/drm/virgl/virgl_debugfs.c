@@ -60,6 +60,7 @@ virgl_debugfs_debug_kick(struct seq_file *m, void *data)
 	struct virgl_device *qdev = node->minor->dev->dev_private;
 
 	schedule_work(&qdev->dequeue_work);
+	return 0;
 }
 
 static struct drm_info_list virgl_debugfs_list[] = {
