@@ -89,6 +89,8 @@ struct drm_virgl_3d_box {
 	uint32_t w, h, d;
 };
 
+#define VIRGL_TRANSFER_FLAG_INVERT (1 << 0)
+
 struct drm_virgl_3d_transfer_put {
 	uint32_t res_handle;
 	uint32_t bo_handle;/* set to 0 to use user_ptr */
@@ -96,6 +98,7 @@ struct drm_virgl_3d_transfer_put {
 	uint32_t dst_level;
 	uint32_t src_stride;
 	uint32_t src_offset;
+	uint32_t transfer_flags;
 };
 
 struct drm_virgl_3d_transfer_get {
@@ -104,6 +107,7 @@ struct drm_virgl_3d_transfer_get {
 	struct drm_virgl_3d_box box;
 	uint32_t level;
 	uint32_t dst_offset;
+	uint32_t transfer_flags;
 };
 
 #define VIRGL_WAIT_NOWAIT 1 /* like it */
