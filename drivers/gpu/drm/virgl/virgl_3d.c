@@ -508,7 +508,7 @@ int virgl_execbuffer(struct drm_device *dev,
 
 	//printk("user cmd size %d\n", user_cmd.command_size);
 
-	ret = virgl_gem_object_create(qdev, execbuffer->size,
+	ret = virgl_gem_object_create(qdev, execbuffer->size + 4,
 				    0, 0, false,
 				    true, &gobj);
 
@@ -531,7 +531,8 @@ int virgl_execbuffer(struct drm_device *dev,
 	if (ret)
 		goto out_unresv;
 
-	if (DRM_COPY_FROM_USER(optr, (void *)(unsigned long)execbuffer->command,
+	*(uint32_t *)optr = 0;
+	if (DRM_COPY_FROM_USER(optr + 4, (void *)(unsigned long)execbuffer->command,
 			       execbuffer->size)) {
 		ret = -EFAULT;
 		goto out_kunmap;
