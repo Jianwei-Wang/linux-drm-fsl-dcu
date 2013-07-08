@@ -309,6 +309,7 @@ int virgl_fence_emit(struct virgl_device *qdev,
 		      struct virgl_fence **fence);
 int virgl_wait(struct virgl_bo *bo, bool no_wait);
 int virgl_resource_id_get(struct virgl_device *qdev, uint32_t *resid);
+void virgl_resource_id_put(struct virgl_device *qdev, uint32_t id);
 
 int virgl_3d_fbdev_init(struct virgl_device *qdev);
 void virgl_3d_fbdev_fini(struct virgl_device *qdev);
