@@ -202,6 +202,9 @@ struct virgl_device {
 	struct idr	resource_idr;
 	spinlock_t resource_idr_lock;
 
+	struct idr	ctx_id_idr;
+	spinlock_t ctx_id_idr_lock;
+
 	/* virt io info */
 	void __iomem *ioaddr;
 	struct virtqueue *cmdq;
@@ -216,11 +219,18 @@ struct virgl_device {
 
 #define vdev_to_virgl_dev(virt) container_of((virt), struct virgl_device, vdev)
 
+struct virgl_fpriv {
+	uint32_t ctx_id;
+};
+
 extern struct drm_ioctl_desc virgl_ioctls[];
 extern int virgl_max_ioctl;
 
 int virgl_driver_load(struct drm_device *dev, unsigned long flags);
 int virgl_driver_unload(struct drm_device *dev);
+int virgl_driver_open(struct drm_device *dev, struct drm_file *fpriv);
+void virgl_driver_preclose(struct drm_device *dev, struct drm_file *fpriv);
+void virgl_driver_postclose(struct drm_device *dev, struct drm_file *fpriv);
 
 int virgl_modeset_init(struct virgl_device *qdev);
 void virgl_modeset_fini(struct virgl_device *qdev);
@@ -321,7 +331,8 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 		       int width, int height);
 int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *clips,
 			 unsigned num_clips);
-
+int virgl_context_create(struct virgl_device *qdev, uint32_t *id);
+int virgl_context_destroy(struct virgl_device *qdev, uint32_t id);
 
 struct virgl_command *virgl_alloc_cmd_buf(struct virgl_device *qdev,
 					  struct virgl_bo *qobj,
