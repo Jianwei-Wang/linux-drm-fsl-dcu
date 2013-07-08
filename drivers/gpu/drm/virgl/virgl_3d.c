@@ -584,7 +584,7 @@ int virgl_execbuffer(struct drm_device *dev,
 			goto out_unresv;
 
 		cmd_p->type = VIRGL_CMD_SUBMIT;
-		cmd_p->u.cmd_submit.size = execbuffer->size;
+		cmd_p->u.cmd_submit.size = execbuffer->size + 4;
 
 		cmd_p->u.cmd_submit.phy_addr = 0;
 		ret = virgl_fence_emit(qdev, cmd_p, &fence);
