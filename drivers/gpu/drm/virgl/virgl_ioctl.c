@@ -139,6 +139,8 @@ static int virgl_resource_unref_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.res_unref.res_handle = ru->res_handle;
 	
 	virgl_queue_cmd_buf(qdev, vbuf);
+
+	virgl_resource_id_put(qdev, ru->res_handle);
 	return 0;
 }
 	

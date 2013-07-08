@@ -150,6 +150,13 @@ fail:
 	return idr_ret;
 }
 
+void virgl_resource_id_put(struct virgl_device *qdev, uint32_t id)
+{
+	spin_lock(&qdev->resource_idr_lock);
+	idr_remove(&qdev->resource_idr, id);
+	spin_unlock(&qdev->resource_idr_lock);	
+}
+
 u32 virgl_fence_read(struct virgl_device *qdev)
 {
 	return ioread32(qdev->ioaddr + 20);
