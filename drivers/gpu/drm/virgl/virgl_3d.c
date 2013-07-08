@@ -157,6 +157,33 @@ void virgl_resource_id_put(struct virgl_device *qdev, uint32_t id)
 	spin_unlock(&qdev->resource_idr_lock);	
 }
 
+static int virgl_ctx_id_get(struct virgl_device *qdev, uint32_t *resid)
+{
+	int handle;
+	int idr_ret = -ENOMEM;
+again:
+	if (idr_pre_get(&qdev->ctx_id_idr, GFP_KERNEL) == 0) {
+		goto fail;
+	}
+	spin_lock(&qdev->ctx_id_idr_lock);
+	idr_ret = idr_get_new_above(&qdev->ctx_id_idr, NULL, 1, &handle);
+	spin_unlock(&qdev->ctx_id_idr_lock);
+	if (idr_ret == -EAGAIN)
+		goto again;
+
+	*resid = handle;
+fail:
+	return idr_ret;
+}
+
+static void virgl_ctx_id_put(struct virgl_device *qdev, uint32_t id)
+{
+	spin_lock(&qdev->ctx_id_idr_lock);
+	idr_remove(&qdev->ctx_id_idr, id);
+	spin_unlock(&qdev->ctx_id_idr_lock);	
+}
+
+
 u32 virgl_fence_read(struct virgl_device *qdev)
 {
 	return ioread32(qdev->ioaddr + 20);
@@ -506,6 +533,7 @@ int virgl_execbuffer(struct drm_device *dev,
 		     struct drm_file *drm_file)
 {
 	struct virgl_device *qdev = dev->dev_private;	
+	struct virgl_fpriv *vfpriv = drm_file->driver_priv;
 	struct drm_gem_object *gobj;
 	struct virgl_fence *fence;
 	struct virgl_bo *qobj;
@@ -538,7 +566,7 @@ int virgl_execbuffer(struct drm_device *dev,
 	if (ret)
 		goto out_unresv;
 
-	*(uint32_t *)optr = 0;
+	*(uint32_t *)optr = vfpriv->ctx_id;
 	if (DRM_COPY_FROM_USER(optr + 4, (void *)(unsigned long)execbuffer->command,
 			       execbuffer->size)) {
 		ret = -EFAULT;
@@ -838,4 +866,44 @@ int virgl_irq_init(struct virgl_device *qdev)
         }
         return 0;
 
+}
+
+int virgl_context_create(struct virgl_device *qdev, uint32_t *id)
+{
+	struct virgl_command *cmd_p;
+	struct virgl_vbuffer *vbuf;
+	uint32_t handle;
+	int ret;
+
+	ret = virgl_ctx_id_get(qdev, &handle);
+	if (ret)
+		return ret;
+
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	if (IS_ERR(cmd_p))
+		return PTR_ERR(cmd_p);
+
+	cmd_p->type = VIRGL_CMD_CREATE_CONTEXT;
+	cmd_p->u.ctx.handle = handle;
+	virgl_queue_cmd_buf(qdev, vbuf);
+
+	*id = handle;
+	return 0;
+}
+
+int virgl_context_destroy(struct virgl_device *qdev, uint32_t id)
+{
+	struct virgl_command *cmd_p;
+	struct virgl_vbuffer *vbuf;
+
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	if (IS_ERR(cmd_p))
+		return PTR_ERR(cmd_p);
+
+	cmd_p->type = VIRGL_DESTROY_CONTEXT;
+	cmd_p->u.ctx.handle = id;
+	virgl_queue_cmd_buf(qdev, vbuf);
+
+	virgl_ctx_id_put(qdev, id);
+	return 0;
 }

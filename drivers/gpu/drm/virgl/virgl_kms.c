@@ -48,6 +48,8 @@ int virgl_device_init(struct virgl_device *qdev,
 	init_waitqueue_head(&qdev->cmd_ack_queue);
 	idr_init(&qdev->resource_idr);
 	spin_lock_init(&qdev->resource_idr_lock);
+	idr_init(&qdev->ctx_id_idr);
+	spin_lock_init(&qdev->ctx_id_idr_lock);
 
 	r = pci_enable_msi(qdev->pdev);
 	if (!r) {
@@ -132,3 +134,41 @@ out:
 }
 
 
+int virgl_driver_open(struct drm_device *dev, struct drm_file *fpriv)
+{
+	struct virgl_device *qdev = dev->dev_private;
+	struct virgl_fpriv *vfpriv;
+	uint32_t id;
+	int ret;
+
+	/* allocate a virt GPU context for this opener */
+	vfpriv = kzalloc(sizeof(*fpriv), GFP_KERNEL);
+	if (!vfpriv)
+		return -ENOMEM;
+
+	ret = virgl_context_create(qdev, &id);
+	if (ret) {
+		kfree(vfpriv);
+		return ret;
+	}
+
+	vfpriv->ctx_id = id;
+	fpriv->driver_priv = vfpriv;
+	return 0;
+}
+
+void virgl_driver_preclose(struct drm_device *dev, struct drm_file *fpriv)
+{
+}
+
+void virgl_driver_postclose(struct drm_device *dev, struct drm_file *fpriv)
+{
+	struct virgl_device *qdev = dev->dev_private;
+	struct virgl_fpriv *vfpriv;
+
+	vfpriv = fpriv->driver_priv;
+
+	virgl_context_destroy(qdev, vfpriv->ctx_id);
+	kfree(vfpriv);
+	fpriv->driver_priv = NULL;
+}

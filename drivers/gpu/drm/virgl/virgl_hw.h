@@ -79,6 +79,11 @@ struct virgl_cmd_submit {
 	uint32_t size;
 };
 
+struct virgl_cmd_context {
+        uint32_t handle;
+        uint32_t pad;
+};
+
 #define VIRGL_COMMAND_EMIT_FENCE (1 << 0)
 
 struct virgl_command {
@@ -86,6 +91,7 @@ struct virgl_command {
 	uint32_t flags;
 	uint64_t fence_id;
 	union virgl_cmds {
+		struct virgl_cmd_context ctx;
 		struct virgl_resource_create res_create;
 		struct virgl_transfer_put transfer_put;
 		struct virgl_transfer_get transfer_get;

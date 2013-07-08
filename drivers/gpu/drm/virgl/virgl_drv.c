@@ -90,6 +90,10 @@ static struct drm_driver virgl_driver = {
 	.load = virgl_driver_load,
 	.unload = virgl_driver_unload,
 
+	.open = virgl_driver_open,
+	.preclose = virgl_driver_preclose,
+	.postclose = virgl_driver_postclose,
+
 	.dumb_create = virgl_mode_dumb_create,
 	.dumb_map_offset = virgl_mode_dumb_mmap,
 	.dumb_destroy = virgl_mode_dumb_destroy,
