@@ -125,22 +125,28 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
-static int virgl_resource_unref_ioctl(struct drm_device *dev, void *data,
-				       struct drm_file *file_priv)
+int virgl_resource_unref(struct virgl_device *qdev, uint32_t res_handle)
 {
-	struct virgl_device *qdev = dev->dev_private;
-	struct drm_virgl_3d_resource_unref *ru = data;
 	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
 
 	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
 	cmd_p->type = VIRGL_RESOURCE_UNREF;
-	cmd_p->u.res_unref.res_handle = ru->res_handle;
+	cmd_p->u.res_unref.res_handle = res_handle;
 	
 	virgl_queue_cmd_buf(qdev, vbuf);
 
-	virgl_resource_id_put(qdev, ru->res_handle);
+	virgl_resource_id_put(qdev, res_handle);
+}
+
+static int virgl_resource_unref_ioctl(struct drm_device *dev, void *data,
+				       struct drm_file *file_priv)
+{
+	struct virgl_device *qdev = dev->dev_private;
+	struct drm_virgl_3d_resource_unref *ru = data;
+
+	virgl_resource_unref(qdev, ru->res_handle);
 	return 0;
 }
 	

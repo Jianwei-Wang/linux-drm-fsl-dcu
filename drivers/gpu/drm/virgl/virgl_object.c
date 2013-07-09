@@ -35,6 +35,8 @@ static void virgl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	bo = container_of(tbo, struct virgl_bo, tbo);
 	qdev = (struct virgl_device *)bo->gem_base.dev->dev_private;
 
+	if (bo->res_handle)
+		virgl_resource_unref(qdev, bo->res_handle);
 	if (bo->sgt)
 		virgl_bo_free_sg_table(bo);
 	spin_lock(&qdev->gem.lock);

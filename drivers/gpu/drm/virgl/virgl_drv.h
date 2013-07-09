@@ -74,6 +74,7 @@ struct virgl_bo {
 	/* Constant after initialization */
 	struct drm_gem_object		gem_base;
 	struct sg_table *sgt;
+	uint32_t res_handle; /* used for backing dumb objects */
 };
 #define gem_to_virgl_bo(gobj) container_of((gobj), struct virgl_bo, gem_base)
 
@@ -246,7 +247,7 @@ void virgl_fbdev_fini(struct virgl_device *qdev);
 int virgl_get_handle_for_primary_fb(struct virgl_device *qdev,
 				  struct drm_file *file_priv,
 				  uint32_t *handle);
-
+int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int height, uint32_t *handle);
 /* virgl_display.c */
 int
 virgl_framebuffer_init(struct drm_device *dev,
@@ -373,4 +374,6 @@ void virgl_fence_process(struct virgl_device *qdev);
 u32 virgl_fence_read(struct virgl_device *qdev);
 
 void virgl_dequeue_work_func(struct work_struct *work);
+
+int virgl_resource_unref(struct virgl_device *qdev, uint32_t res_handle);
 #endif

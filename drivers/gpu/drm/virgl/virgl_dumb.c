@@ -47,8 +47,13 @@ int virgl_mode_dumb_create(struct drm_file *file_priv,
 					      &handle);
 	if (r)
 		return r;
+
+	r = virgl_create_3d_fb_res(qdev, args->width, args->height, &qobj->res_handle);
+	if (r)
+		return r;
+
 	args->pitch = pitch;
-	args->handle = handle;
+	args->handle = handle | (1 << 31);
 	return 0;
 }
 
@@ -56,7 +61,7 @@ int virgl_mode_dumb_destroy(struct drm_file *file_priv,
 			     struct drm_device *dev,
 			     uint32_t handle)
 {
-	return drm_gem_handle_delete(file_priv, handle);
+	return drm_gem_handle_delete(file_priv, (handle & ~(1<<31)));
 }
 
 int virgl_mode_dumb_mmap(struct drm_file *file_priv,
@@ -67,7 +72,7 @@ int virgl_mode_dumb_mmap(struct drm_file *file_priv,
 	struct virgl_bo *qobj;
 
 	BUG_ON(!offset_p);
-	gobj = drm_gem_object_lookup(dev, file_priv, handle);
+	gobj = drm_gem_object_lookup(dev, file_priv, handle & ~(1<<31));
 	if (gobj == NULL)
 		return -ENOENT;
 	qobj = gem_to_virgl_bo(gobj);

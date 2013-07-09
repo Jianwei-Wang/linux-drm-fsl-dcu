@@ -150,13 +150,21 @@ virgl_framebuffer_init(struct drm_device *dev,
 	int ret;
 
 	qfb->obj = obj;
-	qfb->res_3d_handle = res_handle;
+	if (obj) {
+		struct virgl_bo *bo;
+		bo = gem_to_virgl_bo(obj);
+		qfb->res_3d_handle = bo->res_handle;
+	} else
+		qfb->res_3d_handle = res_handle;
 	ret = drm_framebuffer_init(dev, &qfb->base, &virgl_fb_funcs);
 	if (ret) {
 		qfb->obj = NULL;
 		return ret;
 	}
 	drm_helper_mode_fill_fb_struct(&qfb->base, mode_cmd);
+
+	qfb->x1 = qfb->y1 = INT_MAX;
+	qfb->x2 = qfb->y2 = 0;
 	return 0;
 }
 
@@ -419,16 +427,21 @@ virgl_user_framebuffer_create(struct drm_device *dev,
 	int ret;
 	int handle = 0;
 
+	/* lookup object associated with res handle */
 	handle = mode_cmd->handles[0];
+
+	if (handle & (1 << 31))
+		obj = drm_gem_object_lookup(dev, file_priv, handle & ~(1 << 31));
 
 	virgl_fb = kzalloc(sizeof(*virgl_fb), GFP_KERNEL);
 	if (virgl_fb == NULL)
 		return NULL;
 
-	ret = virgl_framebuffer_init(dev, virgl_fb, mode_cmd, NULL, handle);
+	ret = virgl_framebuffer_init(dev, virgl_fb, mode_cmd, obj, handle);
 	if (ret) {
 		kfree(virgl_fb);
-		drm_gem_object_unreference_unlocked(obj);
+		if (obj)
+			drm_gem_object_unreference_unlocked(obj);
 		return NULL;
 	}
 
