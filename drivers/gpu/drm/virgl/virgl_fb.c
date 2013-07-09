@@ -41,16 +41,6 @@ struct virgl_fbdev {
 	struct virgl_framebuffer	qfb;
 	struct list_head	fbdev_list;
 	struct virgl_device	*qdev;
-
-	/* dirty memory logging */
-	struct {
-		spinlock_t lock;
-		bool active;
-		unsigned x1;
-		unsigned y1;
-		unsigned x2;
-		unsigned y2;
-	} dirty;
 };
 
 #define DL_ALIGN_UP(x, a) ALIGN(x, a)
@@ -74,8 +64,10 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 
 	if ((width <= 0) ||
 	    (x + width > fb->base.width) ||
-	    (y + height > fb->base.height))
+	    (y + height > fb->base.height)) {
+		printk("values out of range %d %d %dx%d %dx%d\n", x, y, width, height, fb->base.width, fb->base.height);
 		return -EINVAL;
+	}
 
 	/* if we are in atomic just store the info
 	   can't test inside spin lock */
@@ -121,14 +113,19 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 		max_len = w * bpp + h * fb->base.pitches[0];
 		offset = (y * fb->base.pitches[0]) + x * bpp;
 		cmd_p = virgl_alloc_cmd(qdev, qobj, false, &offset, max_len, &vbuf);
+		if (IS_ERR(cmd_p)) {
+			printk("failed to allocate cmd for transfer\n");
+			return -EINVAL;
+		}
+
 		cmd_p->type = VIRGL_TRANSFER_PUT;
 		cmd_p->u.transfer_put.res_handle = fb->res_3d_handle;
 
 		cmd_p->u.transfer_put.dst_box.x = x;
 		cmd_p->u.transfer_put.dst_box.y = y;
 		cmd_p->u.transfer_put.dst_box.z = 0;
-		cmd_p->u.transfer_put.dst_box.w = x2 - x + 1;
-		cmd_p->u.transfer_put.dst_box.h = y2 - y + 1;
+		cmd_p->u.transfer_put.dst_box.w = w;
+		cmd_p->u.transfer_put.dst_box.h = h;
 		cmd_p->u.transfer_put.dst_box.d = 1;
 		
 		cmd_p->u.transfer_put.dst_level = 0;
@@ -138,7 +135,6 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 		cmd_p->u.transfer_put.transfer_flags = 0;
 
 		virgl_queue_cmd_buf(qdev, vbuf);
-
 	}
 	virgl_3d_dirty_front(qdev, fb, x, y, x2 - x + 1, y2 - y + 1);
 	
@@ -176,11 +172,15 @@ int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *
 		bottom = max_t(int, bottom, (int)clips_ptr->y2);
 	}
 
-	virgl_3d_dirty_front(qdev, qfb, left, bottom, right - left, bottom - top);
+	if (qfb->obj)
+		virgl_dirty_update(qfb, left, top, right - left, bottom - top);
+	else
+		virgl_3d_dirty_front(qdev, qfb, left, top, right - left, bottom - top);
+
 	return 0;
 }
 
-static int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int height, uint32_t *handle)
+int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int height, uint32_t *handle)
 {
 	int ret;
 	uint32_t res_id;
@@ -352,12 +352,12 @@ static int virglfb_create(struct virgl_fbdev *qfbdev,
 
 	info->par = qfbdev;
 
-	ret = virgl_create_3d_fb_res(qdev, mode_cmd.width, mode_cmd.height, &res_handle);
+	ret = virgl_create_3d_fb_res(qdev, mode_cmd.width, mode_cmd.height, &qbo->res_handle);
 
 	if (ret) {
 		goto out_unref;
 	}
-	virgl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj, res_handle);
+	virgl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj, 0);
 
 	fb = &qfbdev->qfb.base;
 
