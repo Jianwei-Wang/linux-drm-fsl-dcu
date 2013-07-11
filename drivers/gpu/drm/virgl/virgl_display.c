@@ -88,7 +88,7 @@ static void virgl_crtc_destroy(struct drm_crtc *crtc)
 static void
 virgl_hide_cursor(struct virgl_device *qdev)
 {
-
+	iowrite32(0, qdev->ioaddr + VIRTIO_VIRGL_CURSOR_ID);
 }
 
 static int virgl_crtc_cursor_set(struct drm_crtc *crtc,
@@ -97,12 +97,71 @@ static int virgl_crtc_cursor_set(struct drm_crtc *crtc,
 			       uint32_t width,
 			       uint32_t height)
 {
-  return 0;
+	struct virgl_device *qdev = crtc->dev->dev_private;
+	struct drm_gem_object *gobj = NULL;
+	struct virgl_bo *qobj = NULL;
+	int ret = 0;
+	if (handle == 0) {
+		virgl_hide_cursor(qdev);
+		return 0;
+	}
+
+	/* lookup the cursor */
+	gobj = drm_gem_object_lookup(crtc->dev, file_priv, handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_virgl_bo(gobj);
+
+	if (!qobj->res_handle) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	{
+		struct virgl_command *cmd_p;
+		struct virgl_vbuffer *vbuf;
+		uint32_t offset = 0;
+
+		cmd_p = virgl_alloc_cmd(qdev, qobj, false, &offset, 0, &vbuf);
+		if (IS_ERR(cmd_p)) {
+			printk("failed to allocate cmd for transfer\n");
+			return -EINVAL;
+		}
+		
+		cmd_p->type = VIRGL_TRANSFER_PUT;
+		cmd_p->u.transfer_put.res_handle = qobj->res_handle;
+
+		cmd_p->u.transfer_put.dst_box.x = 0;
+		cmd_p->u.transfer_put.dst_box.y = 0;
+		cmd_p->u.transfer_put.dst_box.z = 0;
+		cmd_p->u.transfer_put.dst_box.w = 64;
+		cmd_p->u.transfer_put.dst_box.h = 64;
+		cmd_p->u.transfer_put.dst_box.d = 1;
+		
+		cmd_p->u.transfer_put.dst_level = 0;
+		cmd_p->u.transfer_put.src_stride = 0;
+
+		cmd_p->u.transfer_put.data = offset;
+		cmd_p->u.transfer_put.transfer_flags = 0;
+
+		virgl_queue_cmd_buf(qdev, vbuf);
+	}
+
+	iowrite32(qobj->res_handle, qdev->ioaddr + VIRTIO_VIRGL_CURSOR_ID);
+	iowrite32(0, qdev->ioaddr + VIRTIO_VIRGL_CURSOR_HOT_X_Y);
+
+out:
+	drm_gem_object_unreference_unlocked(gobj);
+	return ret;
 }
 
 static int virgl_crtc_cursor_move(struct drm_crtc *crtc,
 				int x, int y)
 {
+	struct virgl_device *qdev = crtc->dev->dev_private;
+	iowrite32(x, qdev->ioaddr + VIRTIO_VIRGL_CURSOR_CUR_X);
+	iowrite32(y, qdev->ioaddr + VIRTIO_VIRGL_CURSOR_CUR_Y);
 	return 0;
 }
 
