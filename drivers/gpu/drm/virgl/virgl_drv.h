@@ -376,4 +376,14 @@ u32 virgl_fence_read(struct virgl_device *qdev);
 void virgl_dequeue_work_func(struct work_struct *work);
 
 int virgl_resource_unref(struct virgl_device *qdev, uint32_t res_handle);
+
+/* 32-bit cursor resource id - 0 = disable cursor */
+#define VIRTIO_VIRGL_FENCE_ID           20
+#define VIRTIO_VIRGL_CURSOR_ID          24
+/* cursor hotspot info */
+#define VIRTIO_VIRGL_CURSOR_HOT_X_Y           28
+/* current cursor position */
+#define VIRTIO_VIRGL_CURSOR_CUR_X             32
+#define VIRTIO_VIRGL_CURSOR_CUR_Y             36
+
 #endif

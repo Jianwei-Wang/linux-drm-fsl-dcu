@@ -281,6 +281,25 @@ static int virgl_wait_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
+static int virgl_cursor_link_ioctl(struct drm_device *dev, void *data,
+				   struct drm_file *file)
+{
+	struct drm_virgl_cursor_link *args = data;
+	struct drm_gem_object *gobj = NULL;
+	struct virgl_bo *qobj = NULL;
+
+	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_virgl_bo(gobj);
+
+	qobj->res_handle = args->res_handle;
+	drm_gem_object_unreference_unlocked(gobj);
+
+	return 0;
+}
+
 struct drm_ioctl_desc virgl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIRGL_ALLOC, virgl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -301,6 +320,8 @@ struct drm_ioctl_desc virgl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIRGL_RESOURCE_UNREF, virgl_resource_unref_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 	DRM_IOCTL_DEF_DRV(VIRGL_WAIT, virgl_wait_ioctl, DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(VIRGL_CURSOR_LINK, virgl_cursor_link_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 };
 
