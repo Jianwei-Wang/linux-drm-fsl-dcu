@@ -187,7 +187,6 @@ static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 	convert_to_hw_box(&cmd_p->u.transfer_get.box, &args->box);
 	cmd_p->u.transfer_get.level = args->level;
 	cmd_p->u.transfer_get.data = offset;
-	cmd_p->u.transfer_get.transfer_flags = args->transfer_flags;
 
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
@@ -244,7 +243,6 @@ static int virgl_transfer_put_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.transfer_put.dst_level = args->dst_level;
 	cmd_p->u.transfer_put.src_stride = args->src_stride;
 	cmd_p->u.transfer_put.data = offset;
-	cmd_p->u.transfer_put.transfer_flags = args->transfer_flags;
 
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 	virgl_queue_cmd_buf(qdev, vbuf);

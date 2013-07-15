@@ -132,7 +132,6 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 		cmd_p->u.transfer_put.src_stride = fb->base.pitches[0];
 
 		cmd_p->u.transfer_put.data = offset;
-		cmd_p->u.transfer_put.transfer_flags = 0;
 
 		virgl_queue_cmd_buf(qdev, vbuf);
 	}

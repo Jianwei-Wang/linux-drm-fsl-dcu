@@ -25,13 +25,10 @@ enum virgl_cmd_type {
 	VIRGL_RESOURCE_UNREF,
 };
 
-#define QXL_3D_TRANSFER_FLAG_INVERT (1 << 0)
-
 /* put a box of data from a BO into a tex/buffer resource */
 struct virgl_transfer_put {
 	VIRGLPHYSICAL data;
 	uint32_t res_handle;
-	uint32_t transfer_flags;
 	struct virgl_box dst_box; /* dst box */
 	uint32_t dst_level;
 	uint32_t src_stride;
@@ -40,7 +37,6 @@ struct virgl_transfer_put {
 struct virgl_transfer_get {
 	VIRGLPHYSICAL data;
 	uint32_t res_handle;
-	uint32_t transfer_flags;
 	struct virgl_box box;
 	int level;
 	uint32_t dx, dy;
