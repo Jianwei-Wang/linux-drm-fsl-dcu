@@ -226,7 +226,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 			goto add_head;
 	}
 
-	BUG_ON(total_sg > vq->vring.num);
+//	BUG_ON(total_sg > vq->vring.num);
 	BUG_ON(total_sg == 0);
 
 	if (vq->vq.num_free < total_sg) {
