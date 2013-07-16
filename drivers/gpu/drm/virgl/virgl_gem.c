@@ -125,14 +125,38 @@ void virgl_gem_object_unpin(struct drm_gem_object *obj)
 	}
 }
 
-int virgl_gem_object_open(struct drm_gem_object *obj, struct drm_file *file_priv)
+int virgl_gem_object_open(struct drm_gem_object *obj,
+			  struct drm_file *file)
 {
-	return 0;
+	struct virgl_device *qdev = (struct virgl_device *)obj->dev->dev_private;
+	struct virgl_fpriv *vfpriv = file->driver_priv;
+	struct virgl_bo *qobj = gem_to_virgl_bo(obj);
+	int r;
+
+	r = virgl_bo_reserve(qobj, false);
+	if (r)
+		return r;
+
+	r = virgl_context_bind_resource(qdev, vfpriv->ctx_id, qobj->res_handle);
+	virgl_bo_unreserve(qobj);
+	return r;
 }
 
 void virgl_gem_object_close(struct drm_gem_object *obj,
-			  struct drm_file *file_priv)
+			    struct drm_file *file)
 {
+	struct virgl_device *qdev = (struct virgl_device *)obj->dev->dev_private;
+	struct virgl_fpriv *vfpriv = file->driver_priv;
+	struct virgl_bo *qobj = gem_to_virgl_bo(obj);
+	int r;
+
+	r = virgl_bo_reserve(qobj, false);
+	if (r)
+		return r;
+
+	r = virgl_context_unbind_resource(qdev, vfpriv->ctx_id, qobj->res_handle);
+	virgl_bo_unreserve(qobj);
+	return r;
 }
 
 int virgl_gem_init(struct virgl_device *qdev)

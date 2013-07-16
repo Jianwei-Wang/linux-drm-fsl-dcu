@@ -356,7 +356,7 @@ static int virglfb_create(struct virgl_fbdev *qfbdev,
 	if (ret) {
 		goto out_unref;
 	}
-	virgl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj, 0);
+	virgl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj);
 
 	fb = &qfbdev->qfb.base;
 

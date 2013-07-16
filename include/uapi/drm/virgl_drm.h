@@ -39,11 +39,10 @@
 #define DRM_VIRGL_EXECBUFFER  0x02
 #define DRM_VIRGL_GETPARAM    0x03
 #define DRM_VIRGL_RESOURCE_CREATE 0x04
-#define DRM_VIRGL_RESOURCE_UNREF 0x05
+#define DRM_VIRGL_RESOURCE_INFO     0x05
 #define DRM_VIRGL_TRANSFER_GET 0x06
 #define DRM_VIRGL_TRANSFER_PUT 0x07
 #define DRM_VIRGL_WAIT     0x08
-#define DRM_VIRGL_CURSOR_LINK 0x09
 
 struct drm_virgl_alloc {
 	uint32_t size;
@@ -68,7 +67,8 @@ struct drm_virgl_getparam {
 	uint64_t value;
 };
 
-struct drm_virgl_3d_resource_create {
+/* NO_BO flags? NO resource flag? */
+struct drm_virgl_resource_create {
 	uint32_t target;
 	uint32_t format;
 	uint32_t bind;
@@ -79,10 +79,15 @@ struct drm_virgl_3d_resource_create {
 	uint32_t last_level;
 	uint32_t nr_samples;
 	uint32_t res_handle;  /* returned by kernel */
+	uint32_t size;
+	uint32_t flags;
+	uint32_t bo_handle; /* if this is set - recreate a new resource attached to this bo ? */
 };
 
-struct drm_virgl_3d_resource_unref {
+struct drm_virgl_resource_info {
+	uint32_t bo_handle;
 	uint32_t res_handle;
+	uint32_t size;
 };
 
 struct drm_virgl_3d_box {
@@ -91,7 +96,6 @@ struct drm_virgl_3d_box {
 };
 
 struct drm_virgl_3d_transfer_put {
-	uint32_t res_handle;
 	uint32_t bo_handle;/* set to 0 to use user_ptr */
 	struct drm_virgl_3d_box dst_box;
 	uint32_t dst_level;
@@ -100,7 +104,6 @@ struct drm_virgl_3d_transfer_put {
 };
 
 struct drm_virgl_3d_transfer_get {
-	uint32_t res_handle;/* resource id */
 	uint32_t bo_handle;/* set to 0 to use user_ptr */
 	struct drm_virgl_3d_box box;
 	uint32_t level;
@@ -111,11 +114,6 @@ struct drm_virgl_3d_transfer_get {
 struct drm_virgl_3d_wait {
 	uint32_t handle; /* 0 is an invalid handle */
         uint32_t flags;
-};
-
-struct drm_virgl_cursor_link {
-	uint32_t bo_handle;
-	uint32_t res_handle;
 };
 
 #define DRM_IOCTL_VIRGL_ALLOC \
@@ -134,7 +132,11 @@ struct drm_virgl_cursor_link {
 
 #define DRM_IOCTL_VIRGL_RESOURCE_CREATE			\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_RESOURCE_CREATE,	\
-		struct drm_virgl_3d_resource_create)
+		struct drm_virgl_resource_create)
+
+#define DRM_IOCTL_VIRGL_RESOURCE_INFO \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_RESOURCE_INFO, \
+		 struct drm_virgl_resource_info)
 
 #define DRM_IOCTL_VIRGL_TRANSFER_GET \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_TRANSFER_GET,	\
@@ -144,15 +146,8 @@ struct drm_virgl_cursor_link {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_TRANSFER_PUT,	\
 		struct drm_virgl_3d_transfer_put)
 
-#define DRM_IOCTL_VIRGL_RESOURCE_UNREF			\
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_RESOURCE_UNREF,	\
-		struct drm_virgl_3d_resource_unref)
-
 #define DRM_IOCTL_VIRGL_WAIT				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_WAIT,	\
 		struct drm_virgl_3d_wait)
 
-#define DRM_IOCTL_VIRGL_CURSOR_LINK				\
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_CURSOR_LINK,	\
-		struct drm_virgl_cursor_link)
 #endif

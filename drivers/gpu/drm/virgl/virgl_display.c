@@ -131,7 +131,7 @@ static int virgl_crtc_cursor_set(struct drm_crtc *crtc,
 		
 		cmd_p->type = VIRGL_TRANSFER_PUT;
 		cmd_p->u.transfer_put.res_handle = qobj->res_handle;
-
+		cmd_p->u.transfer_put.ctx_id = 0;
 		cmd_p->u.transfer_put.dst_box.x = 0;
 		cmd_p->u.transfer_put.dst_box.y = 0;
 		cmd_p->u.transfer_put.dst_box.z = 0;
@@ -202,18 +202,15 @@ int
 virgl_framebuffer_init(struct drm_device *dev,
 		     struct virgl_framebuffer *qfb,
 		     struct drm_mode_fb_cmd2 *mode_cmd,
-		     struct drm_gem_object *obj,
-		     uint32_t res_handle)
+		       struct drm_gem_object *obj)
 {
 	int ret;
-
+	struct virgl_bo *bo;
 	qfb->obj = obj;
-	if (obj) {
-		struct virgl_bo *bo;
-		bo = gem_to_virgl_bo(obj);
-		qfb->res_3d_handle = bo->res_handle;
-	} else
-		qfb->res_3d_handle = res_handle;
+
+	bo = gem_to_virgl_bo(obj);
+	qfb->res_3d_handle = bo->res_handle;
+
 	ret = drm_framebuffer_init(dev, &qfb->base, &virgl_fb_funcs);
 	if (ret) {
 		qfb->obj = NULL;
@@ -483,19 +480,17 @@ virgl_user_framebuffer_create(struct drm_device *dev,
 	struct virgl_framebuffer *virgl_fb;
 	struct virgl_device *qdev = dev->dev_private;
 	int ret;
-	int handle = 0;
 
 	/* lookup object associated with res handle */
-	handle = mode_cmd->handles[0];
-
-	if (handle & (1 << 31))
-		obj = drm_gem_object_lookup(dev, file_priv, handle & ~(1 << 31));
+	obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
+	if (!obj)
+		return PTR_ERR(-EINVAL);
 
 	virgl_fb = kzalloc(sizeof(*virgl_fb), GFP_KERNEL);
 	if (virgl_fb == NULL)
-		return NULL;
+		return PTR_ERR(-ENOMEM);
 
-	ret = virgl_framebuffer_init(dev, virgl_fb, mode_cmd, obj, handle);
+	ret = virgl_framebuffer_init(dev, virgl_fb, mode_cmd, obj);
 	if (ret) {
 		kfree(virgl_fb);
 		if (obj)
