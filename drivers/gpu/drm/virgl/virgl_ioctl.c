@@ -95,15 +95,26 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv)
 {
 	struct virgl_device *qdev = dev->dev_private;
-	struct drm_virgl_3d_resource_create *rc = data;
+	struct drm_virgl_resource_create *rc = data;
 	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
 	int ret;
 	uint32_t res_id;
+	struct virgl_bo *qobj;
+	uint32_t handle;
 
 	ret = virgl_resource_id_get(qdev, &res_id);
-	if (ret)
+	if (ret) 
 		return ret;
+
+	ret = virgl_gem_object_create_with_handle(qdev, file_priv,
+						  0,
+						  rc->size,
+						  &qobj, &handle);
+	if (ret) {
+		virgl_resource_id_put(qdev, res_id);
+		return ret;
+	}
 
 	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
@@ -121,7 +132,29 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 
 	virgl_queue_cmd_buf(qdev, vbuf);
 
-	rc->res_handle = res_id;
+	qobj->res_handle = res_id;
+	rc->res_handle = res_id; /* similiar to a VM address */
+	rc->bo_handle = handle;
+	return 0;
+}
+
+static int virgl_resource_info_ioctl(struct drm_device *dev, void *data,
+				     struct drm_file *file_priv)
+{
+	struct virgl_device *qdev = dev->dev_private;
+	struct drm_virgl_resource_info *ri = data;
+	struct drm_gem_object *gobj = NULL;
+	struct virgl_bo *qobj = NULL;
+
+	gobj = drm_gem_object_lookup(dev, file_priv, ri->bo_handle);
+	if (gobj == NULL)
+		return -ENOENT;
+
+	qobj = gem_to_virgl_bo(gobj);
+
+	ri->size = qobj->gem_base.size;
+	ri->res_handle = qobj->res_handle;
+	drm_gem_object_unreference_unlocked(gobj);
 	return 0;
 }
 
@@ -138,22 +171,14 @@ int virgl_resource_unref(struct virgl_device *qdev, uint32_t res_handle)
 	virgl_queue_cmd_buf(qdev, vbuf);
 
 	virgl_resource_id_put(qdev, res_handle);
-}
-
-static int virgl_resource_unref_ioctl(struct drm_device *dev, void *data,
-				       struct drm_file *file_priv)
-{
-	struct virgl_device *qdev = dev->dev_private;
-	struct drm_virgl_3d_resource_unref *ru = data;
-
-	virgl_resource_unref(qdev, ru->res_handle);
 	return 0;
 }
-	
+
 static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file)
 {
 	struct virgl_device *qdev = dev->dev_private;
+	struct virgl_fpriv *vfpriv = file->driver_priv;
 	struct drm_virgl_3d_transfer_get *args = data;
 	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
@@ -183,11 +208,11 @@ static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 
 	cmd_p->type = VIRGL_TRANSFER_GET;
 
-	cmd_p->u.transfer_get.res_handle = args->res_handle;
+	cmd_p->u.transfer_get.res_handle = qobj->res_handle;
 	convert_to_hw_box(&cmd_p->u.transfer_get.box, &args->box);
 	cmd_p->u.transfer_get.level = args->level;
 	cmd_p->u.transfer_get.data = offset;
-
+	cmd_p->u.transfer_get.ctx_id = vfpriv->ctx_id;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 	virgl_queue_cmd_buf(qdev, vbuf);
@@ -205,6 +230,7 @@ static int virgl_transfer_put_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file)
 {
 	struct virgl_device *qdev = dev->dev_private;
+	struct virgl_fpriv *vfpriv = file->driver_priv;
 	struct drm_virgl_3d_transfer_put *args = data;
 	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
@@ -238,12 +264,12 @@ static int virgl_transfer_put_ioctl(struct drm_device *dev, void *data,
 	cmd_p = virgl_alloc_cmd(qdev, qobj, false, &offset, max_size, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
 	cmd_p->type = VIRGL_TRANSFER_PUT;
-	cmd_p->u.transfer_put.res_handle = args->res_handle;
+	cmd_p->u.transfer_put.res_handle = qobj->res_handle;
 	convert_to_hw_box(&cmd_p->u.transfer_put.dst_box, &args->dst_box);
 	cmd_p->u.transfer_put.dst_level = args->dst_level;
 	cmd_p->u.transfer_put.src_stride = args->src_stride;
 	cmd_p->u.transfer_put.data = offset;
-
+	cmd_p->u.transfer_put.ctx_id = vfpriv->ctx_id;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 	virgl_queue_cmd_buf(qdev, vbuf);
 
@@ -257,7 +283,7 @@ out_unres:
 }
 
 static int virgl_wait_ioctl(struct drm_device *dev, void *data,
-			     struct drm_file *file)
+			    struct drm_file *file)
 {
 	struct drm_virgl_3d_wait *args = data;
 	struct drm_gem_object *gobj = NULL;
@@ -279,25 +305,6 @@ static int virgl_wait_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
-static int virgl_cursor_link_ioctl(struct drm_device *dev, void *data,
-				   struct drm_file *file)
-{
-	struct drm_virgl_cursor_link *args = data;
-	struct drm_gem_object *gobj = NULL;
-	struct virgl_bo *qobj = NULL;
-
-	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
-	if (gobj == NULL)
-		return -ENOENT;
-
-	qobj = gem_to_virgl_bo(gobj);
-
-	qobj->res_handle = args->res_handle;
-	drm_gem_object_unreference_unlocked(gobj);
-
-	return 0;
-}
-
 struct drm_ioctl_desc virgl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIRGL_ALLOC, virgl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -310,16 +317,13 @@ struct drm_ioctl_desc virgl_ioctls[] = {
 
 	DRM_IOCTL_DEF_DRV(VIRGL_RESOURCE_CREATE, virgl_resource_create_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
+	DRM_IOCTL_DEF_DRV(VIRGL_RESOURCE_INFO, virgl_resource_info_ioctl, DRM_AUTH|DRM_UNLOCKED),
 	/* make transfer async to the main ring? - no sure, can we
 	   thread these in the underlying GL */
 	DRM_IOCTL_DEF_DRV(VIRGL_TRANSFER_GET, virgl_transfer_get_ioctl, DRM_AUTH|DRM_UNLOCKED),
 	DRM_IOCTL_DEF_DRV(VIRGL_TRANSFER_PUT, virgl_transfer_put_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
-	DRM_IOCTL_DEF_DRV(VIRGL_RESOURCE_UNREF, virgl_resource_unref_ioctl, DRM_AUTH|DRM_UNLOCKED),
-
 	DRM_IOCTL_DEF_DRV(VIRGL_WAIT, virgl_wait_ioctl, DRM_AUTH|DRM_UNLOCKED),
-
-	DRM_IOCTL_DEF_DRV(VIRGL_CURSOR_LINK, virgl_cursor_link_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 };
 

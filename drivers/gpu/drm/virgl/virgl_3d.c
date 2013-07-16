@@ -543,7 +543,7 @@ int virgl_execbuffer(struct drm_device *dev,
 
 	//printk("user cmd size %d\n", user_cmd.command_size);
 
-	ret = virgl_gem_object_create(qdev, execbuffer->size + 4,
+	ret = virgl_gem_object_create(qdev, execbuffer->size,
 				    0, 0, false,
 				    true, &gobj);
 
@@ -566,8 +566,7 @@ int virgl_execbuffer(struct drm_device *dev,
 	if (ret)
 		goto out_unresv;
 
-	*(uint32_t *)optr = vfpriv->ctx_id;
-	if (DRM_COPY_FROM_USER(optr + 4, (void *)(unsigned long)execbuffer->command,
+	if (DRM_COPY_FROM_USER(optr, (void *)(unsigned long)execbuffer->command,
 			       execbuffer->size)) {
 		ret = -EFAULT;
 		goto out_kunmap;
@@ -584,8 +583,8 @@ int virgl_execbuffer(struct drm_device *dev,
 			goto out_unresv;
 
 		cmd_p->type = VIRGL_CMD_SUBMIT;
-		cmd_p->u.cmd_submit.size = execbuffer->size + 4;
-
+		cmd_p->u.cmd_submit.size = execbuffer->size;
+		cmd_p->u.cmd_submit.ctx_id = vfpriv->ctx_id;
 		cmd_p->u.cmd_submit.phy_addr = 0;
 		ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
@@ -778,6 +777,7 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 	cmd_p->u.set_scanout.box.y = y;
 	cmd_p->u.set_scanout.box.w = width;
 	cmd_p->u.set_scanout.box.h = height;
+	cmd_p->u.set_scanout.ctx_id = 0;
 	virgl_queue_cmd_buf(qdev, vbuf);
 	return 0;
 }
@@ -798,6 +798,7 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 	cmd_p->u.flush_buffer.box.y = y;
 	cmd_p->u.flush_buffer.box.w = width;
 	cmd_p->u.flush_buffer.box.h = height;
+	cmd_p->u.flush_buffer.ctx_id = 0;
 	virgl_queue_cmd_buf(qdev, vbuf);
 	return 0;
 }
@@ -905,5 +906,41 @@ int virgl_context_destroy(struct virgl_device *qdev, uint32_t id)
 	virgl_queue_cmd_buf(qdev, vbuf);
 
 	virgl_ctx_id_put(qdev, id);
+	return 0;
+}
+
+int virgl_context_bind_resource(struct virgl_device *qdev, uint32_t ctx_id,
+				uint32_t res_handle)
+{
+	struct virgl_command *cmd_p;
+	struct virgl_vbuffer *vbuf;
+
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	if (IS_ERR(cmd_p))
+		return PTR_ERR(cmd_p);
+
+	cmd_p->type = VIRGL_CMD_ATTACH_RES_CTX;
+	cmd_p->u.res_ctx.res_handle = res_handle;
+	cmd_p->u.res_ctx.ctx_id = ctx_id;
+	virgl_queue_cmd_buf(qdev, vbuf);
+
+	return 0;
+}
+
+int virgl_context_unbind_resource(struct virgl_device *qdev, uint32_t ctx_id,
+				  uint32_t res_handle)
+{
+	struct virgl_command *cmd_p;
+	struct virgl_vbuffer *vbuf;
+
+	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	if (IS_ERR(cmd_p))
+		return PTR_ERR(cmd_p);
+
+	cmd_p->type = VIRGL_CMD_DETACH_RES_CTX;
+	cmd_p->u.res_ctx.res_handle = res_handle;
+	cmd_p->u.res_ctx.ctx_id = ctx_id;
+	virgl_queue_cmd_buf(qdev, vbuf);
+
 	return 0;
 }

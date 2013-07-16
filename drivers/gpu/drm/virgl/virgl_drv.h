@@ -251,9 +251,9 @@ int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int height, uin
 /* virgl_display.c */
 int
 virgl_framebuffer_init(struct drm_device *dev,
-		     struct virgl_framebuffer *rfb,
-		     struct drm_mode_fb_cmd2 *mode_cmd,
-		     struct drm_gem_object *obj, uint32_t res_handle);
+		       struct virgl_framebuffer *rfb,
+		       struct drm_mode_fb_cmd2 *mode_cmd,
+		       struct drm_gem_object *obj);
 
 /* virgl_gem.c */
 int virgl_gem_init(struct virgl_device *qdev);
@@ -334,7 +334,10 @@ int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *
 			 unsigned num_clips);
 int virgl_context_create(struct virgl_device *qdev, uint32_t *id);
 int virgl_context_destroy(struct virgl_device *qdev, uint32_t id);
-
+int virgl_context_bind_resource(struct virgl_device *qdev, uint32_t ctx_id,
+				uint32_t res_handle);
+int virgl_context_unbind_resource(struct virgl_device *qdev, uint32_t ctx_id,
+				  uint32_t res_handle);
 struct virgl_command *virgl_alloc_cmd_buf(struct virgl_device *qdev,
 					  struct virgl_bo *qobj,
 					  bool inout,
