@@ -211,14 +211,14 @@ static int mgag200fb_create(struct drm_fb_helper *helper,
 	mfbdev->helper.fb = fb;
 	mfbdev->helper.fbdev = info;
 
+	strcpy(info->fix.id, "mgadrmfb");
+
 	ret = fb_alloc_cmap(&info->cmap, 256, 0);
 	if (ret) {
 		DRM_ERROR("%s: can't allocate color map\n", info->fix.id);
 		ret = -ENOMEM;
 		goto out;
 	}
-
-	strcpy(info->fix.id, "mgadrmfb");
 
 	info->flags = FBINFO_DEFAULT | FBINFO_CAN_FORCE_OUTPUT;
 	info->fbops = &mgag200fb_ops;
