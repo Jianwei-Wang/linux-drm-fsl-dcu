@@ -323,7 +323,7 @@ int mgag200_gem_init_object(struct drm_gem_object *obj)
 	return 0;
 }
 
-void mgag200_bo_unref(struct mgag200_bo **bo)
+static void mgag200_bo_unref(struct mgag200_bo **bo)
 {
 	struct ttm_buffer_object *tbo;
 
