@@ -162,13 +162,13 @@ static int mgag200fb_create(struct drm_fb_helper *helper,
 	struct drm_device *dev = mfbdev->helper.dev;
 	struct drm_mode_fb_cmd2 mode_cmd;
 	struct mga_device *mdev = dev->dev_private;
-	struct fb_info *info;
+	struct fb_info *info = NULL;
 	struct drm_framebuffer *fb;
 	struct drm_gem_object *gobj = NULL;
 	struct device *device = &dev->pdev->dev;
 	struct mgag200_bo *bo;
 	int ret;
-	void *sysram;
+	void *sysram = NULL;
 	int size;
 
 	mode_cmd.width = sizes->surface_width;
@@ -191,14 +191,16 @@ static int mgag200fb_create(struct drm_fb_helper *helper,
 		return -ENOMEM;
 
 	info = framebuffer_alloc(0, device);
-	if (info == NULL)
-		return -ENOMEM;
+	if (info == NULL) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	info->par = mfbdev;
 
 	ret = mgag200_framebuffer_init(dev, &mfbdev->mfb, &mode_cmd, gobj);
 	if (ret)
-		return ret;
+		goto out;
 
 	mfbdev->sysram = sysram;
 	mfbdev->size = size;
@@ -242,6 +244,15 @@ static int mgag200fb_create(struct drm_fb_helper *helper,
 		      fb->width, fb->height);
 	return 0;
 out:
+	mfbdev->mfb.obj = NULL;
+	vfree(sysram);
+	mfbdev->sysram = NULL;
+	if (info && info->cmap.len)
+		fb_dealloc_cmap(&info->cmap);
+	framebuffer_release(info);
+	mfbdev->helper.fb = NULL;
+	mfbdev->helper.fbdev = NULL;
+
 	return ret;
 }
 
