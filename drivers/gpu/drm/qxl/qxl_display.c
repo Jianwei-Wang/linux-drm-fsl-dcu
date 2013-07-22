@@ -281,7 +281,7 @@ static int qxl_crtc_cursor_set2(struct drm_crtc *crtc,
 	cmd->u.set.position.y = qcrtc->cur_y;
 
 	cmd->u.set.shape = qxl_bo_physical_address(qdev, cursor_bo, 0);
-	qxl_release_add_res(qdev, release, cursor_bo);
+	qxl_release_list_add(release, cursor_bo);
 
 	cmd->u.set.visible = 1;
 	qxl_release_unmap(qdev, release, &cmd->release_info);

@@ -135,10 +135,6 @@ struct qxl_bo_list {
 	struct ttm_validate_buffer tv;
 };
 
-struct qxl_reloc_list {
-	struct list_head bos;
-};
-
 struct qxl_crtc {
 	struct drm_crtc base;
 	int index;
@@ -198,10 +194,9 @@ enum {
 struct qxl_release {
 	int id;
 	int type;
-	int bo_count;
 	uint32_t release_offset;
 	uint32_t surface_release_id;
-	struct qxl_bo *bos[QXL_MAX_RES];
+	struct list_head bos;
 };
 
 struct qxl_fb_image {
@@ -471,6 +466,7 @@ union qxl_release_info *qxl_release_map(struct qxl_device *qdev,
 void qxl_release_unmap(struct qxl_device *qdev,
 		       struct qxl_release *release,
 		       union qxl_release_info *info);
+int qxl_release_list_add(struct qxl_release *release, struct qxl_bo *bo);
 /*
  * qxl_bo_add_resource.
  *
@@ -519,9 +515,7 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 
 void qxl_release_free(struct qxl_device *qdev,
 		      struct qxl_release *release);
-void qxl_release_add_res(struct qxl_device *qdev,
-			 struct qxl_release *release,
-			 struct qxl_bo *bo);
+
 /* used by qxl_debugfs_release */
 struct qxl_release *qxl_release_from_id_locked(struct qxl_device *qdev,
 						   uint64_t id);

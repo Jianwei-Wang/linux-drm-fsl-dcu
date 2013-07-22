@@ -173,7 +173,8 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 		struct qxl_bo *palette_bo;
 		void *ptr;
 		ret = qxl_palette_create_1bit(&palette_bo, qxl_fb_image);
-		qxl_release_add_res(qdev, release, palette_bo);
+
+		qxl_release_list_add(release, palette_bo);
 
 		ptr = qxl_bo_kmap_atomic_page(qdev, image_bo, 0);
 		image = ptr;
@@ -202,7 +203,7 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 		qxl_bo_physical_address(qdev, image_bo, 0);
 	qxl_release_unmap(qdev, release, &drawable->release_info);
 
-	qxl_release_add_res(qdev, release, image_bo);
+	qxl_release_list_add(release, image_bo);
 	qxl_bo_unreserve(image_bo);
 	qxl_bo_unref(&image_bo);
 
@@ -292,7 +293,7 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	drawable->clip.type = SPICE_CLIP_TYPE_RECTS;
 	drawable->clip.data = qxl_bo_physical_address(qdev,
 						      clips_bo, 0);
-	qxl_release_add_res(qdev, release, clips_bo);
+	qxl_release_list_add(release, clips_bo);
 
 	drawable->u.copy.src_area.top = 0;
 	drawable->u.copy.src_area.bottom = height;
@@ -308,7 +309,8 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 
 	drawable->u.copy.src_bitmap = qxl_bo_physical_address(qdev, image_bo, 0);
 	qxl_release_unmap(qdev, release, &drawable->release_info);
-	qxl_release_add_res(qdev, release, image_bo);
+	qxl_release_list_add(release, image_bo);
+
 	qxl_bo_unreserve(image_bo);
 	qxl_bo_unref(&image_bo);
 	clips_ptr = clips;

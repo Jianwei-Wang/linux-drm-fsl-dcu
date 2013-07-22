@@ -317,52 +317,6 @@ int qxl_bo_check_id(struct qxl_device *qdev, struct qxl_bo *bo)
 	return 0;
 }
 
-void qxl_bo_list_unreserve(struct qxl_reloc_list *reloc_list, bool failed)
-{
-	struct qxl_bo_list *entry, *sf;
-
-	list_for_each_entry_safe(entry, sf, &reloc_list->bos, tv.head) {
-		qxl_bo_unreserve(to_qxl_bo(entry->tv.bo));
-		list_del(&entry->tv.head);
-		kfree(entry);
-	}
-}
-
-int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
-{
-	struct qxl_bo_list *entry;
-	int ret;
-
-	list_for_each_entry(entry, &reloc_list->bos, tv.head) {
-		if (entry->tv.bo == &bo->tbo)
-			return 0;
-	}
-
-	entry = kmalloc(sizeof(struct qxl_bo_list), GFP_KERNEL);
-	if (!entry)
-		return -ENOMEM;
-
-	entry->tv.bo = &bo->tbo;
-	list_add(&entry->tv.head, &reloc_list->bos);
-
-	ret = qxl_bo_reserve(bo, false);
-	if (ret)
-		return ret;
-
-	if (!bo->pin_count) {
-		qxl_ttm_placement_from_domain(bo, bo->type);
-		ret = ttm_bo_validate(&bo->tbo, &bo->placement,
-				      true, false);
-		if (ret)
-			return ret;
-	}
-
-	/* allocate a surface for reserved + validated buffers */
-	ret = qxl_bo_check_id(bo->gem_base.dev->dev_private, bo);
-	if (ret)
-		return ret;
-	return 0;
-}
 
 int qxl_surf_evict(struct qxl_device *qdev)
 {

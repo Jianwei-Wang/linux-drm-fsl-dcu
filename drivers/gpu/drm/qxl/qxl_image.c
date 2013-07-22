@@ -154,7 +154,7 @@ qxl_image_create_helper(struct qxl_device *qdev,
 	image->u.bitmap.stride = chunk_stride;
 	image->u.bitmap.palette = 0;
 	image->u.bitmap.data = qxl_bo_physical_address(qdev, chunk_bo, 0);
-	qxl_release_add_res(qdev, release, chunk_bo);
+	qxl_release_list_add(release, chunk_bo);
 	qxl_bo_unreserve(chunk_bo);
 	qxl_bo_unref(&chunk_bo);
 

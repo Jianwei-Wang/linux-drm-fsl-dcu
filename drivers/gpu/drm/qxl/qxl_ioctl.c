@@ -103,7 +103,7 @@ apply_surf_reloc(struct qxl_device *qdev, struct qxl_bo *dst, uint64_t dst_off,
 /* return holding the reference to this object */
 static struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 					 struct drm_file *file_priv, uint64_t handle,
-					 struct qxl_reloc_list *reloc_list)
+					 struct qxl_release *release)
 {
 	struct drm_gem_object *gobj;
 	struct qxl_bo *qobj;
@@ -116,7 +116,7 @@ static struct qxl_bo *qxlhw_handle_to_bo(struct qxl_device *qdev,
 	}
 	qobj = gem_to_qxl_bo(gobj);
 
-	ret = qxl_bo_list_add(reloc_list, qobj);
+	ret = qxl_release_list_add(release, qobj);
 	if (ret)
 		return NULL;
 
@@ -141,10 +141,8 @@ static int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 	struct drm_qxl_reloc reloc;
 	void *fb_cmd;
 	int i, ret;
-	struct qxl_reloc_list reloc_list;
 	int unwritten;
 	uint32_t reloc_dst_offset;
-	INIT_LIST_HEAD(&reloc_list.bos);
 
 	for (cmd_num = 0; cmd_num < execbuffer->commands_num; ++cmd_num) {
 		struct qxl_release *release;
@@ -206,7 +204,6 @@ static int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			if (DRM_COPY_FROM_USER(&reloc,
 					       &((struct drm_qxl_reloc *)(uintptr_t)user_cmd.relocs)[i],
 					       sizeof(reloc))) {
-				qxl_bo_list_unreserve(&reloc_list, true);
 				qxl_release_unreserve(qdev, release);
 				qxl_release_free(qdev, release);
 				return -EFAULT;
@@ -216,9 +213,8 @@ static int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			   need to validate first then process relocs? */
 			if (reloc.dst_handle) {
 				reloc_dst_bo = qxlhw_handle_to_bo(qdev, file_priv,
-								  reloc.dst_handle, &reloc_list);
+								  reloc.dst_handle, release);
 				if (!reloc_dst_bo) {
-					qxl_bo_list_unreserve(&reloc_list, true);
 					qxl_release_unreserve(qdev, release);
 					qxl_release_free(qdev, release);
 					return -EINVAL;
@@ -233,11 +229,10 @@ static int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			if (reloc.reloc_type == QXL_RELOC_TYPE_BO || reloc.src_handle > 0) {
 				reloc_src_bo =
 					qxlhw_handle_to_bo(qdev, file_priv,
-							   reloc.src_handle, &reloc_list);
+							   reloc.src_handle, release);
 				if (!reloc_src_bo) {
 					if (reloc_dst_bo != cmd_bo)
 						drm_gem_object_unreference_unlocked(&reloc_dst_bo->gem_base);
-					qxl_bo_list_unreserve(&reloc_list, true);
 					qxl_release_unreserve(qdev, release);
 					qxl_release_free(qdev, release);
 					return -EINVAL;
@@ -255,7 +250,6 @@ static int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 			}
 
 			if (reloc_src_bo && reloc_src_bo != cmd_bo) {
-				qxl_release_add_res(qdev, release, reloc_src_bo);
 				drm_gem_object_unreference_unlocked(&reloc_src_bo->gem_base);
 			}
 
@@ -268,12 +262,10 @@ static int qxl_execbuffer_ioctl(struct drm_device *dev, void *data,
 		if (ret == -ERESTARTSYS) {
 			qxl_release_unreserve(qdev, release);
 			qxl_release_free(qdev, release);
-			qxl_bo_list_unreserve(&reloc_list, true);
 			return ret;
 		}
 		qxl_release_unreserve(qdev, release);
 	}
-	qxl_bo_list_unreserve(&reloc_list, 0);
 	return 0;
 }
 
