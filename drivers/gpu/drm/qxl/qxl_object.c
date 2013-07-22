@@ -321,9 +321,9 @@ void qxl_bo_list_unreserve(struct qxl_reloc_list *reloc_list, bool failed)
 {
 	struct qxl_bo_list *entry, *sf;
 
-	list_for_each_entry_safe(entry, sf, &reloc_list->bos, lhead) {
-		qxl_bo_unreserve(entry->bo);
-		list_del(&entry->lhead);
+	list_for_each_entry_safe(entry, sf, &reloc_list->bos, tv.head) {
+		qxl_bo_unreserve(to_qxl_bo(entry->tv.bo));
+		list_del(&entry->tv.head);
 		kfree(entry);
 	}
 }
@@ -333,8 +333,8 @@ int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
 	struct qxl_bo_list *entry;
 	int ret;
 
-	list_for_each_entry(entry, &reloc_list->bos, lhead) {
-		if (entry->bo == bo)
+	list_for_each_entry(entry, &reloc_list->bos, tv.head) {
+		if (entry->tv.bo == &bo->tbo)
 			return 0;
 	}
 
@@ -342,8 +342,8 @@ int qxl_bo_list_add(struct qxl_reloc_list *reloc_list, struct qxl_bo *bo)
 	if (!entry)
 		return -ENOMEM;
 
-	entry->bo = bo;
-	list_add(&entry->lhead, &reloc_list->bos);
+	entry->tv.bo = &bo->tbo;
+	list_add(&entry->tv.head, &reloc_list->bos);
 
 	ret = qxl_bo_reserve(bo, false);
 	if (ret)

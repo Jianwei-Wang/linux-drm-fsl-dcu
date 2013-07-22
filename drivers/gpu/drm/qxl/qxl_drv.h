@@ -42,6 +42,9 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 
+/* just for ttm_validate_buffer */
+#include <ttm/ttm_execbuf_util.h>
+
 #include <drm/qxl_drm.h>
 #include "qxl_dev.h"
 
@@ -121,6 +124,7 @@ struct qxl_bo {
 	atomic_t reserve_count;
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
+#define to_qxl_bo(tobj) container_of((tobj), struct qxl_bo, tbo)
 
 struct qxl_gem {
 	struct mutex		mutex;
@@ -128,8 +132,7 @@ struct qxl_gem {
 };
 
 struct qxl_bo_list {
-	struct list_head lhead;
-	struct qxl_bo *bo;
+	struct ttm_validate_buffer tv;
 };
 
 struct qxl_reloc_list {
