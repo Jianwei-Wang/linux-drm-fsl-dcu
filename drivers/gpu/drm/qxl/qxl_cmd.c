@@ -254,7 +254,25 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	return i;
 }
 
-int qxl_alloc_bo_reserved(struct qxl_device *qdev, unsigned long size,
+int qxl_alloc_bo(struct qxl_device *qdev,
+		 unsigned long size,
+		 struct qxl_bo **_bo)
+{
+	int ret;
+	struct qxl_bo *bo;
+	ret = qxl_bo_create(qdev, size, false /* not kernel - device */,
+			    QXL_GEM_DOMAIN_VRAM, NULL, &bo);
+	if (ret) {
+		DRM_ERROR("failed to allocate VRAM BO\n");
+		return ret;
+	}
+	*_bo = bo;
+	return 0;
+}
+
+int qxl_alloc_bo_reserved(struct qxl_device *qdev,
+			  struct qxl_release *release,
+			  unsigned long size,
 			  struct qxl_bo **_bo)
 {
 	struct qxl_bo *bo;
@@ -266,7 +284,7 @@ int qxl_alloc_bo_reserved(struct qxl_device *qdev, unsigned long size,
 		DRM_ERROR("failed to allocate VRAM BO\n");
 		return ret;
 	}
-	ret = qxl_bo_reserve(bo, false);
+	ret = qxl_bo_ticket_reserve(release, bo, false);
 	if (unlikely(ret != 0))
 		goto out_unref;
 

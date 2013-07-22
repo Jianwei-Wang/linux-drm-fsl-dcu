@@ -203,6 +203,7 @@ static void qxl_fb_fillrect(struct fb_info *info,
 	qxl_draw_fill_rec.rect = rect;
 	qxl_draw_fill_rec.color = color;
 	qxl_draw_fill_rec.rop = rop;
+
 	if (!drm_can_sleep()) {
 		qxl_io_log(qdev,
 			"%s: TODO use RCU, mysterious locks with spin_lock\n",

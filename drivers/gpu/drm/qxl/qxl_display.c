@@ -246,7 +246,7 @@ static int qxl_crtc_cursor_set2(struct drm_crtc *crtc,
 					 &release, NULL);
 	if (ret)
 		goto out_kunmap;
-	ret = qxl_alloc_bo_reserved(qdev, sizeof(struct qxl_cursor) + size,
+	ret = qxl_alloc_bo_reserved(qdev, release, sizeof(struct qxl_cursor) + size,
 				    &cursor_bo);
 	if (ret)
 		goto out_free_release;

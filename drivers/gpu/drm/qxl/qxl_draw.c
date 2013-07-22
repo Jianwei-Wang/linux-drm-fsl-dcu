@@ -23,25 +23,42 @@
 #include "qxl_drv.h"
 #include "qxl_object.h"
 
+static int attempt_reserveations(struct qxl_release *release,
+				 struct qxl_drm_image *image,
+				 struct qxl_bo *clips_bo,
+				 struct qxl_bo *palette_bo)
+{
+	ww_acquire_init(&release->ticket, &reservation_ww_class);
+
+
+}
+
+static int alloc_clips(struct qxl_device *qdev,
+		       unsigned num_clips,
+		       struct qxl_bo **clips_bo)
+{
+	int ret;
+	int size = sizeof(struct qxl_clip_rects) + sizeof(struct qxl_rect) * num_clips;
+	ret = qxl_alloc_bo(qdev, size, clips_bo);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 /* returns a pointer to the already allocated qxl_rect array inside
  * the qxl_clip_rects. This is *not* the same as the memory allocated
  * on the device, it is offset to qxl_clip_rects.chunk.data */
 static struct qxl_rect *drawable_set_clipping(struct qxl_device *qdev,
 					      struct qxl_drawable *drawable,
 					      unsigned num_clips,
-					      struct qxl_bo **clips_bo,
-					      struct qxl_release *release)
+					      struct qxl_bo *clips_bo)
 {
 	struct qxl_clip_rects *dev_clips;
 	int ret;
-	int size = sizeof(*dev_clips) + sizeof(struct qxl_rect) * num_clips;
-	ret = qxl_alloc_bo_reserved(qdev, size, clips_bo);
-	if (ret)
-		return NULL;
 
-	ret = qxl_bo_kmap(*clips_bo, (void **)&dev_clips);
+	ret = qxl_bo_kmap(clips_bo, (void **)&dev_clips);
 	if (ret) {
-		qxl_bo_unref(clips_bo);
 		return NULL;
 	}
 	dev_clips->num_rects = num_clips;
@@ -52,20 +69,34 @@ static struct qxl_rect *drawable_set_clipping(struct qxl_device *qdev,
 }
 
 static int
-make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
-	      const struct qxl_rect *rect,
-	      struct qxl_release **release)
+alloc_drawable(struct qxl_device *qdev, struct qxl_release **release)
 {
-	struct qxl_drawable *drawable;
-	int i, ret;
-
-	ret = qxl_alloc_release_reserved(qdev, sizeof(*drawable),
+	int ret;
+	ret = qxl_alloc_release_reserved(qdev, sizeof(struct qxl_drawable),
 					 QXL_RELEASE_DRAWABLE, release,
 					 NULL);
-	if (ret)
-		return ret;
+	return ret;
+}
 
-	drawable = (struct qxl_drawable *)qxl_release_map(qdev, *release);
+static void
+free_drawable(struct qxl_device *qdev, struct qxl_release *release)
+{
+	qxl_release_free(qdev, release);
+}
+
+/* release needs to be reserved at this point */
+static int
+make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
+	      const struct qxl_rect *rect,
+	      struct qxl_release *release)
+{
+	struct qxl_drawable *drawable;
+	int i;
+
+	drawable = (struct qxl_drawable *)qxl_release_map(qdev, release);
+	if (!drawable)
+		return -ENOMEM;
+
 	drawable->type = type;
 
 	drawable->surface_id = surface;		/* Only primary for now */
@@ -91,14 +122,25 @@ make_drawable(struct qxl_device *qdev, int surface, uint8_t type,
 		drawable->bbox = *rect;
 
 	drawable->mm_time = qdev->rom->mm_clock;
-	qxl_release_unmap(qdev, *release, &drawable->release_info);
+	qxl_release_unmap(qdev, release, &drawable->release_info);
 	return 0;
 }
 
-static int qxl_palette_create_1bit(struct qxl_bo **palette_bo,
+static int alloc_palette_object(struct qxl_device *qdev,
+				    struct qxl_bo **palette_bo)
+{
+	int ret;
+
+	ret = qxl_alloc_bo(qdev,
+			   sizeof(struct qxl_palette) + sizeof(uint32_t) * 2,
+			   palette_bo);
+	return ret;
+}
+
+static int qxl_palette_create_1bit(struct qxl_bo *palette_bo,
+				   struct qxl_release *release,
 				   const struct qxl_fb_image *qxl_fb_image)
 {
-	struct qxl_device *qdev = qxl_fb_image->qdev;
 	const struct fb_image *fb_image = &qxl_fb_image->fb_image;
 	uint32_t visual = qxl_fb_image->visual;
 	const uint32_t *pseudo_palette = qxl_fb_image->pseudo_palette;
@@ -108,12 +150,7 @@ static int qxl_palette_create_1bit(struct qxl_bo **palette_bo,
 	static uint64_t unique; /* we make no attempt to actually set this
 				 * correctly globaly, since that would require
 				 * tracking all of our palettes. */
-
-	ret = qxl_alloc_bo_reserved(qdev,
-				    sizeof(struct qxl_palette) + sizeof(uint32_t) * 2,
-				    palette_bo);
-
-	ret = qxl_bo_kmap(*palette_bo, (void **)&pal);
+	ret = qxl_bo_kmap(palette_bo, (void **)&pal);
 	pal->num_ents = 2;
 	pal->unique = unique++;
 	if (visual == FB_VISUAL_TRUECOLOR || visual == FB_VISUAL_DIRECTCOLOR) {
@@ -126,7 +163,7 @@ static int qxl_palette_create_1bit(struct qxl_bo **palette_bo,
 	}
 	pal->ents[0] = bgcolor;
 	pal->ents[1] = fgcolor;
-	qxl_bo_kunmap(*palette_bo);
+	qxl_bo_kunmap(palette_bo);
 	return 0;
 }
 
@@ -147,22 +184,41 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 	struct qxl_bo *image_bo;
 	struct qxl_image *image;
 	int ret;
-
+	struct qxl_drm_image *dimage;
+	struct qxl_bo *palette_bo = NULL;
 	if (stride == 0)
 		stride = depth * width / 8;
+
+	ret = alloc_drawable(qdev, &release);
+	if (ret)
+		return;
+
+	ret = qxl_image_alloc_objects(qdev, &dimage,
+					 height, stride);
+	if (ret)
+		goto out_free_drawable;
+
+	if (depth == 1) {
+		ret = alloc_palette_object(qdev, &palette_bo);
+		if (ret)
+			goto out_free_image;
+	}
+
+	/* do a reservation run over all the objects we just allocated */
 
 	rect.left = x;
 	rect.right = x + width;
 	rect.top = y;
 	rect.bottom = y + height;
 
-	ret = make_drawable(qdev, 0, QXL_DRAW_COPY, &rect, &release);
+	
+	ret = make_drawable(qdev, 0, QXL_DRAW_COPY, &rect, release);
 	if (ret)
-		return;
+		goto out_free_palette;
 
-	ret = qxl_image_create(qdev, release, &image_bo,
-			       (const uint8_t *)src, 0, 0,
-			       width, height, depth, stride);
+	ret = qxl_image_init(qdev, release, dimage,
+			     (const uint8_t *)src, 0, 0,
+			     width, height, depth, stride);
 	if (ret) {
 		qxl_release_unreserve(qdev, release);
 		qxl_release_free(qdev, release);
@@ -170,9 +226,8 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 	}
 
 	if (depth == 1) {
-		struct qxl_bo *palette_bo;
 		void *ptr;
-		ret = qxl_palette_create_1bit(&palette_bo, qxl_fb_image);
+		ret = qxl_palette_create_1bit(palette_bo, release, qxl_fb_image);
 
 		qxl_release_list_add(release, palette_bo);
 
@@ -206,10 +261,18 @@ void qxl_draw_opaque_fb(const struct qxl_fb_image *qxl_fb_image,
 	qxl_release_list_add(release, image_bo);
 	qxl_bo_unreserve(image_bo);
 	qxl_bo_unref(&image_bo);
-
+	
 	qxl_fence_releaseable(qdev, release);
 	qxl_push_command_ring_release(qdev, release, QXL_CMD_DRAW, false);
 	qxl_release_unreserve(qdev, release);
+
+out_free_palette:
+	if (palette_bo)
+		qxl_bo_unref(&palette_bo);
+out_free_image:
+	qxl_image_free_objects(qdev, dimage);
+out_free_drawable:
+	free_drawable(qdev, release);
 }
 
 /* push a draw command using the given clipping rectangles as
@@ -246,7 +309,12 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 	struct qxl_release *release;
 	struct qxl_bo *image_bo;
 	struct qxl_bo *clips_bo;
+	struct qxl_drm_image *dimage;
 	int ret;
+
+	ret = alloc_drawable(qdev, &release);
+	if (ret)
+		return;
 
 	left = clips->x1;
 	right = clips->x2;
@@ -264,26 +332,40 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 
 	width = right - left;
 	height = bottom - top;
+
+	ret = alloc_clips(qdev, num_clips, &clips_bo);
+	if (ret)
+		goto out_free_drawable;
+
+	ret = qxl_image_alloc_objects(qdev, &dimage,
+				      height, stride);
+	if (ret)
+		goto out_free_clips;
+
+	/* do a reservation run over all the objects we just allocated */
+
 	drawable_rect.left = left;
 	drawable_rect.right = right;
 	drawable_rect.top = top;
 	drawable_rect.bottom = bottom;
+
 	ret = make_drawable(qdev, 0, QXL_DRAW_COPY, &drawable_rect,
-			    &release);
+			    release);
 	if (ret)
-		return;
+		goto out_free_image;
+
 
 	ret = qxl_bo_kmap(bo, (void **)&surface_base);
 	if (ret)
 		goto out_unref;
 
-	ret = qxl_image_create(qdev, release, &image_bo, surface_base,
-			       left, top, width, height, depth, stride);
+	ret = qxl_image_init(qdev, release, dimage, surface_base,
+			     left, top, width, height, depth, stride);
 	qxl_bo_kunmap(bo);
 	if (ret)
 		goto out_unref;
 
-	rects = drawable_set_clipping(qdev, drawable, num_clips, &clips_bo, release);
+	rects = drawable_set_clipping(qdev, drawable, num_clips, clips_bo);
 	if (!rects) {
 		qxl_bo_unref(&image_bo);
 		goto out_unref;
@@ -332,6 +414,13 @@ void qxl_draw_dirty_fb(struct qxl_device *qdev,
 out_unref:
 	qxl_release_unreserve(qdev, release);
 	qxl_release_free(qdev, release);
+out_free_image:
+	qxl_image_free_objects(qdev, dimage);
+out_free_clips:
+	qxl_bo_unref(&clips_bo);
+out_free_drawable:
+	free_drawable(qdev, release);
+
 }
 
 void qxl_draw_copyarea(struct qxl_device *qdev,
@@ -344,11 +433,17 @@ void qxl_draw_copyarea(struct qxl_device *qdev,
 	struct qxl_release *release;
 	int ret;
 
+	ret = alloc_drawable(qdev, &release);
+	if (ret)
+		return;
+
+	/* do a reservation run over all the objects we just allocated */
+
 	rect.left = dx;
 	rect.top = dy;
 	rect.right = dx + width;
 	rect.bottom = dy + height;
-	ret = make_drawable(qdev, 0, QXL_COPY_BITS, &rect, &release);
+	ret = make_drawable(qdev, 0, QXL_COPY_BITS, &rect, release);
 	if (ret)
 		return;
 
@@ -372,7 +467,13 @@ void qxl_draw_fill(struct qxl_draw_fill *qxl_draw_fill_rec)
 	struct qxl_release *release;
 	int ret;
 
-	ret = make_drawable(qdev, 0, QXL_DRAW_FILL, &rect, &release);
+	ret = alloc_drawable(qdev, &release);
+	if (ret)
+		return;
+
+	/* do a reservation run over all the objects we just allocated */
+
+	ret = make_drawable(qdev, 0, QXL_DRAW_FILL, &rect, release);
 	if (ret)
 		return;
 

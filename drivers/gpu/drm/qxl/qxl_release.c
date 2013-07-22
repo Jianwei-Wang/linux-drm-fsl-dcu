@@ -56,6 +56,8 @@ qxl_release_alloc(struct qxl_device *qdev, int type,
 	release->release_offset = 0;
 	release->surface_release_id = 0;
 	INIT_LIST_HEAD(&release->bos);
+	ww_acquire_init(&release->ticket, &reservation_ww_class);
+
 	idr_preload(GFP_KERNEL);
 	spin_lock(&qdev->release_idr_lock);
 	idr_ret = idr_alloc(&qdev->release_idr, release, 1, 0, GFP_NOWAIT);
@@ -123,6 +125,19 @@ int qxl_release_list_add(struct qxl_release *release, struct qxl_bo *bo)
 	qxl_bo_ref(bo);
 	entry->tv.bo = &bo->tbo;
 	list_add_tail(&entry->tv.head, &release->bos);
+	return 0;
+}
+
+int qxl_release_reserve_list(struct qxl_release *release, bool no_intr)
+{
+	struct qxl_bo_list *entry;
+
+	return ttm_eu_reserve_buffers(&release->ticket, &release->bos);
+}
+
+int qxl_release_validate_bo(struct qxl_release *release, struct qxl_bo *bo)
+{
+	int ret;
 
 	ret = qxl_bo_reserve(bo, false);
 	if (ret)
@@ -156,6 +171,8 @@ void qxl_release_unreserve(struct qxl_device *qdev,
 		list_del(&entry->tv.head);
 		kfree(entry);
 	}
+	ww_acquire_done(&release->ticket);
+	ww_acquire_fini(&release->ticket);
 }
 
 int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
@@ -293,6 +310,8 @@ union qxl_release_info *qxl_release_map(struct qxl_device *qdev,
 	struct qxl_bo *bo = to_qxl_bo(entry->tv.bo);
 
 	ptr = qxl_bo_kmap_atomic_page(qdev, bo, release->release_offset & PAGE_SIZE);
+	if (!ptr)
+		return NULL;
 	info = ptr + (release->release_offset & ~PAGE_SIZE);
 	return info;
 }
@@ -309,3 +328,37 @@ void qxl_release_unmap(struct qxl_device *qdev,
 	qxl_bo_kunmap_atomic_page(qdev, bo, ptr);
 }
 
+void qxl_release_fence_buffer_objects(struct qxl_release *release)
+{
+	struct ttm_validate_buffer *entry;
+	struct ttm_buffer_object *bo;
+	struct ttm_bo_global *glob;
+	struct ttm_bo_device *bdev;
+	struct ttm_bo_driver *driver;
+	struct qxl_bo *qbo;
+	int ret;
+
+	bo = list_first_entry(&release->bos, struct ttm_validate_buffer, head)->bo;
+	bdev = bo->bdev;
+	driver = bdev->driver;
+	glob = bo->glob;
+
+	spin_lock(&glob->lru_lock);
+	spin_lock(&bdev->fence_lock);
+
+	list_for_each_entry(entry, &release->bos, head) {
+		bo = entry->bo;
+		qbo = to_qxl_bo(bo);
+
+		if (!entry->bo->sync_obj)
+			entry->bo->sync_obj = &qbo->fence;
+		
+		ret = qxl_fence_add_release(&qbo->fence, release->id);
+		ttm_bo_add_to_lru(bo);
+		ww_mutex_unlock(&bo->resv->lock);
+		entry->reserved = false;
+	}
+	spin_unlock(&bdev->fence_lock);
+	spin_unlock(&glob->lru_lock);
+	ww_acquire_fini(&release->ticket);
+}

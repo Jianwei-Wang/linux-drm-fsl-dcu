@@ -42,6 +42,22 @@ static inline int qxl_bo_reserve(struct qxl_bo *bo, bool no_wait)
 	return 0;
 }
 
+static inline int qxl_bo_ticket_reserve(struct qxl_release *release,
+					struct qxl_bo *bo, bool no_wait)
+{
+	int r;
+
+	r = ttm_bo_reserve_nolru(&bo->tbo, true, no_wait, false, &release->ticket);
+	if (unlikely(r != 0)) {
+		if (r != -ERESTARTSYS) {
+			struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+			dev_err(qdev->dev, "%p reserve failed\n", bo);
+		}
+		return r;
+	}
+	return 0;
+}
+
 static inline void qxl_bo_unreserve(struct qxl_bo *bo)
 {
 	ttm_bo_unreserve(&bo->tbo);
