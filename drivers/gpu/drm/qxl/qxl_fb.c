@@ -217,6 +217,9 @@ static void qxl_fb_copyarea(struct fb_info *info,
 {
 	struct qxl_fbdev *qfbdev = info->par;
 
+	if (!drm_can_sleep()) {
+		return;
+	}
 	qxl_draw_copyarea(qfbdev->qdev,
 			  region->width, region->height,
 			  region->sx, region->sy,
