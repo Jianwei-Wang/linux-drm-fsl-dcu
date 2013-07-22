@@ -121,7 +121,6 @@ struct qxl_bo {
 	uint32_t surface_id;
 	struct qxl_fence fence; /* per bo fence  - list of releases */
 	struct qxl_release *surf_create;
-	atomic_t reserve_count;
 };
 #define gem_to_qxl_bo(gobj) container_of((gobj), struct qxl_bo, gem_base)
 #define to_qxl_bo(tobj) container_of((tobj), struct qxl_bo, tbo)
@@ -457,8 +456,6 @@ int qxl_ring_push(struct qxl_ring *ring, const void *new_elt, bool interruptible
 void qxl_io_flush_release(struct qxl_device *qdev);
 void qxl_io_flush_surfaces(struct qxl_device *qdev);
 
-int qxl_release_reserve(struct qxl_device *qdev,
-			struct qxl_release *release, bool no_wait);
 void qxl_release_unreserve(struct qxl_device *qdev,
 			   struct qxl_release *release);
 union qxl_release_info *qxl_release_map(struct qxl_device *qdev,

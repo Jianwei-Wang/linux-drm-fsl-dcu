@@ -216,7 +216,6 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 	struct qxl_release *release;
 	uint64_t id, next_id;
 	int i = 0;
-	int ret;
 	union qxl_release_info *info;
 
 	while (qxl_ring_pop(qdev->release_ring, &id)) {
@@ -225,12 +224,6 @@ int qxl_garbage_collect(struct qxl_device *qdev)
 			release = qxl_release_from_id_locked(qdev, id);
 			if (release == NULL)
 				break;
-
-			ret = qxl_release_reserve(qdev, release, false);
-			if (ret) {
-				qxl_io_log(qdev, "failed to reserve release on garbage collect %lld\n", id);
-				DRM_ERROR("failed to reserve release %lld\n", id);
-			}
 
 			info = qxl_release_map(qdev, release);
 			next_id = info->next;

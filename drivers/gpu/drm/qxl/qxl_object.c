@@ -103,7 +103,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	bo->surface_id = 0;
 	qxl_fence_init(qdev, &bo->fence);
 	INIT_LIST_HEAD(&bo->list);
-	atomic_set(&bo->reserve_count, 0);
+
 	if (surf)
 		bo->surf = *surf;
 
