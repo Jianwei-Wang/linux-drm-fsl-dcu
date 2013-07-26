@@ -94,6 +94,7 @@ int virgl_bo_create(struct virgl_device *qdev,
 	bo->gem_base.driver_private = NULL;
 	bo->type = domain;
 	bo->pin_count = 0;
+	bo->dumb = false;
 	INIT_LIST_HEAD(&bo->list);
 
 	virgl_ttm_placement_from_domain(bo, domain);

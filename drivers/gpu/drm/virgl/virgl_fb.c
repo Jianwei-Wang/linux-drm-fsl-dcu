@@ -171,10 +171,12 @@ int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *
 		bottom = max_t(int, bottom, (int)clips_ptr->y2);
 	}
 
-	if (qfb->obj)
-		virgl_dirty_update(qfb, left, top, right - left, bottom - top);
-	else
-		virgl_3d_dirty_front(qdev, qfb, left, top, right - left, bottom - top);
+	if (qfb->obj) {
+		struct virgl_bo *qobj = gem_to_virgl_bo(qfb->obj);
+		if (qobj->dumb)
+			return virgl_dirty_update(qfb, left, top, right - left, bottom - top);
+	}
+	virgl_3d_dirty_front(qdev, qfb, left, top, right - left, bottom - top);
 
 	return 0;
 }
