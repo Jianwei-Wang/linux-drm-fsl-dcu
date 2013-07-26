@@ -107,6 +107,7 @@ struct drm_virgl_3d_transfer_get {
 	uint32_t bo_handle;/* set to 0 to use user_ptr */
 	struct drm_virgl_3d_box box;
 	uint32_t level;
+	uint32_t dst_stride;
 	uint32_t dst_offset;
 };
 

@@ -213,6 +213,7 @@ static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.transfer_get.level = args->level;
 	cmd_p->u.transfer_get.data = offset;
 	cmd_p->u.transfer_get.ctx_id = vfpriv->ctx_id;
+	cmd_p->u.transfer_get.dst_stride = args->dst_stride;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 	virgl_queue_cmd_buf(qdev, vbuf);
