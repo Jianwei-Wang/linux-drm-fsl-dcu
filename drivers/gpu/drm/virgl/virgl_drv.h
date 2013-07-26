@@ -75,6 +75,7 @@ struct virgl_bo {
 	struct drm_gem_object		gem_base;
 	struct sg_table *sgt;
 	uint32_t res_handle; /* used for backing dumb objects */
+	bool dumb;
 };
 #define gem_to_virgl_bo(gobj) container_of((gobj), struct virgl_bo, gem_base)
 

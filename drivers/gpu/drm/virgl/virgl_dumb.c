@@ -52,6 +52,7 @@ int virgl_mode_dumb_create(struct drm_file *file_priv,
 	if (r)
 		return r;
 
+	qobj->dumb = true;
 	args->pitch = pitch;
 	args->handle = handle;
 	return 0;
