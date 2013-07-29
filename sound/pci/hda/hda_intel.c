@@ -555,6 +555,9 @@ struct azx {
 #ifdef CONFIG_SND_HDA_DSP_LOADER
 	struct azx_dev saved_azx_dev;
 #endif
+
+	/* secondary power domain for hdmi audio under vga device */
+	struct dev_pm_domain hdmi_pm_domain;
 };
 
 #define CREATE_TRACE_POINTS
@@ -2898,7 +2901,7 @@ static int param_set_xint(const char *val, const struct kernel_param *kp)
 /*
  * power management
  */
-static int azx_suspend(struct device *dev)
+static int azx_do_suspend(struct device *dev, pci_power_t state)
 {
 	struct pci_dev *pci = to_pci_dev(dev);
 	struct snd_card *card = dev_get_drvdata(dev);
@@ -2920,14 +2923,28 @@ static int azx_suspend(struct device *dev)
 		free_irq(chip->irq, chip);
 		chip->irq = -1;
 	}
+
+	/*
+	 * for vga switcheroo suspend we need to
+	 * force runtime suspend so lspci works.
+	 */
+	if (state == PCI_D3cold)
+		pm_runtime_suspend(&pci->dev);
+
 	if (chip->msi)
 		pci_disable_msi(chip->pci);
 	pci_disable_device(pci);
 	pci_save_state(pci);
-	pci_set_power_state(pci, PCI_D3hot);
+
+	pci_set_power_state(pci, state);
 	if (chip->driver_caps & AZX_DCAPS_I915_POWERWELL)
 		hda_display_power(false);
 	return 0;
+}
+
+static int azx_suspend(struct device *dev)
+{
+	return azx_do_suspend(dev, PCI_D3hot);
 }
 
 static int azx_resume(struct device *dev)
@@ -2971,6 +2988,9 @@ static int azx_runtime_suspend(struct device *dev)
 	struct snd_card *card = dev_get_drvdata(dev);
 	struct azx *chip = card->private_data;
 
+	if (chip->disabled)
+		return 0;
+
 	azx_stop_chip(chip);
 	azx_enter_link_reset(chip);
 	azx_clear_irq_pending(chip);
@@ -2984,6 +3004,9 @@ static int azx_runtime_resume(struct device *dev)
 	struct snd_card *card = dev_get_drvdata(dev);
 	struct azx *chip = card->private_data;
 
+	if (chip->disabled)
+		return 0;
+
 	if (chip->driver_caps & AZX_DCAPS_I915_POWERWELL)
 		hda_display_power(true);
 	azx_init_pci(chip);
@@ -2995,6 +3018,9 @@ static int azx_runtime_idle(struct device *dev)
 {
 	struct snd_card *card = dev_get_drvdata(dev);
 	struct azx *chip = card->private_data;
+
+	if (chip->disabled)
+		return 0;
 
 	if (!power_save_controller ||
 	    !(chip->driver_caps & AZX_DCAPS_PM_RUNTIME))
@@ -3078,7 +3104,11 @@ static void azx_vs_set_state(struct pci_dev *pci,
 			   "%s: %s via VGA-switcheroo\n", pci_name(chip->pci),
 			   disabled ? "Disabling" : "Enabling");
 		if (disabled) {
-			azx_suspend(&pci->dev);
+			azx_do_suspend(&pci->dev, PCI_D3cold);
+			/* when we get suspended by vga switcheroo we end up in D3cold,
+			 * however we have no ACPI handle, so pci/acpi can't put us there,
+			 * put ourselves there */
+			pci->current_state = PCI_D3cold;
 			chip->disabled = true;
 			if (snd_hda_lock_devices(chip->bus))
 				snd_printk(KERN_WARNING SFX "%s: Cannot lock devices!\n",
@@ -3087,6 +3117,7 @@ static void azx_vs_set_state(struct pci_dev *pci,
 			snd_hda_unlock_devices(chip->bus);
 			chip->disabled = false;
 			azx_resume(&pci->dev);
+			pm_runtime_resume(&pci->dev);
 		}
 	}
 }
@@ -3139,6 +3170,9 @@ static int register_vga_switcheroo(struct azx *chip)
 	if (err < 0)
 		return err;
 	chip->vga_switcheroo_registered = 1;
+
+	/* register as an optimus hdmi audio power domain */
+	vga_switcheroo_init_domain_pm_optimus_hdmi_audio(&chip->pci->dev, &chip->hdmi_pm_domain);
 	return 0;
 }
 #else
