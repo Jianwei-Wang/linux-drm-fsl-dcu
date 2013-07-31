@@ -91,6 +91,20 @@ static int virgl_getparam_ioctl(struct drm_device *dev, void *data,
 	return -EINVAL;
 }
 
+static int cpp_for_format(uint32_t format)
+{
+	switch (format) {
+	case GRAW_FORMAT_A8_UNORM:
+	case GRAW_FORMAT_R8_UNORM:
+		return 1;
+	case GRAW_FORMAT_B4G4R4A4_UNORM:
+	case GRAW_FORMAT_B5G6R5_UNORM:
+		return 2;
+	default:
+		return 4;
+	}
+}
+	
 static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv)
 {
@@ -102,14 +116,23 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	uint32_t res_id;
 	struct virgl_bo *qobj;
 	uint32_t handle;
+	uint32_t size;
+	uint32_t stride;
+	int cpp = cpp_for_format(rc->format);
 
 	ret = virgl_resource_id_get(qdev, &res_id);
 	if (ret) 
 		return ret;
+	stride = rc->width * cpp;
+	size = stride * rc->height * rc->depth * 
+	  rc->array_size * (rc->nr_samples ? rc->nr_samples : 1) *
+	  (rc->last_level + 1);
 
+	rc->size = size;
+	rc->stride = stride;
 	ret = virgl_gem_object_create_with_handle(qdev, file_priv,
 						  0,
-						  rc->size,
+						  size,
 						  &qobj, &handle);
 	if (ret) {
 		virgl_resource_id_put(qdev, res_id);
@@ -133,6 +156,7 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	virgl_queue_cmd_buf(qdev, vbuf);
 
 	qobj->res_handle = res_id;
+	qobj->stride = stride;
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
 	return 0;
@@ -213,7 +237,7 @@ static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.transfer_get.level = args->level;
 	cmd_p->u.transfer_get.data = offset;
 	cmd_p->u.transfer_get.ctx_id = vfpriv->ctx_id;
-	cmd_p->u.transfer_get.dst_stride = args->dst_stride;
+	cmd_p->u.transfer_get.dst_stride = qobj->stride;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 	virgl_queue_cmd_buf(qdev, vbuf);
@@ -268,7 +292,7 @@ static int virgl_transfer_put_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.transfer_put.res_handle = qobj->res_handle;
 	convert_to_hw_box(&cmd_p->u.transfer_put.dst_box, &args->dst_box);
 	cmd_p->u.transfer_put.dst_level = args->dst_level;
-	cmd_p->u.transfer_put.src_stride = args->src_stride;
+	cmd_p->u.transfer_put.src_stride = qobj->stride;
 	cmd_p->u.transfer_put.data = offset;
 	cmd_p->u.transfer_put.ctx_id = vfpriv->ctx_id;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);

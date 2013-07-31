@@ -111,4 +111,24 @@ struct virgl_command {
 	} u;
 };
 
+/* formats known by the HW device */
+#define GRAW_FORMAT_B8G8R8A8_UNORM 1
+#define GRAW_FORMAT_B8G8R8X8_UNORM 2
+#define GRAW_FORMAT_A8R8G8B8_UNORM 3
+#define GRAW_FORMAT_X8R8G8B8_UNORM 4
+#define GRAW_FORMAT_B4G4R4A4_UNORM 6
+#define GRAW_FORMAT_B5G6R5_UNORM   7
+
+#define GRAW_FORMAT_A8_UNORM       10
+
+#define GRAW_FORMAT_Z16_UNORM      16
+#define GRAW_FORMAT_S8_UINT        23   /**< ubyte stencil */
+
+
+#define GRAW_FORMAT_R8_UNORM       64
+#define GRAW_FORMAT_R8G8B8A8_UNORM 67
+
+#define GRAW_FORMAT_A8B8G8R8_UNORM 121
+#define GRAW_FORMAT_R8G8B8X8_UNORM 134
+
 #endif

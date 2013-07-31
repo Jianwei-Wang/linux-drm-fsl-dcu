@@ -78,10 +78,11 @@ struct drm_virgl_resource_create {
 	uint32_t array_size;
 	uint32_t last_level;
 	uint32_t nr_samples;
-	uint32_t res_handle;  /* returned by kernel */
-	uint32_t size;
 	uint32_t flags;
 	uint32_t bo_handle; /* if this is set - recreate a new resource attached to this bo ? */
+	uint32_t res_handle;  /* returned by kernel */
+	uint32_t size;        /* returned by kernel */
+	uint32_t stride;      /* returned by kernel */
 };
 
 struct drm_virgl_resource_info {
@@ -99,7 +100,6 @@ struct drm_virgl_3d_transfer_put {
 	uint32_t bo_handle;/* set to 0 to use user_ptr */
 	struct drm_virgl_3d_box dst_box;
 	uint32_t dst_level;
-	uint32_t src_stride;
 	uint32_t src_offset;
 };
 
@@ -107,7 +107,6 @@ struct drm_virgl_3d_transfer_get {
 	uint32_t bo_handle;/* set to 0 to use user_ptr */
 	struct drm_virgl_3d_box box;
 	uint32_t level;
-	uint32_t dst_stride;
 	uint32_t dst_offset;
 };
 
