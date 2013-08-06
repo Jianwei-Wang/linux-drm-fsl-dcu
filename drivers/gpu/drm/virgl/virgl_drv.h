@@ -127,6 +127,7 @@ struct virgl_vbuffer {
 	char *buf;
 	size_t size;
 
+	struct list_head destroy_list;
 	size_t bo_max_len;
 	size_t bo_start_offset;
 	size_t bo_user_offset;

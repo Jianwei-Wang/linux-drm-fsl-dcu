@@ -334,13 +334,13 @@ struct virgl_command *virgl_alloc_cmd_buf(struct virgl_device *qdev,
 	return (struct virgl_command *)vbuf->buf;
 }
 
-static int reclaim_vbufs(struct virtqueue *vq)
+static int reclaim_vbufs(struct virtqueue *vq, struct list_head *reclaim_list)
 {
 	struct virgl_vbuffer *vbuf;
 	unsigned int len;
 	int freed = 0;
 	while ((vbuf = virtqueue_get_buf(vq, &len))) {
-		free_vbuf(vbuf);
+		list_add(&vbuf->destroy_list, reclaim_list);
 		freed++;
 	}
 	return freed;
@@ -351,15 +351,24 @@ void virgl_dequeue_work_func(struct work_struct *work)
 	struct virgl_device *qdev = container_of(work, struct virgl_device,
 					       dequeue_work);
 	int ret;
+	struct list_head reclaim_list;
+	struct virgl_vbuffer *entry, *tmp;
+
+	INIT_LIST_HEAD(&reclaim_list);
 	spin_lock(&qdev->cmdq_lock);
 	do {
 		virtqueue_disable_cb(qdev->cmdq);
-		ret = reclaim_vbufs(qdev->cmdq);
+		ret = reclaim_vbufs(qdev->cmdq, &reclaim_list);
 		if (ret == 0)
 			printk("cleaned 0 buffers wierd\n");
 		qdev->num_freed += ret;
 	} while (!virtqueue_enable_cb(qdev->cmdq));
 	spin_unlock(&qdev->cmdq_lock);
+
+	list_for_each_entry_safe(entry, tmp, &reclaim_list, destroy_list) {
+		list_del(&entry->destroy_list);
+		free_vbuf(entry);
+	}
 	wake_up(&qdev->cmd_ack_queue);
 }
 
