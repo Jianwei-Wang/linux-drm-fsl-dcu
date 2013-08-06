@@ -661,7 +661,7 @@ static bool virgl_fence_seq_signaled(struct virgl_device *qdev, u64 seq)
 static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 				 bool intr)
 {
-  	unsigned long timeout, last_activity;
+  	uint64_t timeout, last_activity;
 	uint64_t seq;
 	bool signaled;
 	int r;
