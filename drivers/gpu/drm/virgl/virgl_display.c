@@ -218,6 +218,7 @@ virgl_framebuffer_init(struct drm_device *dev,
 	}
 	drm_helper_mode_fill_fb_struct(&qfb->base, mode_cmd);
 
+	spin_lock_init(&qfb->dirty_lock);
 	qfb->x1 = qfb->y1 = INT_MAX;
 	qfb->x2 = qfb->y2 = 0;
 	return 0;
