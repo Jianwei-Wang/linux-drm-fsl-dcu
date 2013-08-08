@@ -392,4 +392,8 @@ int virgl_resource_unref(struct virgl_device *qdev, uint32_t res_handle);
 #define VIRTIO_VIRGL_CURSOR_CUR_X             32
 #define VIRTIO_VIRGL_CURSOR_CUR_Y             36
 
+u32 virgl_get_vblank_counter(struct drm_device *dev, int crtc);
+int virgl_enable_vblank(struct drm_device *dev, int crtc);
+void virgl_disable_vblank(struct drm_device *dev, int crtc);
+
 #endif

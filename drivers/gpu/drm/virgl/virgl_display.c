@@ -534,7 +534,10 @@ int virgl_modeset_init(struct virgl_device *qdev)
 	 * issuing command queue commands and having them read by
 	 * spice server. */
 	virgl_fbdev_init(qdev);
-	return 0;
+
+	ret = drm_vblank_init(qdev->ddev, 1);
+	
+	return ret;
 }
 
 void virgl_modeset_fini(struct virgl_device *qdev)

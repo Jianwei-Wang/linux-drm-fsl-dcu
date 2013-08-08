@@ -108,6 +108,10 @@ static struct drm_driver virgl_driver = {
 	.fops = &virgl_fops,
 	.ioctls = virgl_ioctls,
 	.irq_handler = virgl_irq_handler,
+
+	.get_vblank_counter = virgl_get_vblank_counter,
+	.enable_vblank = virgl_enable_vblank,
+	.disable_vblank = virgl_disable_vblank,
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
 	.date = DRIVER_DATE,

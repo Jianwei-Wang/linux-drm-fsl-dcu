@@ -172,3 +172,19 @@ void virgl_driver_postclose(struct drm_device *dev, struct drm_file *fpriv)
 	kfree(vfpriv);
 	fpriv->driver_priv = NULL;
 }
+
+
+u32 virgl_get_vblank_counter(struct drm_device *dev, int crtc)
+{
+        return 0;
+}
+
+int virgl_enable_vblank(struct drm_device *dev, int crtc)
+{
+        return -ENOSYS;
+}
+
+void virgl_disable_vblank(struct drm_device *dev, int crtc)
+{
+}
+
