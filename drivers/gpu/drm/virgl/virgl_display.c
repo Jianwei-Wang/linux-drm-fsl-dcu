@@ -485,11 +485,11 @@ virgl_user_framebuffer_create(struct drm_device *dev,
 	/* lookup object associated with res handle */
 	obj = drm_gem_object_lookup(dev, file_priv, mode_cmd->handles[0]);
 	if (!obj)
-		return PTR_ERR(-EINVAL);
+		return ERR_PTR(-EINVAL);
 
 	virgl_fb = kzalloc(sizeof(*virgl_fb), GFP_KERNEL);
 	if (virgl_fb == NULL)
-		return PTR_ERR(-ENOMEM);
+		return ERR_PTR(-ENOMEM);
 
 	ret = virgl_framebuffer_init(dev, virgl_fb, mode_cmd, obj);
 	if (ret) {
