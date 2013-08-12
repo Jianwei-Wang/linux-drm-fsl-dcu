@@ -81,14 +81,15 @@ struct drm_virgl_resource_create {
 	uint32_t flags;
 	uint32_t bo_handle; /* if this is set - recreate a new resource attached to this bo ? */
 	uint32_t res_handle;  /* returned by kernel */
-	uint32_t size;        /* returned by kernel */
-	uint32_t stride;      /* returned by kernel */
+	uint32_t size;        /* validate transfer in the host */
+	uint32_t stride;      /* validate transfer in the host */
 };
 
 struct drm_virgl_resource_info {
 	uint32_t bo_handle;
 	uint32_t res_handle;
 	uint32_t size;
+	uint32_t stride;
 };
 
 struct drm_virgl_3d_box {

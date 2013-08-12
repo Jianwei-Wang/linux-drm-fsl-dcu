@@ -91,20 +91,6 @@ static int virgl_getparam_ioctl(struct drm_device *dev, void *data,
 	return -EINVAL;
 }
 
-static int cpp_for_format(uint32_t format)
-{
-	switch (format) {
-	case GRAW_FORMAT_A8_UNORM:
-	case GRAW_FORMAT_R8_UNORM:
-		return 1;
-	case GRAW_FORMAT_B4G4R4A4_UNORM:
-	case GRAW_FORMAT_B5G6R5_UNORM:
-		return 2;
-	default:
-		return 4;
-	}
-}
-	
 static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file_priv)
 {
@@ -117,19 +103,13 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	struct virgl_bo *qobj;
 	uint32_t handle;
 	uint32_t size;
-	uint32_t stride;
-	int cpp = cpp_for_format(rc->format);
 
 	ret = virgl_resource_id_get(qdev, &res_id);
 	if (ret) 
 		return ret;
-	stride = rc->width * cpp;
-	size = stride * rc->height * rc->depth * 
-	  rc->array_size * (rc->nr_samples ? rc->nr_samples : 1) *
-	  (rc->last_level + 1);
 
-	rc->size = size;
-	rc->stride = stride;
+	size = rc->size;
+
 	ret = virgl_gem_object_create_with_handle(qdev, file_priv,
 						  0,
 						  size,
@@ -156,9 +136,10 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	virgl_queue_cmd_buf(qdev, vbuf);
 
 	qobj->res_handle = res_id;
-	qobj->stride = stride;
+	qobj->stride = rc->stride;
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
+
 	return 0;
 }
 
@@ -178,6 +159,7 @@ static int virgl_resource_info_ioctl(struct drm_device *dev, void *data,
 
 	ri->size = qobj->gem_base.size;
 	ri->res_handle = qobj->res_handle;
+	ri->stride = qobj->stride;
 	drm_gem_object_unreference_unlocked(gobj);
 	return 0;
 }
