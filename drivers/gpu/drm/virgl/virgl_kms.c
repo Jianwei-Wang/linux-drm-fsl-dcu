@@ -78,11 +78,16 @@ int virgl_device_init(struct virgl_device *qdev,
 	if (r)
 		return r;
 
+	r = virgl_get_caps(qdev);
+	if (r)
+		return r;
 	return 0;
 }
 
 void virgl_device_fini(struct virgl_device *qdev)
 {
+	virgl_bo_unref(&qdev->caps_bo);
+
 	virgl_virtio_fini(qdev);
 
 	virgl_bo_fini(qdev);

@@ -219,6 +219,8 @@ struct virgl_device {
 	struct work_struct dequeue_work;
 
 	uint32_t num_alloc, num_freed;
+
+	struct virgl_bo *caps_bo;
 };
 
 #define vdev_to_virgl_dev(virt) container_of((virt), struct virgl_device, vdev)
@@ -396,4 +398,5 @@ u32 virgl_get_vblank_counter(struct drm_device *dev, int crtc);
 int virgl_enable_vblank(struct drm_device *dev, int crtc);
 void virgl_disable_vblank(struct drm_device *dev, int crtc);
 
+int virgl_get_caps(struct virgl_device *vdev);
 #endif

@@ -312,6 +312,23 @@ static int virgl_wait_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
+static int virgl_get_caps_ioctl(struct drm_device *dev,
+				void *data, struct drm_file *file)
+{
+	struct virgl_device *vdev = dev->dev_private;
+	struct drm_virgl_get_caps *args = data;	
+	struct drm_gem_object *gobj = &vdev->caps_bo->gem_base;
+	uint32_t handle;
+	int r;
+
+	r = drm_gem_handle_create(file, gobj, &handle);
+	if (r)
+		return r;
+
+	args->handle = handle;
+	return 0;
+}
+
 struct drm_ioctl_desc virgl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIRGL_ALLOC, virgl_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
@@ -331,6 +348,8 @@ struct drm_ioctl_desc virgl_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIRGL_TRANSFER_PUT, virgl_transfer_put_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 	DRM_IOCTL_DEF_DRV(VIRGL_WAIT, virgl_wait_ioctl, DRM_AUTH|DRM_UNLOCKED),
+
+	DRM_IOCTL_DEF_DRV(VIRGL_GET_CAPS, virgl_get_caps_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 };
 

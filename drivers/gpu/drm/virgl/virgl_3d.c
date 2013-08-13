@@ -953,3 +953,68 @@ int virgl_context_unbind_resource(struct virgl_device *qdev, uint32_t ctx_id,
 
 	return 0;
 }
+
+int virgl_get_caps(struct virgl_device *vdev)
+{
+	struct drm_gem_object *gobj = NULL;
+	int size, aligned_size;
+	int ret;
+	struct virgl_bo *qbo = NULL;
+	struct virgl_command *cmd_p;
+	struct virgl_vbuffer *vbuf = NULL;
+	struct virgl_fence *fence;
+
+	size = sizeof(union virgl_caps);
+	aligned_size = ALIGN(size, PAGE_SIZE);
+	
+	ret = virgl_gem_object_create(vdev, aligned_size, 0, 0,
+				       false, false, &gobj);
+	if (ret)
+		return ret;
+
+	qbo = gem_to_virgl_bo(gobj);
+
+	ret = virgl_bo_reserve(qbo, false);
+	if (ret)
+		goto out;
+
+	virgl_ttm_placement_from_domain(qbo, qbo->type);
+	ret = ttm_bo_validate(&qbo->tbo, &qbo->placement,
+			      true, false);
+	if (unlikely(ret))
+		goto out_unres;
+	cmd_p = virgl_alloc_cmd(vdev, qbo, true, NULL, 0, &vbuf);
+	if (IS_ERR(cmd_p))
+		goto out_unres;
+
+	cmd_p->type = VIRGL_CMD_GET_3D_CAPABILITIES;
+	cmd_p->u.get_cap.cap_set = 0;
+	cmd_p->u.get_cap.cap_set_version = 1;
+	cmd_p->u.get_cap.offset = 0;
+	ret = virgl_fence_emit(vdev, cmd_p, &fence);
+	virgl_queue_cmd_buf(vdev, vbuf);
+
+	qbo->tbo.sync_obj = vdev->mman.bdev.driver->sync_obj_ref(fence);
+
+	spin_lock(&qbo->tbo.bdev->fence_lock);
+	ret = ttm_bo_wait(&qbo->tbo, true, true, false);
+	spin_unlock(&qbo->tbo.bdev->fence_lock);
+	if (!ret)
+		vdev->caps_bo = qbo;
+
+	{
+	  union virgl_caps *ptr;
+	  virgl_bo_kmap(qbo, (void **)&ptr);
+	  printk("max version %d, glsl level %d\n", ptr->max_version,
+		 ptr->v1.glsl_level);
+	  virgl_bo_kunmap(qbo);
+	}
+out_unres:
+	virgl_bo_unreserve(qbo);
+out:
+	if (ret)
+		drm_gem_object_unreference_unlocked(gobj);
+	return ret;
+
+}
+  

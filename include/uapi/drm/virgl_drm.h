@@ -43,6 +43,7 @@
 #define DRM_VIRGL_TRANSFER_GET 0x06
 #define DRM_VIRGL_TRANSFER_PUT 0x07
 #define DRM_VIRGL_WAIT     0x08
+#define DRM_VIRGL_GET_CAPS  0x09
 
 struct drm_virgl_alloc {
 	uint32_t size;
@@ -117,6 +118,10 @@ struct drm_virgl_3d_wait {
         uint32_t flags;
 };
 
+struct drm_virgl_get_caps {
+	uint32_t handle; /* 0 is an invalid handle */
+};
+
 #define DRM_IOCTL_VIRGL_ALLOC \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_ALLOC, struct drm_virgl_alloc)
 
@@ -151,4 +156,6 @@ struct drm_virgl_3d_wait {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_WAIT,	\
 		struct drm_virgl_3d_wait)
 
+#define DRM_IOCTL_VIRGL_GET_CAPS \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRGL_GET_CAPS, struct drm_virgl_get_caps)
 #endif
