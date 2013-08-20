@@ -132,15 +132,16 @@ static int virgl_crtc_cursor_set(struct drm_crtc *crtc,
 		cmd_p->type = VIRGL_TRANSFER_PUT;
 		cmd_p->u.transfer_put.res_handle = qobj->res_handle;
 		cmd_p->u.transfer_put.ctx_id = 0;
-		cmd_p->u.transfer_put.dst_box.x = 0;
-		cmd_p->u.transfer_put.dst_box.y = 0;
-		cmd_p->u.transfer_put.dst_box.z = 0;
-		cmd_p->u.transfer_put.dst_box.w = 64;
-		cmd_p->u.transfer_put.dst_box.h = 64;
-		cmd_p->u.transfer_put.dst_box.d = 1;
+		cmd_p->u.transfer_put.box.x = 0;
+		cmd_p->u.transfer_put.box.y = 0;
+		cmd_p->u.transfer_put.box.z = 0;
+		cmd_p->u.transfer_put.box.w = 64;
+		cmd_p->u.transfer_put.box.h = 64;
+		cmd_p->u.transfer_put.box.d = 1;
 		
-		cmd_p->u.transfer_put.dst_level = 0;
-		cmd_p->u.transfer_put.src_stride = 0;
+		cmd_p->u.transfer_put.level = 0;
+		cmd_p->u.transfer_put.stride = 0;
+		cmd_p->u.transfer_put.layer_stride = 0;
 
 		cmd_p->u.transfer_put.data = offset;
 

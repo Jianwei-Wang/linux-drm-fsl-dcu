@@ -121,15 +121,16 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 		cmd_p->type = VIRGL_TRANSFER_PUT;
 		cmd_p->u.transfer_put.res_handle = fb->res_3d_handle;
 
-		cmd_p->u.transfer_put.dst_box.x = x;
-		cmd_p->u.transfer_put.dst_box.y = y;
-		cmd_p->u.transfer_put.dst_box.z = 0;
-		cmd_p->u.transfer_put.dst_box.w = w;
-		cmd_p->u.transfer_put.dst_box.h = h;
-		cmd_p->u.transfer_put.dst_box.d = 1;
+		cmd_p->u.transfer_put.box.x = x;
+		cmd_p->u.transfer_put.box.y = y;
+		cmd_p->u.transfer_put.box.z = 0;
+		cmd_p->u.transfer_put.box.w = w;
+		cmd_p->u.transfer_put.box.h = h;
+		cmd_p->u.transfer_put.box.d = 1;
 		
-		cmd_p->u.transfer_put.dst_level = 0;
-		cmd_p->u.transfer_put.src_stride = fb->base.pitches[0];
+		cmd_p->u.transfer_put.level = 0;
+		cmd_p->u.transfer_put.stride = fb->base.pitches[0];
+		cmd_p->u.transfer_put.layer_stride = 0;
 
 		cmd_p->u.transfer_put.data = offset;
 

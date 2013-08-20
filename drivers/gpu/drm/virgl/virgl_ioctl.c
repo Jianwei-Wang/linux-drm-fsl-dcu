@@ -192,7 +192,7 @@ static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 	struct virgl_bo *qobj = NULL;
 	struct virgl_fence *fence;
 	int ret;
-	u32 offset = args->dst_offset;
+	u32 offset = args->offset;
 
 	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
 	if (gobj == NULL)
@@ -219,7 +219,8 @@ static int virgl_transfer_get_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.transfer_get.level = args->level;
 	cmd_p->u.transfer_get.data = offset;
 	cmd_p->u.transfer_get.ctx_id = vfpriv->ctx_id;
-	cmd_p->u.transfer_get.dst_stride = qobj->stride;
+	cmd_p->u.transfer_get.stride = args->stride;
+	cmd_p->u.transfer_get.layer_stride = args->layer_stride;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 	virgl_queue_cmd_buf(qdev, vbuf);
@@ -245,7 +246,7 @@ static int virgl_transfer_put_ioctl(struct drm_device *dev, void *data,
 	struct virgl_bo *qobj = NULL;
 	struct virgl_fence *fence;
 	int ret;
-	u32 offset = args->src_offset;
+	u32 offset = args->offset;
 	u32 max_size = 0;
 
 	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
@@ -264,17 +265,18 @@ static int virgl_transfer_put_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret))
 		goto out_unres;
 
-	if (args->dst_box.h == 1 && args->dst_box.d == 1 &&
-	    args->dst_box.y == 0 && args->dst_box.z == 0) {
-		max_size = args->dst_box.w;
+	if (args->box.h == 1 && args->box.d == 1 &&
+	    args->box.y == 0 && args->box.z == 0) {
+		max_size = args->box.w;
 	}
 	cmd_p = virgl_alloc_cmd(qdev, qobj, false, &offset, max_size, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
 	cmd_p->type = VIRGL_TRANSFER_PUT;
 	cmd_p->u.transfer_put.res_handle = qobj->res_handle;
-	convert_to_hw_box(&cmd_p->u.transfer_put.dst_box, &args->dst_box);
-	cmd_p->u.transfer_put.dst_level = args->dst_level;
-	cmd_p->u.transfer_put.src_stride = qobj->stride;
+	convert_to_hw_box(&cmd_p->u.transfer_put.box, &args->box);
+	cmd_p->u.transfer_put.level = args->level;
+	cmd_p->u.transfer_put.stride = args->stride;
+	cmd_p->u.transfer_put.layer_stride = args->layer_stride;
 	cmd_p->u.transfer_put.data = offset;
 	cmd_p->u.transfer_put.ctx_id = vfpriv->ctx_id;
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
