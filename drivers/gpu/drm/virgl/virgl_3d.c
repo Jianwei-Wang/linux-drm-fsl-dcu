@@ -945,7 +945,7 @@ int virgl_irq_init(struct virgl_device *qdev)
 
 }
 
-int virgl_context_create(struct virgl_device *qdev, uint32_t *id)
+int virgl_context_create(struct virgl_device *qdev, uint32_t nlen, const char *name, uint32_t *id)
 {
 	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
@@ -961,7 +961,9 @@ int virgl_context_create(struct virgl_device *qdev, uint32_t *id)
 		return PTR_ERR(cmd_p);
 
 	cmd_p->type = VIRGL_CMD_CREATE_CONTEXT;
-	cmd_p->u.ctx.handle = handle;
+	cmd_p->u.ctx_create.handle = handle;
+	cmd_p->u.ctx_create.nlen = nlen;
+	strncpy(cmd_p->u.ctx_create.debug_name, name, min(64, nlen + 1));
 	virgl_queue_cmd_buf(qdev, vbuf);
 
 	*id = handle;

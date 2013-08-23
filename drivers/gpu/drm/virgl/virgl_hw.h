@@ -92,6 +92,12 @@ struct virgl_cmd_context {
         uint32_t pad;
 };
 
+struct virgl_cmd_context_create {
+        uint32_t handle;
+        uint32_t nlen;
+        char debug_name[64];
+};
+
 struct virgl_cmd_resource_context {
 	uint32_t res_handle;
 	uint32_t ctx_id;
@@ -120,6 +126,7 @@ struct virgl_command {
 	uint64_t fence_id;
 	union virgl_cmds {
 		struct virgl_cmd_context ctx;
+		struct virgl_cmd_context_create ctx_create;
 		struct virgl_resource_create res_create;
 		struct virgl_transfer_put transfer_put;
 		struct virgl_transfer_get transfer_get;

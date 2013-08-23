@@ -145,13 +145,17 @@ int virgl_driver_open(struct drm_device *dev, struct drm_file *fpriv)
 	struct virgl_fpriv *vfpriv;
 	uint32_t id;
 	int ret;
-
+	char dbgname[64], tmpname[TASK_COMM_LEN];
+	
+	get_task_comm(tmpname, current);
+	snprintf(dbgname, sizeof(dbgname), "%s", tmpname);
+	dbgname[63] = 0;
 	/* allocate a virt GPU context for this opener */
 	vfpriv = kzalloc(sizeof(*fpriv), GFP_KERNEL);
 	if (!vfpriv)
 		return -ENOMEM;
 
-	ret = virgl_context_create(qdev, &id);
+	ret = virgl_context_create(qdev, strlen(dbgname), dbgname, &id);
 	if (ret) {
 		kfree(vfpriv);
 		return ret;

@@ -337,7 +337,7 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 		       int width, int height);
 int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *clips,
 			 unsigned num_clips);
-int virgl_context_create(struct virgl_device *qdev, uint32_t *id);
+int virgl_context_create(struct virgl_device *qdev, uint32_t nlen, const char *name, uint32_t *id);
 int virgl_context_destroy(struct virgl_device *qdev, uint32_t id);
 int virgl_context_bind_resource(struct virgl_device *qdev, uint32_t ctx_id,
 				uint32_t res_handle);
