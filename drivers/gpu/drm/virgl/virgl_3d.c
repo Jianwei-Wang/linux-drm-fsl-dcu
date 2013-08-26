@@ -4,7 +4,7 @@
 #include <linux/virtio_pci.h>
 #include "virgl_drv.h"
 #include "virgl_object.h"
-
+#include "ttm/ttm_execbuf_util.h"
 /* virtio config->get_features() implementation */
 static u32 vp_get_features(struct virtio_device *vdev)
 {
@@ -536,6 +536,43 @@ int virgl_virtio_init(struct virgl_device *qdev)
 fail:
 	return ret;
 }
+
+static int virgl_bo_list_validate(struct list_head *head)
+{
+	struct ttm_validate_buffer *buf;
+	struct ttm_buffer_object *bo;
+	struct virgl_bo *qobj;
+	int ret;
+	
+	ret = ttm_eu_reserve_buffers(head);
+	if (ret != 0)
+		return ret;
+
+	list_for_each_entry(buf, head, head) {
+		bo = buf->bo;
+		qobj = container_of(bo, struct virgl_bo, tbo);
+		if (qobj->pin_count)
+			continue;
+		virgl_ttm_placement_from_domain(qobj, qobj->type);
+		ret = ttm_bo_validate(bo, &qobj->placement, false, false);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static void virgl_unref_list(struct list_head *head)
+{
+	struct ttm_validate_buffer *buf;
+	struct ttm_buffer_object *bo;
+	struct virgl_bo *qobj;
+	list_for_each_entry(buf, head, head) {
+		bo = buf->bo;
+		qobj = container_of(bo, struct virgl_bo, tbo);
+
+		drm_gem_object_unreference_unlocked(&qobj->gem_base);
+	}
+}
 	  
 int virgl_execbuffer(struct drm_device *dev,
 		     struct drm_virgl_execbuffer *execbuffer,
@@ -549,8 +586,47 @@ int virgl_execbuffer(struct drm_device *dev,
 	void *optr;
 	void *osyncobj;
 	int ret;
-
+	uint32_t *bo_handles = NULL;
+	struct list_head validate_list;
+	struct ttm_validate_buffer *buflist = NULL;
+	struct ttm_validate_buffer cmdbuffer;
+	int i;
 	//printk("user cmd size %d\n", user_cmd.command_size);
+
+	memset(&cmdbuffer, 0, sizeof(struct ttm_validate_buffer));
+	INIT_LIST_HEAD(&validate_list);
+	if (execbuffer->num_bo_handles) {
+
+		bo_handles = drm_malloc_ab(execbuffer->num_bo_handles, sizeof(uint32_t));
+		buflist = drm_calloc_large(execbuffer->num_bo_handles, sizeof(struct ttm_validate_buffer));
+		if (!bo_handles || !buflist) {
+			drm_free_large(bo_handles);
+			drm_free_large(buflist);
+			return -ENOMEM;
+		}
+
+		if (copy_from_user(bo_handles, (void __user *)(uintptr_t)execbuffer->bo_handles, execbuffer->num_bo_handles * sizeof(uint32_t))) {
+			ret = -EFAULT;
+			drm_free_large(bo_handles);
+			return ret;
+		}
+
+		for (i = 0; i < execbuffer->num_bo_handles; i++) {
+			gobj = drm_gem_object_lookup(dev,
+						     drm_file, bo_handles[i]);
+			if (!gobj) {
+				drm_free_large(bo_handles);
+				drm_free_large(buflist);
+				return -ENOENT;
+			}
+
+			qobj = gem_to_virgl_bo(gobj);
+			buflist[i].bo = &qobj->tbo;
+
+			list_add(&buflist[i].head, &validate_list);
+		}
+		drm_free_large(bo_handles);
+	}
 
 	ret = virgl_gem_object_create(qdev, execbuffer->size,
 				    0, 0, false,
@@ -561,15 +637,12 @@ int virgl_execbuffer(struct drm_device *dev,
 
 	qobj = gem_to_virgl_bo(gobj);
 
-	ret = virgl_bo_reserve(qobj, false);
+	cmdbuffer.bo = &qobj->tbo;
+	list_add(&cmdbuffer.head, &validate_list);
+
+	ret = virgl_bo_list_validate(&validate_list);
 	if (ret)
 		goto out_free;
-
-	virgl_ttm_placement_from_domain(qobj, qobj->type);
-	ret = ttm_bo_validate(&qobj->tbo, &qobj->placement,
-			      true, false);
-	if (ret)
-		goto out_unresv;
 
 	ret = virgl_bo_kmap(qobj, &optr);
 	if (ret)
@@ -600,25 +673,19 @@ int virgl_execbuffer(struct drm_device *dev,
 		virgl_queue_cmd_buf(qdev, vbuf);
 	}
 
-	spin_lock(&qobj->tbo.glob->lru_lock);
-	spin_lock(&qobj->tbo.bdev->fence_lock);
-	osyncobj = qobj->tbo.sync_obj;
-	qobj->tbo.sync_obj = qdev->mman.bdev.driver->sync_obj_ref(fence);
+	ttm_eu_fence_buffer_objects(&validate_list, fence);
 
-	spin_unlock(&qobj->tbo.bdev->fence_lock);
-	spin_unlock(&qobj->tbo.glob->lru_lock);
-	virgl_bo_unreserve(qobj);
 	/* fence the command bo */
-	drm_gem_object_unreference_unlocked(gobj);
-	if (osyncobj)
-		qdev->mman.bdev.driver->sync_obj_ref(osyncobj);
+	virgl_unref_list(&validate_list);
+	drm_free_large(buflist);
 	return 0;
 out_kunmap:
 	virgl_bo_kunmap(qobj);
 out_unresv:
-	virgl_bo_unreserve(qobj);
+	ttm_eu_backoff_reservation(&validate_list);
 out_free:
-	drm_gem_object_unreference_unlocked(gobj);
+	virgl_unref_list(&validate_list);
+	drm_free_large(buflist);
 	return ret;
 }
 

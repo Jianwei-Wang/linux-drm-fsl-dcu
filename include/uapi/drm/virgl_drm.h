@@ -59,7 +59,10 @@ struct drm_virgl_map {
 struct drm_virgl_execbuffer {
 	uint32_t		flags;		/* for future use */
 	uint32_t size;
-	uint64_t	 __user command; /* void* */
+	uint64_t command; /* void* */
+	uint64_t bo_handles;
+	uint32_t num_bo_handles;
+	uint32_t pad;
 };
 
 /* no params yet */
