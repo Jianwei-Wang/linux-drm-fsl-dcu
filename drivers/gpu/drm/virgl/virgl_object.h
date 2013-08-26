@@ -67,30 +67,6 @@ static inline u64 virgl_bo_mmap_offset(struct virgl_bo *bo)
 	return bo->tbo.addr_space_offset;
 }
 
-static inline int virgl_bo_wait(struct virgl_bo *bo, u32 *mem_type,
-			      bool no_wait)
-{
-	int r;
-
-	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
-	if (unlikely(r != 0)) {
-		if (r != -ERESTARTSYS) {
-			struct virgl_device *qdev = (struct virgl_device *)bo->gem_base.dev->dev_private;
-			dev_err(qdev->dev, "%p reserve failed for wait\n",
-				bo);
-		}
-		return r;
-	}
-	spin_lock(&bo->tbo.bdev->fence_lock);
-	if (mem_type)
-		*mem_type = bo->tbo.mem.mem_type;
-	if (bo->tbo.sync_obj)
-		r = ttm_bo_wait(&bo->tbo, true, true, no_wait);
-	spin_unlock(&bo->tbo.bdev->fence_lock);
-	ttm_bo_unreserve(&bo->tbo);
-	return r;
-}
-
 extern int virgl_bo_create(struct virgl_device *qdev,
 			 unsigned long size,
 			 bool kernel, u32 domain,
