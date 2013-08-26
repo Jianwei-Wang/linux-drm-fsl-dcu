@@ -36,17 +36,20 @@
 #include "virgl_object.h"
 #include "drm_fb_helper.h"
 
+#define VIRGL_FBCON_POLL_PERIOD (HZ / 60)
+
 struct virgl_fbdev {
 	struct drm_fb_helper helper;
 	struct virgl_framebuffer	qfb;
 	struct list_head	fbdev_list;
 	struct virgl_device	*qdev;
+	struct delayed_work work;
 };
 
 #define DL_ALIGN_UP(x, a) ALIGN(x, a)
 #define DL_ALIGN_DOWN(x, a) ALIGN(x-(a-1), a)
 
-static int virgl_dirty_update(struct virgl_framebuffer *fb,
+static int virgl_dirty_update(struct virgl_framebuffer *fb, bool store,
 			     int x, int y, int width, int height)
 {
 	struct drm_device *dev = fb->base.dev;
@@ -71,7 +74,7 @@ static int virgl_dirty_update(struct virgl_framebuffer *fb,
 
 	/* if we are in atomic just store the info
 	   can't test inside spin lock */
-	if (in_atomic())
+	if (in_atomic() || store)
 		store_for_later = true;
 
 	x2 = x + width - 1;
@@ -175,7 +178,7 @@ int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *
 	if (qfb->obj) {
 		struct virgl_bo *qobj = gem_to_virgl_bo(qfb->obj);
 		if (qobj->dumb)
-			return virgl_dirty_update(qfb, left, top, right - left, bottom - top);
+			return virgl_dirty_update(qfb, false, left, top, right - left, bottom - top);
 	}
 	virgl_3d_dirty_front(qdev, qfb, left, top, right - left, bottom - top);
 
@@ -207,13 +210,23 @@ int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int height, uin
 	return 0;
 }
 
+static void virgl_fb_dirty_work(struct work_struct *work)
+{
+	struct delayed_work *delayed_work = to_delayed_work(work);
+	struct virgl_fbdev *vfbdev = container_of(delayed_work, struct virgl_fbdev, work);
+	struct virgl_framebuffer *vfb = &vfbdev->qfb;
+
+	virgl_dirty_update(&vfbdev->qfb, false, vfb->x1, vfb->y1, vfb->x2 - vfb->x1, vfb->y2 - vfb->y1);
+}
+
 static void virgl_3d_fillrect(struct fb_info *info,
 			    const struct fb_fillrect *rect)
 {
 	struct virgl_fbdev *qfbdev = info->par;
 	sys_fillrect(info, rect);
-	virgl_dirty_update(&qfbdev->qfb, rect->dx, rect->dy, rect->width,
+	virgl_dirty_update(&qfbdev->qfb, true, rect->dx, rect->dy, rect->width,
 			 rect->height);
+	schedule_delayed_work(&qfbdev->work, VIRGL_FBCON_POLL_PERIOD);
 }
 
 static void virgl_3d_copyarea(struct fb_info *info,
@@ -221,8 +234,9 @@ static void virgl_3d_copyarea(struct fb_info *info,
 {
 	struct virgl_fbdev *qfbdev = info->par;
 	sys_copyarea(info, area);
-	virgl_dirty_update(&qfbdev->qfb, area->dx, area->dy,
-			 area->width, area->height);
+	virgl_dirty_update(&qfbdev->qfb, true, area->dx, area->dy,
+			   area->width, area->height);
+	schedule_delayed_work(&qfbdev->work, VIRGL_FBCON_POLL_PERIOD);
 }
 
 static void virgl_3d_imageblit(struct fb_info *info,
@@ -230,8 +244,9 @@ static void virgl_3d_imageblit(struct fb_info *info,
 {
 	struct virgl_fbdev *qfbdev = info->par;
 	sys_imageblit(info, image);
-	virgl_dirty_update(&qfbdev->qfb, image->dx, image->dy,
+	virgl_dirty_update(&qfbdev->qfb, true, image->dx, image->dy,
 			 image->width, image->height);
+	schedule_delayed_work(&qfbdev->work, VIRGL_FBCON_POLL_PERIOD);
 }
 
 int virgl_fb_init(struct virgl_device *qdev)
@@ -371,7 +386,7 @@ static int virglfb_create(struct virgl_fbdev *qfbdev,
 
 	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->depth);
 
-	info->flags = FBINFO_DEFAULT;
+	info->flags = FBINFO_DEFAULT | FBINFO_READS_FAST;
 	info->fbops = &virglfb_ops;
 
 	/*
@@ -480,6 +495,7 @@ int virgl_fbdev_init(struct virgl_device *qdev)
 	qfbdev->qdev = qdev;
 	qdev->mode_info.qfbdev = qfbdev;
 	qfbdev->helper.funcs = &virgl_fb_helper_funcs;
+	INIT_DELAYED_WORK(&qfbdev->work, virgl_fb_dirty_work);
 
 	ret = drm_fb_helper_init(qdev->ddev, &qfbdev->helper,
 				 1 /* num_crtc - VIRGL supports just 1 */,
