@@ -73,6 +73,7 @@ int virgl_bo_create(struct virgl_device *qdev,
 {
 	struct virgl_bo *bo;
 	enum ttm_bo_type type;
+	size_t acc_size;
 	int r;
 
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
@@ -82,6 +83,10 @@ int virgl_bo_create(struct virgl_device *qdev,
 	else
 		type = ttm_bo_type_device;
 	*bo_ptr = NULL;
+
+	acc_size = ttm_bo_dma_acc_size(&qdev->mman.bdev, size,
+				       sizeof(struct virgl_bo));
+
 	bo = kzalloc(sizeof(struct virgl_bo), GFP_KERNEL);
 	if (bo == NULL)
 		return -ENOMEM;
@@ -100,7 +105,7 @@ int virgl_bo_create(struct virgl_device *qdev,
 	virgl_ttm_placement_from_domain(bo, domain);
 
 	r = ttm_bo_init(&qdev->mman.bdev, &bo->tbo, size, type,
-			&bo->placement, 0, !kernel, NULL, size,
+			&bo->placement, 0, !kernel, NULL, acc_size,
 			NULL, &virgl_ttm_bo_destroy);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS)
