@@ -77,6 +77,7 @@ struct virgl_bo {
 	uint32_t res_handle; /* used for backing dumb objects */
 	bool dumb;
 	uint32_t stride;
+	bool is_res_bound;
 };
 #define gem_to_virgl_bo(gobj) container_of((gobj), struct virgl_bo, gem_base)
 
@@ -231,6 +232,7 @@ struct virgl_fpriv {
 
 extern struct drm_ioctl_desc virgl_ioctls[];
 extern int virgl_max_ioctl;
+extern int virgl_create_sg;
 
 int virgl_driver_load(struct drm_device *dev, unsigned long flags);
 int virgl_driver_unload(struct drm_device *dev);
@@ -399,4 +401,7 @@ int virgl_enable_vblank(struct drm_device *dev, int crtc);
 void virgl_disable_vblank(struct drm_device *dev, int crtc);
 
 int virgl_get_caps(struct virgl_device *vdev);
+
+int virgl_bo_list_validate(struct list_head *head);
+void virgl_unref_list(struct list_head *head);
 #endif

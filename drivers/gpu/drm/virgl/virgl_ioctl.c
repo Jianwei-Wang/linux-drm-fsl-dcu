@@ -25,6 +25,7 @@
 
 #include "virgl_drv.h"
 #include "virgl_object.h"
+#include "ttm/ttm_execbuf_util.h"
 
 static void convert_to_hw_box(struct virgl_box *dst,
 			      const struct drm_virgl_3d_box *src)
@@ -101,8 +102,19 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	int ret;
 	uint32_t res_id;
 	struct virgl_bo *qobj;
-	uint32_t handle;
-	uint32_t size;
+	uint32_t handle = 0;
+	uint32_t size, pg_size;
+	struct virgl_bo *pg_bo = NULL;
+	void *optr;
+	int si;
+	struct scatterlist *sg;
+	struct list_head validate_list;
+	struct ttm_validate_buffer mainbuf, page_info_buf;
+	struct virgl_fence *fence;
+
+	INIT_LIST_HEAD(&validate_list);
+	memset(&mainbuf, 0, sizeof(struct ttm_validate_buffer));
+	memset(&page_info_buf, 0, sizeof(struct ttm_validate_buffer));
 
 	ret = virgl_resource_id_get(qdev, &res_id);
 	if (ret) 
@@ -110,16 +122,58 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 
 	size = rc->size;
 
+	/* allocate a single page size object */
+	if (size == 0)
+		size = PAGE_SIZE;
+
 	ret = virgl_gem_object_create_with_handle(qdev, file_priv,
 						  0,
 						  size,
 						  &qobj, &handle);
-	if (ret) {
-		virgl_resource_id_put(qdev, res_id);
-		return ret;
+	if (ret)
+		goto fail_id;
+
+	/* use a gem reference since unref list undoes them */
+	drm_gem_object_reference(&qobj->gem_base);
+	mainbuf.bo = &qobj->tbo;
+	list_add(&mainbuf.head, &validate_list);
+
+	if (virgl_create_sg == 1) {
+		ret = virgl_bo_get_sg_table(qdev, qobj);
+		if (ret)
+			goto fail_obj;
+
+		pg_size = sizeof(struct virgl_iov_entry) * qobj->sgt->nents;
+
+		ret = virgl_bo_create(qdev, pg_size, true, 0, &pg_bo);
+		if (ret)
+			goto fail_unref;
+
+		drm_gem_object_reference(&pg_bo->gem_base);
+		page_info_buf.bo = &pg_bo->tbo;
+		list_add(&page_info_buf.head, &validate_list);
 	}
 
-	cmd_p = virgl_alloc_cmd(qdev, NULL, false, NULL, 0, &vbuf);
+	ret = virgl_bo_list_validate(&validate_list);
+	if (ret) {
+		printk("failed to validate\n");
+		goto fail_unref;
+	}
+
+	if (virgl_create_sg == 1) {
+		ret = virgl_bo_kmap(pg_bo, &optr);
+		for_each_sg(qobj->sgt->sgl, sg, qobj->sgt->nents, si) {
+			struct virgl_iov_entry *iov = ((struct virgl_iov_entry *)optr) + si;
+			iov->addr = sg_phys(sg);
+			iov->length = sg->length;
+			iov->pad = 0;
+		}
+		virgl_bo_kunmap(pg_bo);
+
+		qobj->is_res_bound = true;
+	}
+
+	cmd_p = virgl_alloc_cmd(qdev, pg_bo, false, NULL, 0, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
 	cmd_p->type = VIRGL_CMD_CREATE_RESOURCE;
 	cmd_p->u.res_create.handle = res_id;
@@ -132,15 +186,35 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.res_create.array_size = rc->array_size;
 	cmd_p->u.res_create.last_level = rc->last_level;
 	cmd_p->u.res_create.nr_samples = rc->nr_samples;
+	cmd_p->u.res_create.nr_sg_entries = qobj->sgt ? qobj->sgt->nents : 0;
+
+	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 
 	virgl_queue_cmd_buf(qdev, vbuf);
+
+	ttm_eu_fence_buffer_objects(&validate_list, fence);
 
 	qobj->res_handle = res_id;
 	qobj->stride = rc->stride;
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
 
+	virgl_unref_list(&validate_list);
+	if (virgl_create_sg == 1)
+		virgl_bo_unref(&pg_bo);
+
 	return 0;
+fail_unref:
+	virgl_unref_list(&validate_list);
+fail_pg_obj:
+	if (virgl_create_sg == 1)
+		if (pg_bo)
+			virgl_bo_unref(&pg_bo);
+fail_obj:
+	drm_gem_object_handle_unreference_unlocked(&qobj->gem_base);
+fail_id:
+	virgl_resource_id_put(qdev, res_id);
+	return ret;
 }
 
 static int virgl_resource_info_ioctl(struct drm_device *dev, void *data,

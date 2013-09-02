@@ -74,7 +74,7 @@ struct virgl_resource_create {
 	uint32_t array_size;
 	uint32_t last_level;
 	uint32_t nr_samples;
-	uint32_t pad;
+        uint32_t nr_sg_entries;
 };
 
 struct virgl_resource_unref {
@@ -120,6 +120,12 @@ struct virgl_cmd_get_cap {
 
 #define VIRGL_COMMAND_EMIT_FENCE (1 << 0)
 
+struct virgl_iov_entry {
+	VIRGLPHYSICAL addr;
+	uint32_t length;
+	uint32_t pad;
+};
+	
 struct virgl_command {
 	uint32_t type;
 	uint32_t flags;

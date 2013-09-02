@@ -49,6 +49,11 @@ int virgl_modeset = -1;
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, virgl_modeset, int, 0400);
 
+int virgl_create_sg = 0;
+
+MODULE_PARM_DESC(sgc, "Use new SG creation feature");
+module_param_named(sgc, virgl_create_sg, int, 0400);
+
 static struct drm_driver virgl_driver;
 static struct pci_driver virgl_pci_driver;
 

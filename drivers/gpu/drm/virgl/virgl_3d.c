@@ -260,8 +260,12 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 				     int size, bool inout, u32 *base_offset, u32 max_bo_len)
 {
 	struct virgl_vbuffer *vbuf;
-	int sgpages = bo ? bo->tbo.num_pages : 0;
+	int sgpages = 0;
 	int ret;
+
+	if (bo)
+		if (!bo->is_res_bound)
+			sgpages = bo->tbo.num_pages;
 
 	sgpages++;
 	
@@ -274,7 +278,7 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 	vbuf->sgpages = sgpages;
 	vbuf->size = size;
 
-	if (bo) {
+	if (bo && !bo->is_res_bound) {
 		struct scatterlist *sg;
 		unsigned int i;
 		uint32_t offset = 0;
@@ -537,7 +541,7 @@ fail:
 	return ret;
 }
 
-static int virgl_bo_list_validate(struct list_head *head)
+int virgl_bo_list_validate(struct list_head *head)
 {
 	struct ttm_validate_buffer *buf;
 	struct ttm_buffer_object *bo;
@@ -561,7 +565,7 @@ static int virgl_bo_list_validate(struct list_head *head)
 	return 0;
 }
 
-static void virgl_unref_list(struct list_head *head)
+void virgl_unref_list(struct list_head *head)
 {
 	struct ttm_validate_buffer *buf;
 	struct ttm_buffer_object *bo;
