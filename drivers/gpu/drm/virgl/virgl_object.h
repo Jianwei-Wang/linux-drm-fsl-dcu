@@ -57,11 +57,6 @@ static inline unsigned long virgl_bo_size(struct virgl_bo *bo)
 	return bo->tbo.num_pages << PAGE_SHIFT;
 }
 
-static inline bool virgl_bo_is_reserved(struct virgl_bo *bo)
-{
-	return !!atomic_read(&bo->tbo.reserved);
-}
-
 static inline u64 virgl_bo_mmap_offset(struct virgl_bo *bo)
 {
 	return bo->tbo.addr_space_offset;

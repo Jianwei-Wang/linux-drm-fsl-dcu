@@ -111,6 +111,7 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	struct list_head validate_list;
 	struct ttm_validate_buffer mainbuf, page_info_buf;
 	struct virgl_fence *fence;
+	struct ww_acquire_ctx ticket;
 
 	INIT_LIST_HEAD(&validate_list);
 	memset(&mainbuf, 0, sizeof(struct ttm_validate_buffer));
@@ -154,7 +155,7 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 		list_add(&page_info_buf.head, &validate_list);
 	}
 
-	ret = virgl_bo_list_validate(&validate_list);
+	ret = virgl_bo_list_validate(&ticket, &validate_list);
 	if (ret) {
 		printk("failed to validate\n");
 		goto fail_unref;
@@ -192,7 +193,7 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 
 	virgl_queue_cmd_buf(qdev, vbuf);
 
-	ttm_eu_fence_buffer_objects(&validate_list, fence);
+	ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 
 	qobj->res_handle = res_id;
 	qobj->stride = rc->stride;

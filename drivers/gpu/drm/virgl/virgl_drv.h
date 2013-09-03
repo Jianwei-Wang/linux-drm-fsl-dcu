@@ -402,6 +402,6 @@ void virgl_disable_vblank(struct drm_device *dev, int crtc);
 
 int virgl_get_caps(struct virgl_device *vdev);
 
-int virgl_bo_list_validate(struct list_head *head);
+int virgl_bo_list_validate(struct ww_acquire_ctx *ticket, struct list_head *head);
 void virgl_unref_list(struct list_head *head);
 #endif

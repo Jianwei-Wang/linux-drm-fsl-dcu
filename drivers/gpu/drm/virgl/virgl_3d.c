@@ -5,6 +5,8 @@
 #include "virgl_drv.h"
 #include "virgl_object.h"
 #include "ttm/ttm_execbuf_util.h"
+
+static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf);
 /* virtio config->get_features() implementation */
 static u32 vp_get_features(struct virtio_device *vdev)
 {
@@ -267,8 +269,6 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 		if (!bo->is_res_bound)
 			sgpages = bo->tbo.num_pages;
 
-	sgpages++;
-	
 	vbuf = kmalloc(sizeof(*vbuf) + sizeof(struct scatterlist) * sgpages + size, GFP_KERNEL);
 	if (!vbuf)
 		goto fail;
@@ -282,6 +282,7 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 		struct scatterlist *sg;
 		unsigned int i;
 		uint32_t offset = 0;
+
 		vbuf->bo = virgl_bo_ref(bo);
 		vbuf->bo_max_len = max_bo_len;
 		/* TODO work out offset */
@@ -309,6 +310,8 @@ struct virgl_vbuffer *allocate_vbuf(struct virgl_device *qdev,
 			vbuf->bo_start_offset = offset;
 		} else
 			vbuf->bo_start_offset = 0;
+
+		virt_map_sgt(&vbuf->sg[0], vbuf);
 	} else {
 		vbuf->bo = NULL;
 		vbuf->bo_max_len = 0;
@@ -376,17 +379,21 @@ void virgl_dequeue_work_func(struct work_struct *work)
 	wake_up(&qdev->cmd_ack_queue);
 }
 
-static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf,
-			 unsigned int *p_idx)
+static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf)
 {
 	struct scatterlist *sg_elem;
 	int i;
-	int idx = *p_idx;
+	int idx = 0;
 	uint32_t offset = buf->bo->sgt->sgl->offset;
+	bool just_count = true;
+
+restart:
 	for_each_sg(buf->bo->sgt->sgl, sg_elem, buf->bo->sgt->nents, i) {
 		if (offset + sg_elem->length <= buf->bo_start_offset)
 			goto skip;
-		sg[idx++] = *sg_elem;
+		if (just_count == false) 
+			sg_set_page(&sg[idx], sg_page(sg_elem), sg_elem->length, sg_elem->offset);
+		idx++;
 		if (buf->bo_max_len)
 			if (offset + sg_elem->length > buf->bo_start_offset + buf->bo_user_offset + buf->bo_max_len)
 				break;
@@ -394,33 +401,39 @@ static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf,
 		offset += sg_elem->length;
 	}
 
-	*p_idx = idx;
+	if (just_count == true) {
+		sg_init_table(sg, idx);
+		idx = 0;
+		just_count = false;
+		offset = buf->bo->sgt->sgl->offset;
+		goto restart;
+	}
+	printk(KERN_ERR "remapped sgt %d vs %d\n", buf->bo->sgt->nents, idx);
 }
 
 int virgl_queue_cmd_buf(struct virgl_device *qdev,
 			struct virgl_vbuffer *buf)
 {
 	struct virtqueue *vq = qdev->cmdq;
-	struct scatterlist *sg = buf->sg;
 	int ret;
 	int idx = 0, outcnt = 0, incnt = 0, old_idx;
+	struct scatterlist *sgs[2], vcmd, vbuf;
 
-	/* always put the command into in */
-	sg_set_buf(&sg[idx++], buf->buf, buf->size);
-	if (buf->inout == true)
-		outcnt = idx;
+	sg_init_one(&vcmd, buf->buf, buf->size);
+	sgs[0] = &vcmd;
+	outcnt = 1;
+
 	if (buf->bo) {
-		old_idx = idx;
-		virt_map_sgt(sg, buf, &idx);
+		sgs[1] = &buf->sg[0];
+		if (buf->inout == true)
+			incnt = 1;
+		else
+			outcnt = 2;
 	}
-	if (buf->inout == true)
-		incnt = idx - outcnt;
-	else
-		outcnt = idx;
 
 	spin_lock(&qdev->cmdq_lock);
  retry:
-	ret = virtqueue_add_buf(vq, sg, outcnt, incnt, buf, GFP_ATOMIC);
+	ret = virtqueue_add_sgs(vq, sgs, outcnt, incnt, buf, GFP_ATOMIC);
 	if (ret == -ENOSPC) {
 		virtqueue_kick(vq);
 		spin_unlock(&qdev->cmdq_lock);
@@ -541,14 +554,15 @@ fail:
 	return ret;
 }
 
-int virgl_bo_list_validate(struct list_head *head)
+int virgl_bo_list_validate(struct ww_acquire_ctx *ticket,
+			   struct list_head *head)
 {
 	struct ttm_validate_buffer *buf;
 	struct ttm_buffer_object *bo;
 	struct virgl_bo *qobj;
 	int ret;
 	
-	ret = ttm_eu_reserve_buffers(head);
+	ret = ttm_eu_reserve_buffers(ticket, head);
 	if (ret != 0)
 		return ret;
 
@@ -595,6 +609,7 @@ int virgl_execbuffer(struct drm_device *dev,
 	struct ttm_validate_buffer *buflist = NULL;
 	struct ttm_validate_buffer cmdbuffer;
 	int i;
+	struct ww_acquire_ctx ticket;
 	//printk("user cmd size %d\n", user_cmd.command_size);
 
 	memset(&cmdbuffer, 0, sizeof(struct ttm_validate_buffer));
@@ -644,7 +659,7 @@ int virgl_execbuffer(struct drm_device *dev,
 	cmdbuffer.bo = &qobj->tbo;
 	list_add(&cmdbuffer.head, &validate_list);
 
-	ret = virgl_bo_list_validate(&validate_list);
+	ret = virgl_bo_list_validate(&ticket, &validate_list);
 	if (ret)
 		goto out_free;
 
@@ -677,7 +692,7 @@ int virgl_execbuffer(struct drm_device *dev,
 		virgl_queue_cmd_buf(qdev, vbuf);
 	}
 
-	ttm_eu_fence_buffer_objects(&validate_list, fence);
+	ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 
 	/* fence the command bo */
 	virgl_unref_list(&validate_list);
@@ -686,7 +701,7 @@ int virgl_execbuffer(struct drm_device *dev,
 out_kunmap:
 	virgl_bo_kunmap(qobj);
 out_unresv:
-	ttm_eu_backoff_reservation(&validate_list);
+	ttm_eu_backoff_reservation(&ticket, &validate_list);
 out_free:
 	virgl_unref_list(&validate_list);
 	drm_free_large(buflist);
