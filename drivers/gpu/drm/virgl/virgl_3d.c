@@ -421,7 +421,6 @@ restart:
 		offset = buf->bo->sgt->sgl->offset;
 		goto restart;
 	}
-	printk(KERN_ERR "remapped sgt %d vs %d\n", buf->bo->sgt->nents, idx);
 }
 
 int virgl_queue_cmd_buf(struct virgl_device *qdev,
