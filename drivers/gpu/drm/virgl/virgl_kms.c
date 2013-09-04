@@ -50,7 +50,8 @@ int virgl_device_init(struct virgl_device *qdev,
 	spin_lock_init(&qdev->resource_idr_lock);
 	idr_init(&qdev->ctx_id_idr);
 	spin_lock_init(&qdev->ctx_id_idr_lock);
-
+	spin_lock_init(&qdev->fence_drv.event_lock);
+	INIT_LIST_HEAD(&qdev->fence_drv.event_list);
 	r = pci_enable_msi(qdev->pdev);
 	if (!r) {
 	  dev_info(qdev->dev,"3D device MSI enabled\n");

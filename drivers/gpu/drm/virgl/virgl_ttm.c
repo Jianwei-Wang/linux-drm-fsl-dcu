@@ -356,7 +356,7 @@ static void *virgl_sync_obj_ref(void *sync_obj)
 
 static bool virgl_sync_obj_signaled(void *sync_obj)
 {
-	return virgl_fence_signaled((struct virgl_fence *)sync_obj);
+	return virgl_fence_signaled((struct virgl_fence *)sync_obj, true);
 }
 
 static void virgl_bo_move_notify(struct ttm_buffer_object *bo,

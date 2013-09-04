@@ -116,6 +116,10 @@ struct virgl_fence_driver {
 	uint64_t last_activity;
 	bool initialized;
 	uint64_t			sync_seq;
+       
+	spinlock_t event_lock;
+	struct list_head event_list;
+	uint64_t first_seq_event_list;
 };
 
 struct virgl_fence {
@@ -336,9 +340,9 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 		     int width, int height);
 int virgl_3d_dirty_front(struct virgl_device *qdev,
 		       struct virgl_framebuffer *fb, int x, int y,
-		       int width, int height);
+			 int width, int height, struct virgl_fence **fence);
 int virgl_3d_surface_dirty(struct virgl_framebuffer *qfb, struct drm_clip_rect *clips,
-			 unsigned num_clips);
+			   unsigned num_clips, struct virgl_fence **fence);
 int virgl_context_create(struct virgl_device *qdev, uint32_t nlen, const char *name, uint32_t *id);
 int virgl_context_destroy(struct virgl_device *qdev, uint32_t id);
 int virgl_context_bind_resource(struct virgl_device *qdev, uint32_t ctx_id,
@@ -373,7 +377,7 @@ extern struct virgl_bo *virgl_bo_ref(struct virgl_bo *bo);
 struct virgl_fence *virgl_fence_ref(struct virgl_fence *fence);
 void virgl_fence_unref(struct virgl_fence **fence);
  
-bool virgl_fence_signaled(struct virgl_fence *fence);
+bool virgl_fence_signaled(struct virgl_fence *fence, bool process);
 int virgl_fence_wait(struct virgl_fence *fence, bool interruptible);
 void virgl_fence_process(struct virgl_device *qdev);
 
@@ -404,4 +408,8 @@ int virgl_get_caps(struct virgl_device *vdev);
 
 int virgl_bo_list_validate(struct ww_acquire_ctx *ticket, struct list_head *head);
 void virgl_unref_list(struct list_head *head);
+int virgl_fence_event_queue(struct drm_file *file,
+			    struct virgl_fence *fence,
+			    struct drm_pending_vblank_event *event);
+
 #endif

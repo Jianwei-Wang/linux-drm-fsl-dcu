@@ -6,6 +6,19 @@
 #include "virgl_object.h"
 #include "ttm/ttm_execbuf_util.h"
 
+struct virgl_fence_event {
+
+	struct drm_device *dev;
+	struct drm_file *file;
+	struct virgl_fence *fence;
+	struct list_head head;
+
+	void (*seq_done)(struct virgl_fence_event *event);
+	void (*cleanup)(struct virgl_fence_event *event);
+	struct list_head fpriv_head;
+	struct drm_pending_vblank_event *event;
+};
+
 static void virt_map_sgt(struct scatterlist *sg, struct virgl_vbuffer *buf);
 /* virtio config->get_features() implementation */
 static u32 vp_get_features(struct virtio_device *vdev)
@@ -732,12 +745,13 @@ void virgl_fence_unref(struct virgl_fence **fence)
 	}
 }
 
-static bool virgl_fence_seq_signaled(struct virgl_device *qdev, u64 seq)
+static bool virgl_fence_seq_signaled(struct virgl_device *qdev, u64 seq, bool process)
 {
 	if (atomic64_read(&qdev->fence_drv.last_seq) >= seq)
 		return true;
 
-	virgl_fence_process(qdev);
+	if (process)
+		virgl_fence_process(qdev);
 
 	if (atomic64_read(&qdev->fence_drv.last_seq) >= seq)
 		return true;
@@ -771,11 +785,11 @@ static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 		//		radeon_irq_kms_sw_irq_get(rdev, ring);
 		if (intr) {
 			r = wait_event_interruptible_timeout(qdev->fence_queue,
-				(signaled = virgl_fence_seq_signaled(qdev, target_seq)),
+							     (signaled = virgl_fence_seq_signaled(qdev, target_seq, true)),
 				timeout);
                 } else {
 			r = wait_event_timeout(qdev->fence_queue,
-				(signaled = virgl_fence_seq_signaled(qdev, target_seq)),
+					       (signaled = virgl_fence_seq_signaled(qdev, target_seq, true)),
 				timeout);
 		}
 		//		radeon_irq_kms_sw_irq_put(rdev, ring);
@@ -805,7 +819,7 @@ static int virgl_fence_wait_seq(struct virgl_device *qdev, u64 target_seq,
 	return 0;
 }
 
-bool virgl_fence_signaled(struct virgl_fence *fence)
+bool virgl_fence_signaled(struct virgl_fence *fence, bool process)
 {
 	if (!fence)
 		return true;
@@ -813,7 +827,7 @@ bool virgl_fence_signaled(struct virgl_fence *fence)
 	if (fence->seq == VIRGL_FENCE_SIGNALED_SEQ)
 		return true;
 
-	if (virgl_fence_seq_signaled(fence->qdev, fence->seq)) {
+	if (virgl_fence_seq_signaled(fence->qdev, fence->seq, process)) {
 		fence->seq = VIRGL_FENCE_SIGNALED_SEQ;
 		return true;
 	}
@@ -878,8 +892,8 @@ int virgl_3d_set_front(struct virgl_device *qdev,
 }
 
 int virgl_3d_dirty_front(struct virgl_device *qdev,
-		       struct virgl_framebuffer *fb, int x, int y,
-		       int width, int height)
+			 struct virgl_framebuffer *fb, int x, int y,
+			 int width, int height, struct virgl_fence **fence)
 {
 	struct virgl_command *cmd_p;
 	struct virgl_vbuffer *vbuf;
@@ -894,10 +908,28 @@ int virgl_3d_dirty_front(struct virgl_device *qdev,
 	cmd_p->u.flush_buffer.box.w = width;
 	cmd_p->u.flush_buffer.box.h = height;
 	cmd_p->u.flush_buffer.ctx_id = 0;
+
+	if (fence)
+		virgl_fence_emit(qdev, cmd_p, fence);
 	virgl_queue_cmd_buf(qdev, vbuf);
 	return 0;
 }
 
+void virgl_fence_event_process(struct virgl_device *vdev, u64 last_seq)
+{
+	unsigned long irq_flags;
+	struct virgl_fence_event *fe, *tmp;
+
+	spin_lock_irqsave(&vdev->fence_drv.event_lock, irq_flags);
+	list_for_each_entry_safe(fe, tmp, &vdev->fence_drv.event_list, head) {
+		if (virgl_fence_signaled(fe->fence, false)) {
+			fe->seq_done(fe);
+			list_del(&fe->head);
+			fe->cleanup(fe);
+		}	       
+	}
+	spin_unlock_irqrestore(&vdev->fence_drv.event_lock, irq_flags);
+}
 
 void virgl_fence_process(struct virgl_device *qdev)
 {
@@ -917,7 +949,7 @@ void virgl_fence_process(struct virgl_device *qdev)
 		if (seq <= last_seq || seq > last_emitted) {
 			break;
 		}
-			wake = true;
+		wake = true;
 		last_seq = seq;
 		if ((count_loop++) > 10) {
 			break;
@@ -925,6 +957,7 @@ void virgl_fence_process(struct virgl_device *qdev)
 		}
 	} while (atomic64_xchg(&qdev->fence_drv.last_seq, seq) > seq);
 
+	virgl_fence_event_process(qdev, last_seq);
 	if (wake) {
 		qdev->fence_drv.last_activity = jiffies;
 		wake_up_all(&qdev->fence_queue);
@@ -1105,4 +1138,60 @@ out:
 	return ret;
 
 }
-  
+
+static void virgl_fence_event_cleanup(struct virgl_fence_event *event)
+{
+	kfree(event);
+}
+
+static void virgl_fence_event_signaled(struct virgl_fence_event *fence_event)
+{
+	struct drm_device *dev = fence_event->dev;
+	unsigned long irq_flags;
+
+	spin_lock_irqsave(&dev->event_lock, irq_flags);
+
+	drm_send_vblank_event(dev, -1, fence_event->event);
+
+	spin_unlock_irqrestore(&dev->event_lock, irq_flags);
+}
+
+static void virgl_fence_event_add(struct virgl_fence *fence,
+				  struct virgl_fence_event *event)
+{
+	struct virgl_device *vdev = fence->qdev;
+
+	unsigned long irq_flags;
+	/* need to check if the fence has signaled already before adding
+	   it to the list */
+	if (virgl_fence_signaled(fence, true)) {
+		event->seq_done(event);
+		event->cleanup(event);
+	} else {
+		spin_lock_irqsave(&vdev->fence_drv.event_lock, irq_flags);
+		list_add_tail(&event->head, &vdev->fence_drv.event_list);
+		spin_unlock_irqrestore(&vdev->fence_drv.event_lock, irq_flags);
+	}
+}
+				  
+int virgl_fence_event_queue(struct drm_file *file,
+			    struct virgl_fence *fence,
+			    struct drm_pending_vblank_event *event)
+{
+	struct virgl_fence_event *fence_event;
+
+	fence_event = kzalloc(sizeof(*fence_event), GFP_KERNEL);
+	if (event == NULL)
+		return -ENOMEM;
+
+	fence_event->event = event;
+	fence_event->file = file;
+	fence_event->dev = fence->qdev->ddev;
+	fence_event->event = event;
+	fence_event->seq_done = virgl_fence_event_signaled;
+	fence_event->cleanup = virgl_fence_event_cleanup;
+	fence_event->fence = fence;
+
+	virgl_fence_event_add(fence, fence_event);
+	return 0;
+}

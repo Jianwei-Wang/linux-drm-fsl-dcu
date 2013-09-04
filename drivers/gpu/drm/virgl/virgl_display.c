@@ -165,12 +165,41 @@ static int virgl_crtc_cursor_move(struct drm_crtc *crtc,
 	return 0;
 }
 
+static int virgl_crtc_page_flip(struct drm_crtc *crtc,
+				struct drm_framebuffer *fb,
+				struct drm_pending_vblank_event *event)
+{
+	struct virgl_device *qdev = crtc->dev->dev_private;
+	struct drm_framebuffer *old_fb = crtc->fb;
+	struct virgl_framebuffer *vfb = to_virgl_framebuffer(fb);
+	struct drm_file *file;
+	struct drm_clip_rect clips;
+	struct virgl_fence *fence;
+
+	if (event == NULL)
+		return -EINVAL;
+
+	file = event->base.file_priv;
+
+	crtc->fb = fb;
+	clips.x1 = clips.y1 = 0;
+	clips.x2 = fb->width;
+	clips.y2 = fb->height;
+
+	virgl_3d_set_front(qdev, vfb, 0, 0, fb->width, fb->height);
+	virgl_3d_surface_dirty(vfb, &clips, 1, &fence);
+	
+	virgl_fence_event_queue(file, fence, event);
+	return 0;
+}
+
 
 static const struct drm_crtc_funcs virgl_crtc_funcs = {
 	.cursor_set = virgl_crtc_cursor_set,
 	.cursor_move = virgl_crtc_cursor_move,
 	.gamma_set = virgl_crtc_gamma_set,
 	.set_config = drm_crtc_helper_set_config,
+	.page_flip = virgl_crtc_page_flip,
 	.destroy = virgl_crtc_destroy,
 };
 
@@ -190,7 +219,7 @@ int virgl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 				  struct drm_clip_rect *clips,
 				  unsigned num_clips)
 {
-	return virgl_3d_surface_dirty(to_virgl_framebuffer(fb), clips, num_clips);
+	return virgl_3d_surface_dirty(to_virgl_framebuffer(fb), clips, num_clips, NULL);
 
 }
 

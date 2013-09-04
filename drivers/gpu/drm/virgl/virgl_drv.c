@@ -86,6 +86,7 @@ static const struct file_operations virgl_fops = {
 	.poll = drm_poll,
 	.fasync = drm_fasync,
 	.mmap = virgl_mmap,
+	.read = drm_read,
 };
 
 static struct drm_driver virgl_driver = {
