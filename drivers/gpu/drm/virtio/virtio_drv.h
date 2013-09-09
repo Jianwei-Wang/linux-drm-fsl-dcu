@@ -37,7 +37,31 @@ struct virtgpu_bo {
 	uint32_t hw_res_handle;
 };
 #define gem_to_virtgpu_bo(gobj) container_of((gobj), struct virtgpu_bo, gem_base)
- 
+
+struct virtgpu_fence_driver {
+	atomic64_t last_seq;
+	uint64_t last_activity;
+	bool initialized;
+	uint64_t			sync_seq;
+       
+	spinlock_t event_lock;
+	struct list_head event_list;
+	uint64_t first_seq_event_list;
+};
+
+struct virtgpu_fence {
+	struct virtgpu_device *qdev;
+	struct kref kref;
+	uint64_t seq;
+};
+
+struct virtgpu_vbuffer {
+	char *buf;
+	int size;
+
+	struct list_head destroy_list;
+};
+
 struct virtgpu_crtc {
 	struct drm_crtc base;
 	int cur_x;
@@ -83,6 +107,17 @@ struct virtgpu_device {
 	struct virtgpu_fbdev *vgfbdev;
 	
 	struct virtqueue *ctrlq;
+	spinlock_t ctrlq_lock;
+	wait_queue_head_t ctrl_ack_queue;
+	struct work_struct dequeue_work;
+
+	struct idr	resource_idr;
+	spinlock_t resource_idr_lock;
+
+	struct virtgpu_fence_driver fence_drv;
+	wait_queue_head_t fence_queue;
+
+	int num_outputs;
 };
 
 int virtgpu_driver_load(struct drm_device *dev, unsigned long flags);
@@ -105,4 +140,9 @@ extern void virtgpu_bo_unref(struct virtgpu_bo **bo);
 #define VIRTGPUFB_CONN_LIMIT 1
 int virtgpu_fbdev_init(struct virtgpu_device *vgdev);
 void virtgpu_fbdev_fini(struct virtgpu_device *vgdev);
+
+/* virtio vg */
+void virtgpu_ctrl_ack(struct virtqueue *vq);
+void virtgpu_dequeue_work_func(struct work_struct *work);
+
 #endif
