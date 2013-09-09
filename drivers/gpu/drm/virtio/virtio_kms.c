@@ -5,10 +5,6 @@
 
 int virtgpu_max_ioctls;
 
-static void virtgpu_ctrl_ack(struct virtqueue *vq)
-{
-
-}
 
 int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 {
@@ -27,6 +23,9 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	vgdev->ddev = dev;
 	dev->dev_private = vgdev;
 	vgdev->vdev = dev->virtdev;
+
+	init_waitqueue_head(&vgdev->ctrl_ack_queue);
+	INIT_WORK(&vgdev->dequeue_work, virtgpu_dequeue_work_func);
 
 	nvqs = 1;
 
