@@ -225,3 +225,5 @@ source "drivers/gpu/drm/tilcdc/Kconfig"
 source "drivers/gpu/drm/qxl/Kconfig"
 
 source "drivers/gpu/drm/virgl/Kconfig"
+
+source "drivers/gpu/drm/virtio/Kconfig"

@@ -157,6 +157,7 @@ int drm_err(const char *func, const char *format, ...);
 #define DRIVER_BUS_PCI 0x1
 #define DRIVER_BUS_PLATFORM 0x2
 #define DRIVER_BUS_USB 0x3
+#define DRIVER_BUS_VIRTIO 0x4
 
 /***********************************************************************/
 /** \name Begin the DRM... */

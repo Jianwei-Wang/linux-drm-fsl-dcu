@@ -55,4 +55,5 @@ obj-$(CONFIG_DRM_OMAP)	+= omapdrm/
 obj-$(CONFIG_DRM_TILCDC)	+= tilcdc/
 obj-$(CONFIG_DRM_QXL) += qxl/
 obj-$(CONFIG_DRM_VIRGL) += virgl/
+obj-$(CONFIG_DRM_VIRTIO_GPU) += virtio/
 obj-y			+= i2c/
