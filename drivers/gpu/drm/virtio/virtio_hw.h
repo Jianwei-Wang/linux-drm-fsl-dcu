@@ -58,6 +58,21 @@ struct virtgpu_transfer_send_2d {
 	uint32_t y;
 };
 
+struct virtgpu_mem_entry {
+	uint64_t addr;
+	uint32_t length;
+	uint32_t pad;
+};
+
+struct virtgpu_resource_attach_backing {
+	uint32_t resource_id;
+	uint32_t nr_entries;
+};
+
+struct virtgpu_resource_inval_backing {
+	uint32_t resource_id;
+};
+
 #define VIRTGPU_MAX_SCANOUTS 16
 struct virtgpu_display_info {
 	uint32_t num_scanouts;
@@ -83,6 +98,8 @@ struct virtgpu_command {
 		struct virtgpu_resource_unref resource_unref;
 		struct virtgpu_set_scanout set_scanout;
 		struct virtgpu_transfer_send_2d transfer_send_2d;
+		struct virtgpu_resource_attach_backing resource_attach_backing;
+		struct virtgpu_resource_inval_backing resource_inval_backing;
 	} u;
 };
 
