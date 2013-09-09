@@ -1,6 +1,6 @@
 #include <drm/drmP.h>
 #include <drm/drm_fb_helper.h>
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 
 struct virtgpu_fbdev {
 	struct drm_fb_helper helper;

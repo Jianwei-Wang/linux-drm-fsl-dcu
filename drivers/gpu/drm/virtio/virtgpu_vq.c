@@ -1,5 +1,5 @@
 #include <drm/drmP.h>
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 #include <linux/virtio.h>
 #include <linux/virtio_ring.h>
 

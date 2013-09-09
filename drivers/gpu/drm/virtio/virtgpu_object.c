@@ -1,5 +1,5 @@
 #include <drm/drmP.h>
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 
 static void virtgpu_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 {

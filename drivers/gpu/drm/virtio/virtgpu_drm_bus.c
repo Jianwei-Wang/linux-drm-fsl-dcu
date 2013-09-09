@@ -1,5 +1,4 @@
 #include <drm/drmP.h>
-#include "virtio_drv.h"
 
 static int drm_virtio_get_irq(struct drm_device *dev)
 {

@@ -1,6 +1,6 @@
 
 #include <drm/drmP.h>
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 
 int virtgpu_gem_object_init(struct drm_gem_object *obj)
 {

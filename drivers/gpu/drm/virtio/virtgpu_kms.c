@@ -1,7 +1,7 @@
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <drm/drmP.h>
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 
 int virtgpu_max_ioctls;
 

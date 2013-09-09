@@ -1,7 +1,7 @@
 #include <drm/drmP.h>
 #include <drm/drm.h>
 
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 
 
 #define DRM_FILE_PAGE_OFFSET (0x100000000ULL >> PAGE_SHIFT)

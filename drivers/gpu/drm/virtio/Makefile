@@ -4,6 +4,6 @@
 
 ccflags-y := -Iinclude/drm
 
-virtio-gpu-y := virtio_drv.o virtio_kms.o virtio_drm_bus.o virtio_gem.o virtio_ttm.o virtio_object.o virtio_fb.o virtio_display.o virtio_vq.o
+virtio-gpu-y := virtgpu_drv.o virtgpu_kms.o virtgpu_drm_bus.o virtgpu_gem.o virtgpu_ttm.o virtgpu_object.o virtgpu_fb.o virtgpu_display.o virtgpu_vq.o
 
 obj-$(CONFIG_DRM_VIRTIO_GPU)+= virtio-gpu.o 

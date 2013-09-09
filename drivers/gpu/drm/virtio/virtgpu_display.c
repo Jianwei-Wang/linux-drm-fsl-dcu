@@ -23,7 +23,7 @@
  *          Alon Levy
  */
 
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 #include "drm_crtc_helper.h"
 
 static int virtgpu_add_common_modes(struct drm_connector *connector)
