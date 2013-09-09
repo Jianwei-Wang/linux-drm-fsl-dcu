@@ -32,7 +32,7 @@
 #include "drmP.h"
 #include "drm/drm.h"
 
-#include "virtio_drv.h"
+#include "virtgpu_drv.h"
 static struct drm_driver driver;
 
 int virtgpu_modeset = -1;
