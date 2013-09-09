@@ -35,26 +35,26 @@
 #include "virtio_drv.h"
 static struct drm_driver driver;
 
-int virtio_gpu_modeset = -1;
+int virtgpu_modeset = -1;
 
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
-module_param_named(modeset, virtio_gpu_modeset, int, 0400);
+module_param_named(modeset, virtgpu_modeset, int, 0400);
 
-extern int virtio_gpu_max_ioctls;
+extern int virtgpu_max_ioctls;
 
-static int virtio_gpu_probe(struct virtio_device *vdev)
+static int virtgpu_probe(struct virtio_device *vdev)
 {
 	struct drm_device *dev;
 	int ret;
 
 #ifdef CONFIG_VGA_CONSOLE
-	if (vgacon_text_force() && virtio_gpu_modeset == -1)
+	if (vgacon_text_force() && virtgpu_modeset == -1)
 		return -EINVAL;
 #endif
 
-	if (virtio_gpu_modeset == 0)
+	if (virtgpu_modeset == 0)
 		return -EINVAL;
-	driver.num_ioctls = virtio_gpu_max_ioctls;
+	driver.num_ioctls = virtgpu_max_ioctls;
 
 	virtio_set_driver_bus(&driver);
 	INIT_LIST_HEAD(&driver.device_list);
@@ -62,6 +62,7 @@ static int virtio_gpu_probe(struct virtio_device *vdev)
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 
 	dev->dev = &vdev->dev;
+	dev->virtdev = vdev;
 	vdev->priv = dev;
 	mutex_lock(&drm_global_mutex);
 
@@ -109,7 +110,7 @@ err_g1:
 	return 0;
 }
 
-static void virtio_gpu_remove(struct virtio_device *vdev)
+static void virtgpu_remove(struct virtio_device *vdev)
 {
 	struct drm_device *dev = vdev->priv;
 	drm_put_dev(dev);
@@ -120,21 +121,21 @@ static struct virtio_device_id id_table[] = {
 	{ 0 },
 };
 
-static struct virtio_driver virtio_gpu_driver = {
+static struct virtio_driver virtgpu_driver = {
 	.driver.name = KBUILD_MODNAME,
 	.driver.owner = THIS_MODULE,
 	.id_table = id_table,
-	.probe = virtio_gpu_probe,
-	.remove = virtio_gpu_remove,
+	.probe = virtgpu_probe,
+	.remove = virtgpu_remove,
 };
 
-module_virtio_driver(virtio_gpu_driver);
+module_virtio_driver(virtgpu_driver);
 
 MODULE_DEVICE_TABLE(virtio, id_table);
 MODULE_DESCRIPTION("Virtio GPU driver");
 MODULE_LICENSE("GPL");
 
-static const struct file_operations virtio_gpu_driver_fops = {
+static const struct file_operations virtgpu_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
 //	.mmap = udl_drm_gem_mmap,
@@ -150,11 +151,13 @@ static const struct file_operations virtio_gpu_driver_fops = {
 };
 
 static struct drm_driver driver = {
-	.driver_features = DRIVER_MODESET,
-	.load = virtio_gpu_driver_load,
-	.unload = virtio_gpu_driver_unload,
+	.driver_features = DRIVER_MODESET | DRIVER_GEM,
+	.load = virtgpu_driver_load,
+	.unload = virtgpu_driver_unload,
 
-	.fops = &virtio_gpu_driver_fops,
+	.gem_init_object = virtgpu_gem_object_init,
+	.gem_free_object = virtgpu_gem_object_free,
+	.fops = &virtgpu_driver_fops,
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
