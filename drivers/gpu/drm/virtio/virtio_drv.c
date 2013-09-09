@@ -1,0 +1,165 @@
+/*
+ * 2011 Red Hat, Inc.
+ * All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * VA LINUX SYSTEMS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors:
+ *    Dave Airlie <airlied@redhat.com>
+ */
+
+#include <linux/module.h>
+#include <linux/console.h>
+#include <linux/virtio.h>
+#include <linux/virtio_ids.h>
+#include "drmP.h"
+#include "drm/drm.h"
+
+#include "virtio_drv.h"
+static struct drm_driver driver;
+
+int virtio_gpu_modeset = -1;
+
+MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
+module_param_named(modeset, virtio_gpu_modeset, int, 0400);
+
+extern int virtio_gpu_max_ioctls;
+
+static int virtio_gpu_probe(struct virtio_device *vdev)
+{
+	struct drm_device *dev;
+	int ret;
+
+#ifdef CONFIG_VGA_CONSOLE
+	if (vgacon_text_force() && virtio_gpu_modeset == -1)
+		return -EINVAL;
+#endif
+
+	if (virtio_gpu_modeset == 0)
+		return -EINVAL;
+	driver.num_ioctls = virtio_gpu_max_ioctls;
+
+	virtio_set_driver_bus(&driver);
+	INIT_LIST_HEAD(&driver.device_list);
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+
+	dev->dev = &vdev->dev;
+	vdev->priv = dev;
+	mutex_lock(&drm_global_mutex);
+
+	ret = drm_fill_in_dev(dev, NULL, &driver);
+
+	ret = drm_get_minor(dev, &dev->control, DRM_MINOR_CONTROL);
+	if (ret)
+		goto err_g1;
+
+	ret = drm_get_minor(dev, &dev->primary, DRM_MINOR_LEGACY);
+	if (ret)
+		goto err_g2;
+
+	if (dev->driver->load) {
+		ret = dev->driver->load(dev, 0);
+		if (ret)
+			goto err_g3;
+	}
+
+	/* setup the grouping for the legacy output */
+#if 0
+	ret = drm_mode_group_init_legacy_group(dev,
+					       &dev->primary->mode_group);
+	if (ret)
+		goto err_g3;
+#endif
+	list_add_tail(&dev->driver_item, &driver.device_list);
+
+	mutex_unlock(&drm_global_mutex);
+
+	DRM_INFO("Initialized %s %d.%d.%d %s on minor %d\n",
+		 driver.name, driver.major, driver.minor, driver.patchlevel,
+		 driver.date, dev->primary->index);
+
+	return 0;
+
+err_g3:
+	drm_put_minor(&dev->primary);
+err_g2:
+	drm_put_minor(&dev->control);
+err_g1:
+	kfree(dev);
+	mutex_unlock(&drm_global_mutex);
+
+	return 0;
+}
+
+static void virtio_gpu_remove(struct virtio_device *vdev)
+{
+	struct drm_device *dev = vdev->priv;
+	drm_put_dev(dev);
+}
+
+static struct virtio_device_id id_table[] = {
+	{ VIRTIO_ID_GPU, VIRTIO_DEV_ANY_ID },
+	{ 0 },
+};
+
+static struct virtio_driver virtio_gpu_driver = {
+	.driver.name = KBUILD_MODNAME,
+	.driver.owner = THIS_MODULE,
+	.id_table = id_table,
+	.probe = virtio_gpu_probe,
+	.remove = virtio_gpu_remove,
+};
+
+module_virtio_driver(virtio_gpu_driver);
+
+MODULE_DEVICE_TABLE(virtio, id_table);
+MODULE_DESCRIPTION("Virtio GPU driver");
+MODULE_LICENSE("GPL");
+
+static const struct file_operations virtio_gpu_driver_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_open,
+//	.mmap = udl_drm_gem_mmap,
+	.poll = drm_poll,
+	.read = drm_read,
+	.unlocked_ioctl	= drm_ioctl,
+	.release = drm_release,
+	.fasync = drm_fasync,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = drm_compat_ioctl,
+#endif
+	.llseek = noop_llseek,
+};
+
+static struct drm_driver driver = {
+	.driver_features = DRIVER_MODESET,
+	.load = virtio_gpu_driver_load,
+	.unload = virtio_gpu_driver_unload,
+
+	.fops = &virtio_gpu_driver_fops,
+
+	.name = DRIVER_NAME,
+	.desc = DRIVER_DESC,
+	.date = DRIVER_DATE,
+	.major = DRIVER_MAJOR,
+	.minor = DRIVER_MINOR,
+	.patchlevel = DRIVER_PATCHLEVEL,
+};
