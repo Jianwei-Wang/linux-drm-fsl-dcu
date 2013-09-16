@@ -714,7 +714,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 		goto out;
 
 	err = pci_request_regions(pci_dev, "virtio-pci");
-	if (err)
+	if (err && ((pci_dev->class >> 8) != PCI_CLASS_DISPLAY_VGA))
 		goto out_enable_device;
 
 	vp_dev->ioaddr = pci_iomap(pci_dev, 0, 0);
