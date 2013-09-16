@@ -101,3 +101,19 @@ retry:
 		ret = vq->num_free;
 	return ret;
 }
+
+int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
+				uint32_t resource_id,
+				uint32_t format,
+				uint32_t width,
+				uint32_t height)
+{
+	
+
+}
+
+int virtgpu_cmd_attach_status_page(struct virtgpu_device *vgdev,
+				   uint64_t page_addr)
+{
+
+}
