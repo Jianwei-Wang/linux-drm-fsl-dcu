@@ -206,6 +206,7 @@ int virgl_create_3d_fb_res(struct virgl_device *qdev, int width, int height, uin
 	cmd_p->u.res_create.width = width;
 	cmd_p->u.res_create.height = height;
 	cmd_p->u.res_create.depth = 1;
+	cmd_p->u.res_create.flags = VIRGL_RESOURCE_Y_0_TOP;
 	virgl_queue_cmd_buf(qdev, vbuf);
 	*handle = res_id;
 	return 0;

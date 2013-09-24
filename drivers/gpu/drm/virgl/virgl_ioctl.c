@@ -188,6 +188,7 @@ static int virgl_resource_create_ioctl(struct drm_device *dev, void *data,
 	cmd_p->u.res_create.last_level = rc->last_level;
 	cmd_p->u.res_create.nr_samples = rc->nr_samples;
 	cmd_p->u.res_create.nr_sg_entries = qobj->sgt ? qobj->sgt->nents : 0;
+	cmd_p->u.res_create.flags = rc->flags;
 
 	ret = virgl_fence_emit(qdev, cmd_p, &fence);
 

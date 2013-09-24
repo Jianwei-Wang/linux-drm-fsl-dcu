@@ -72,6 +72,7 @@ struct drm_virgl_getparam {
 };
 
 /* NO_BO flags? NO resource flag? */
+/* resource flag for y_0_top */
 struct drm_virgl_resource_create {
 	uint32_t target;
 	uint32_t format;
