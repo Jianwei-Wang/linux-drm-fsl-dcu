@@ -10,7 +10,7 @@ struct virtgpu_fbdev {
 	struct delayed_work work;
 };
 
-static struct fb_ops virglfb_ops = {
+static struct fb_ops virtgpufb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = drm_fb_helper_check_var,
 	.fb_set_par = drm_fb_helper_set_par, /* TODO: copy vmwgfx */
@@ -24,27 +24,60 @@ static struct fb_ops virglfb_ops = {
 	.fb_debug_leave = drm_fb_helper_debug_leave,
 };
  
-static int virtgpufb_create(struct virtgpu_fbdev *qfbdev,
+static int virtgpufb_create(struct drm_fb_helper *helper,
 			struct drm_fb_helper_surface_size *sizes)
 {
-	return -EINVAL;
-}
-
-static int virtgpu_fb_find_or_create_single(
-		struct drm_fb_helper *helper,
-		struct drm_fb_helper_surface_size *sizes)
-{
-	struct virtgpu_fbdev *vgfbdev = (struct virtgpu_fbdev *)helper;
-	int new_fb = 0;
+	struct virtgpu_fbdev *vfbdev =
+		container_of(helper, struct virtgpu_fbdev, helper);
+	struct drm_device *dev = helper->dev;
+	struct fb_info *info;
+	struct drm_framebuffer *fb;
+	struct drm_mode_fb_cmd2 mode_cmd = {};
+	struct virtgpu_object *obj;
+	struct device *device = &dev->pdev->dev;
 	int ret;
 
-	if (!helper->fb) {
-		ret = virtgpufb_create(vgfbdev, sizes);
-		if (ret)
-			return ret;
-		new_fb = 1;
+	mode_cmd.width = sizes->surface_width;
+	mode_cmd.height = sizes->surface_height;
+	mode_cmd.pitches[0] = mode_cmd.width * ((sizes->surface_bpp + 7) / 8);
+	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
+							  sizes->surface_depth);
+
+
+	info = framebuffer_alloc(0, device);
+	if (!info) {
+		ret = -ENOMEM;
+		goto fail;
 	}
-	return new_fb;
+
+	info->par = helper;
+	
+	ret = virtgpu_framebuffer_init(dev, &vfbdev->vgfb, &mode_cmd, &obj->gem_base);
+	if (ret)
+		goto fail;
+
+	fb = &vfbdev->vgfb.base;
+
+	vfbdev->helper.fb = fb;
+	vfbdev->helper.fbdev = info;
+	
+	strcpy(info->fix.id, "virtiodrmfb");
+	info->flags = FBINFO_DEFAULT;
+	info->fbops = &virtgpufb_ops;
+	
+	ret = fb_alloc_cmap(&info->cmap, 256, 0);
+	if (ret) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+
+	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->depth);
+	drm_fb_helper_fill_var(info, &vfbdev->helper, sizes->fb_width, sizes->fb_height);
+
+	return 0;
+fail:
+
+	return -EINVAL;
 }
 
 static int virtgpu_fbdev_destroy(struct drm_device *dev, struct virtgpu_fbdev *vgfbdev)
@@ -67,7 +100,7 @@ static int virtgpu_fbdev_destroy(struct drm_device *dev, struct virtgpu_fbdev *v
 	return 0;
 }
 static struct drm_fb_helper_funcs virtgpu_fb_helper_funcs = {
-	.fb_probe = virtgpu_fb_find_or_create_single,
+	.fb_probe = virtgpufb_create,
 };
 
 int virtgpu_fbdev_init(struct virtgpu_device *vgdev)
