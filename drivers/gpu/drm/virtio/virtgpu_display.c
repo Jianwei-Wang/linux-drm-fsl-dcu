@@ -95,7 +95,7 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 {
 	struct virtgpu_device *vgdev = crtc->dev->dev_private;
 	struct drm_gem_object *gobj = NULL;
-	struct virtgpu_bo *qobj = NULL;
+	struct virtgpu_object *qobj = NULL;
 	int ret = 0;
 	if (handle == 0) {
 		virtgpu_hide_cursor(vgdev);
@@ -107,7 +107,7 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 	if (gobj == NULL)
 		return -ENOENT;
 
-	qobj = gem_to_virtgpu_bo(gobj);
+	qobj = gem_to_virtgpu_obj(gobj);
 
 	if (!qobj->hw_res_handle) {
 		ret = -EINVAL;
@@ -169,15 +169,15 @@ static const struct drm_framebuffer_funcs virtgpu_fb_funcs = {
 
 int
 virtgpu_framebuffer_init(struct drm_device *dev,
-		     struct virtgpu_framebuffer *vgfb,
-		     struct drm_mode_fb_cmd2 *mode_cmd,
-		       struct drm_gem_object *obj)
+			 struct virtgpu_framebuffer *vgfb,
+			 struct drm_mode_fb_cmd2 *mode_cmd,
+			 struct drm_gem_object *obj)
 {
 	int ret;
-	struct virtgpu_bo *bo;
+	struct virtgpu_object *bo;
 	vgfb->obj = obj;
 
-	bo = gem_to_virtgpu_bo(obj);
+	bo = gem_to_virtgpu_obj(obj);
 //	vgfb->res_3d_handle = bo->res_handle;
 
 	ret = drm_framebuffer_init(dev, &vgfb->base, &virtgpu_fb_funcs);
@@ -216,7 +216,7 @@ static int virtgpu_crtc_mode_set(struct drm_crtc *crtc,
 	struct drm_device *dev = crtc->dev;
 	struct virtgpu_device *vgdev = dev->dev_private;
 	struct virtgpu_framebuffer *vgfb;
-	struct virtgpu_bo *bo, *old_bo = NULL;
+	struct virtgpu_object *bo, *old_bo = NULL;
 	int ret;
 
 	if (!crtc->fb) {
@@ -226,10 +226,10 @@ static int virtgpu_crtc_mode_set(struct drm_crtc *crtc,
 
 	if (old_fb) {
 		vgfb = to_virtgpu_framebuffer(old_fb);
-		old_bo = gem_to_virtgpu_bo(vgfb->obj);
+		old_bo = gem_to_virtgpu_obj(vgfb->obj);
 	}
 	vgfb = to_virtgpu_framebuffer(crtc->fb);
-	bo = gem_to_virtgpu_bo(vgfb->obj);
+	bo = gem_to_virtgpu_obj(vgfb->obj);
 	DRM_DEBUG("+%d+%d (%d,%d) => (%d,%d)\n",
 		  x, y,
 		  mode->hdisplay, mode->vdisplay,
