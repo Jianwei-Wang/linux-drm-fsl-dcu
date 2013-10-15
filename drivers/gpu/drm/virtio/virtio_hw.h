@@ -16,11 +16,11 @@ enum virtgpu_ctrl_cmd {
 };
 
 struct virtgpu_hw_status_page {
-	uint64_t fence_id;
 	uint32_t cursor_x, cursor_y;
 	uint32_t cursor_hot_x, cursor_hot_y;
 	uint32_t cursor_id;
 	uint32_t error_state;
+	uint64_t fence_id;
 };
 
 struct virtgpu_attach_status_page {
@@ -41,6 +41,14 @@ struct virtgpu_resource_create_2d {
 
 struct virtgpu_set_scanout {
 	uint32_t scanout_id;
+	uint32_t resource_id;
+	uint32_t width;
+	uint32_t height;
+	uint32_t x;
+	uint32_t y;
+};
+
+struct virtgpu_resource_flush {
 	uint32_t resource_id;
 	uint32_t width;
 	uint32_t height;
@@ -86,16 +94,15 @@ struct virtgpu_display_info {
 	} pmodes[VIRTGPU_MAX_SCANOUTS];
 };
 
-#define VIRTGPU_COMMAND_EMIT_FENCE (1 << 0)
-
 struct virtgpu_command {
 	uint32_t type;
 	uint32_t flags;
-	uint64_t fence;
+	uint64_t rsvd;
 	union virtgpu_cmds {
 		struct virtgpu_attach_status_page attach_status_page;
 		struct virtgpu_resource_create_2d resource_create_2d;
 		struct virtgpu_resource_unref resource_unref;
+		struct virtgpu_resource_flush resource_flush;
 		struct virtgpu_set_scanout set_scanout;
 		struct virtgpu_transfer_send_2d transfer_send_2d;
 		struct virtgpu_resource_attach_backing resource_attach_backing;

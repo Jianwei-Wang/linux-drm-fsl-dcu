@@ -102,6 +102,8 @@ int virtgpu_gem_init_object(struct drm_gem_object *obj);
 void virtgpu_gem_free_object(struct drm_gem_object *gem_obj);
 int virtgpu_gem_init(struct virtgpu_device *qdev);
 void virtgpu_gem_fini(struct virtgpu_device *qdev);
+struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
+					    size_t size);
 
 /* virtio_fb */
 #define VIRTGPUFB_CONN_LIMIT 1
@@ -109,6 +111,20 @@ int virtgpu_fbdev_init(struct virtgpu_device *vgdev);
 void virtgpu_fbdev_fini(struct virtgpu_device *vgdev);
 
 /* virtio vg */
+int virtgpu_resource_id_get(struct virtgpu_device *vgdev, uint32_t *resid);
+int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
+				uint32_t resource_id,
+				uint32_t format,
+				uint32_t width,
+				uint32_t height);
+int virtgpu_cmd_transfer_send_2d(struct virtgpu_device *vgdev,
+				 uint32_t resource_id, uint32_t offset,
+				 uint32_t width, uint32_t height,
+				 uint32_t x, uint32_t y);
+int virtgpu_cmd_resource_flush(struct virtgpu_device *vgdev,
+			       uint32_t resource_id,
+			       uint32_t width, uint32_t height,
+			       uint32_t x, uint32_t y);
 void virtgpu_ctrl_ack(struct virtqueue *vq);
 void virtgpu_dequeue_work_func(struct work_struct *work);
 
