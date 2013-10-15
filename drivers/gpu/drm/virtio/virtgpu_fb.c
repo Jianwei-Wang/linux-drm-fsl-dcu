@@ -1,6 +1,9 @@
 #include <drm/drmP.h>
 #include <drm/drm_fb_helper.h>
 #include "virtgpu_drv.h"
+#include "virtio_hw.h"
+
+#define VIRTGPU_FBCON_POLL_PERIOD (HZ / 60)
 
 struct virtgpu_fbdev {
 	struct drm_fb_helper helper;
@@ -9,14 +12,127 @@ struct virtgpu_fbdev {
 	struct virtgpu_device	*vgdev;
 	struct delayed_work work;
 };
+#define DL_ALIGN_UP(x, a) ALIGN(x, a)
+#define DL_ALIGN_DOWN(x, a) ALIGN(x-(a-1), a)
+
+static int virtgpu_dirty_update(struct virtgpu_framebuffer *fb, bool store,
+				int x, int y, int width, int height)
+{
+	struct drm_device *dev = fb->base.dev;
+	struct virtgpu_device *vgdev = dev->dev_private;
+	bool store_for_later = false;
+	int aligned_x;
+	int bpp = (fb->base.bits_per_pixel / 8);
+	int x2, y2;
+	unsigned long flags;
+	struct virtgpu_object *obj = gem_to_virtgpu_obj(fb->obj);
+	int size;
+	aligned_x = DL_ALIGN_DOWN(x, sizeof(unsigned long));
+	width = DL_ALIGN_UP(width + (x-aligned_x), sizeof(unsigned long));
+	x = aligned_x;
+
+	if ((width <= 0) ||
+	    (x + width > fb->base.width) ||
+	    (y + height > fb->base.height)) {
+		printk("values out of range %d %d %dx%d %dx%d\n", x, y, width, height, fb->base.width, fb->base.height);
+		return -EINVAL;
+	}
+
+	/* if we are in atomic just store the info
+	   can't test inside spin lock */
+	if (in_atomic() || store)
+		store_for_later = true;
+
+	x2 = x + width - 1;
+	y2 = y + height - 1;
+
+	spin_lock_irqsave(&fb->dirty_lock, flags);
+
+	if (fb->y1 < y)
+		y = fb->y1;
+	if (fb->y2 > y2)
+		y2 = fb->y2;
+	if (fb->x1 < x)
+		x = fb->x1;
+	if (fb->x2 > x2)
+		x2 = fb->x2;
+
+	if (store_for_later) {
+		fb->x1 = x;
+		fb->x2 = x2;
+		fb->y1 = y;
+		fb->y2 = y2;
+		spin_unlock_irqrestore(&fb->dirty_lock, flags);
+		return 0;
+	}
+
+	fb->x1 = fb->y1 = INT_MAX;
+	fb->x2 = fb->y2 = 0;
+
+	spin_unlock_irqrestore(&fb->dirty_lock, flags);
+
+	{
+		uint32_t offset;
+		uint32_t w = x2 - x + 1;
+		uint32_t h = y2 - y + 1;
+
+		offset = (y * fb->base.pitches[0]) + x * bpp;
+
+		virtgpu_cmd_transfer_send_2d(vgdev, obj->hw_res_handle,
+					     offset, w, h, x, y);
+
+	}
+	virtgpu_cmd_resource_flush(vgdev, obj->hw_res_handle, x2 - x + 1, y2 - y + 1, x, y);
+	
+	return 0;
+}
+
+static void virtgpu_fb_dirty_work(struct work_struct *work)
+{
+	struct delayed_work *delayed_work = to_delayed_work(work);
+	struct virtgpu_fbdev *vfbdev = container_of(delayed_work, struct virtgpu_fbdev, work);
+	struct virtgpu_framebuffer *vgfb = &vfbdev->vgfb;
+
+	virtgpu_dirty_update(&vfbdev->vgfb, false, vgfb->x1, vgfb->y1, vgfb->x2 - vgfb->x1, vgfb->y2 - vgfb->y1);
+}
+
+static void virtgpu_3d_fillrect(struct fb_info *info,
+			    const struct fb_fillrect *rect)
+{
+	struct virtgpu_fbdev *vfbdev = info->par;
+	sys_fillrect(info, rect);
+	virtgpu_dirty_update(&vfbdev->vgfb, true, rect->dx, rect->dy, rect->width,
+			   rect->height);
+	schedule_delayed_work(&vfbdev->work, VIRTGPU_FBCON_POLL_PERIOD);
+}
+
+static void virtgpu_3d_copyarea(struct fb_info *info,
+			    const struct fb_copyarea *area)
+{
+	struct virtgpu_fbdev *vfbdev = info->par;
+	sys_copyarea(info, area);
+	virtgpu_dirty_update(&vfbdev->vgfb, true, area->dx, area->dy,
+			   area->width, area->height);
+	schedule_delayed_work(&vfbdev->work, VIRTGPU_FBCON_POLL_PERIOD);
+}
+
+static void virtgpu_3d_imageblit(struct fb_info *info,
+			     const struct fb_image *image)
+{
+	struct virtgpu_fbdev *vfbdev = info->par;
+	sys_imageblit(info, image);
+	virtgpu_dirty_update(&vfbdev->vgfb, true, image->dx, image->dy,
+			     image->width, image->height);
+	schedule_delayed_work(&vfbdev->work, VIRTGPU_FBCON_POLL_PERIOD);
+}
 
 static struct fb_ops virtgpufb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = drm_fb_helper_check_var,
 	.fb_set_par = drm_fb_helper_set_par, /* TODO: copy vmwgfx */
-//	.fb_fillrect = virgl_3d_fillrect,
-///	.fb_copyarea = virgl_3d_copyarea,
-//	.fb_imageblit = virgl_3d_imageblit,
+	.fb_fillrect = virtgpu_3d_fillrect,
+	.fb_copyarea = virtgpu_3d_copyarea,
+	.fb_imageblit = virtgpu_3d_imageblit,
 	.fb_pan_display = drm_fb_helper_pan_display,
 	.fb_blank = drm_fb_helper_blank,
 	.fb_setcmap = drm_fb_helper_setcmap,
@@ -30,13 +146,17 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	struct virtgpu_fbdev *vfbdev =
 		container_of(helper, struct virtgpu_fbdev, helper);
 	struct drm_device *dev = helper->dev;
+	struct virtgpu_device *vgdev = dev->dev_private;
 	struct fb_info *info;
 	struct drm_framebuffer *fb;
 	struct drm_mode_fb_cmd2 mode_cmd = {};
 	struct virtgpu_object *obj;
 	struct device *device = &dev->pdev->dev;
+	uint32_t resid, format, size;
 	int ret;
 
+	if (sizes->surface_bpp == 24)
+		sizes->surface_bpp = 32;
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
 	mode_cmd.pitches[0] = mode_cmd.width * ((sizes->surface_bpp + 7) / 8);
@@ -44,6 +164,35 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 							  sizes->surface_depth);
 
 
+	if (mode_cmd.pixel_format == DRM_FORMAT_XRGB8888)
+		format = VIRGL_FORMAT_B8G8R8X8_UNORM;
+	else if (mode_cmd.pixel_format == DRM_FORMAT_ARGB8888)
+		format = VIRGL_FORMAT_B8G8R8A8_UNORM;
+	else if (mode_cmd.pixel_format == DRM_FORMAT_XRGB1555)
+		format = VIRGL_FORMAT_B5G5R5A1_UNORM;
+	else {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	size = mode_cmd.pitches[0] * mode_cmd.height;
+	obj = virtgpu_alloc_object(dev, size);
+	if (!obj) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+
+	ret = virtgpu_resource_id_get(vgdev, &resid);
+	if (ret)
+		goto fail;
+
+	obj->hw_res_handle = resid;
+
+	ret = virtgpu_cmd_create_resource(vgdev, resid,
+					  format, mode_cmd.width, mode_cmd.height);
+	if (ret)
+		goto fail;
+	  
 	info = framebuffer_alloc(0, device);
 	if (!info) {
 		ret = -ENOMEM;
@@ -116,7 +265,7 @@ int virtgpu_fbdev_init(struct virtgpu_device *vgdev)
 	vgfbdev->vgdev = vgdev;
 	vgdev->vgfbdev = vgfbdev;
 	vgfbdev->helper.funcs = &virtgpu_fb_helper_funcs;
-	//	INIT_DELAYED_WORK(&vgfbdev->work, virtgpu_fb_dirty_work);
+	INIT_DELAYED_WORK(&vgfbdev->work, virtgpu_fb_dirty_work);
 
 	ret = drm_fb_helper_init(vgdev->ddev, &vgfbdev->helper,
 				 1 /* num_crtc - VIRTGPU supports just 1 */,
