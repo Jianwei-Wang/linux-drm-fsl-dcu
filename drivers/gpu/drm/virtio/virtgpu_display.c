@@ -217,6 +217,7 @@ static int virtgpu_crtc_mode_set(struct drm_crtc *crtc,
 	struct virtgpu_device *vgdev = dev->dev_private;
 	struct virtgpu_framebuffer *vgfb;
 	struct virtgpu_object *bo, *old_bo = NULL;
+	struct virtgpu_crtc *vgcrtc = to_virtgpu_crtc(crtc);
 	int ret;
 
 	if (!crtc->fb) {
@@ -235,6 +236,9 @@ static int virtgpu_crtc_mode_set(struct drm_crtc *crtc,
 		  mode->hdisplay, mode->vdisplay,
 		  adjusted_mode->hdisplay,
 		  adjusted_mode->vdisplay);
+
+	virtgpu_cmd_set_scanout(vgdev, vgcrtc->idx, bo->hw_res_handle,
+				mode->hdisplay, mode->vdisplay, x, y);
 
 	return 0;
 }
@@ -256,7 +260,16 @@ void virtgpu_crtc_load_lut(struct drm_crtc *crtc)
 	DRM_DEBUG("\n");
 }
 
+void virtgpu_crtc_disable(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct virtgpu_device *vgdev = dev->dev_private;
+	struct virtgpu_crtc *vgcrtc = to_virtgpu_crtc(crtc);
+	virtgpu_cmd_set_scanout(vgdev, vgcrtc->idx, 0, 0, 0, 0, 0);
+}
+
 static const struct drm_crtc_helper_funcs virtgpu_crtc_helper_funcs = {
+	.disable = virtgpu_crtc_disable,
 	.dpms = virtgpu_crtc_dpms,
 	.mode_fixup = virtgpu_crtc_mode_fixup,
 	.mode_set = virtgpu_crtc_mode_set,
@@ -277,6 +290,8 @@ int vgdev_crtc_init(struct drm_device *dev, int num_crtc)
 
 	drm_mode_crtc_set_gamma_size(&virtgpu_crtc->base, 256);
 	drm_crtc_helper_add(&virtgpu_crtc->base, &virtgpu_crtc_helper_funcs);
+
+	virtgpu_crtc->idx = num_crtc;
 	return 0;
 }
 
@@ -498,7 +513,9 @@ int virtgpu_modeset_init(struct virtgpu_device *vgdev)
 	/* primary surface must be created by this point, to allow
 	 * issuing command queue commands and having them read by
 	 * spice server. */
-	virtgpu_fbdev_init(vgdev);
+	ret = virtgpu_fbdev_init(vgdev);
+	if (ret)
+		return ret;
 
 	ret = drm_vblank_init(vgdev->ddev, 1);
 	
