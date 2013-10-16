@@ -24,13 +24,16 @@
 #define DRIVER_MINOR 0
 #define DRIVER_PATCHLEVEL 1
 
-#define VIRTGPU_NUM_OUTPUTS 1
+#define VIRTGPU_NUM_OUTPUTS 2
 
 void virtio_set_driver_bus(struct drm_driver *driver);
 
 struct virtgpu_object {
 	struct drm_gem_object gem_base;
 	uint32_t hw_res_handle;
+
+	struct sg_table *pages;
+	void *vmap;
 };
 #define gem_to_virtgpu_obj(gobj) container_of((gobj), struct virtgpu_object, gem_base)
 
@@ -38,11 +41,15 @@ struct virtgpu_vbuffer {
 	char *buf;
 	int size;
 
+	void *vaddr;
+	dma_addr_t busaddr;
+	uint32_t vaddr_len;
 	struct list_head destroy_list;
 };
 
 struct virtgpu_crtc {
 	struct drm_crtc base;
+	int idx;
 	int cur_x;
 	int cur_y;
 };
@@ -104,7 +111,16 @@ int virtgpu_gem_init(struct virtgpu_device *qdev);
 void virtgpu_gem_fini(struct virtgpu_device *qdev);
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 					    size_t size);
-
+int virtgpu_gem_object_get_pages(struct virtgpu_object *obj);
+int virtgpu_mode_dumb_create(struct drm_file *file_priv,
+			     struct drm_device *dev,
+			     struct drm_mode_create_dumb *args);
+int virtgpu_mode_dumb_destroy(struct drm_file *file_priv,
+			      struct drm_device *dev,
+			      uint32_t handle);
+int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
+			   struct drm_device *dev,
+			   uint32_t handle, uint64_t *offset_p);
 /* virtio_fb */
 #define VIRTGPUFB_CONN_LIMIT 1
 int virtgpu_fbdev_init(struct virtgpu_device *vgdev);
@@ -125,12 +141,19 @@ int virtgpu_cmd_resource_flush(struct virtgpu_device *vgdev,
 			       uint32_t resource_id,
 			       uint32_t width, uint32_t height,
 			       uint32_t x, uint32_t y);
+int virtgpu_cmd_set_scanout(struct virtgpu_device *vgdev,
+			    uint32_t scanout_id, uint32_t resource_id,
+			    uint32_t width, uint32_t height,
+			    uint32_t x, uint32_t y);
 void virtgpu_ctrl_ack(struct virtqueue *vq);
 void virtgpu_dequeue_work_func(struct work_struct *work);
+int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id);
 
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
 			     struct virtgpu_framebuffer *vgfb,
 			     struct drm_mode_fb_cmd2 *mode_cmd,
 			     struct drm_gem_object *obj);
+int virtgpu_modeset_init(struct virtgpu_device *vgdev);
+void virtgpu_modeset_fini(struct virtgpu_device *vgdev);
 #endif

@@ -83,12 +83,11 @@ static int virtgpu_probe(struct virtio_device *vdev)
 	}
 
 	/* setup the grouping for the legacy output */
-#if 0
 	ret = drm_mode_group_init_legacy_group(dev,
 					       &dev->primary->mode_group);
 	if (ret)
 		goto err_g3;
-#endif
+
 	list_add_tail(&dev->driver_item, &driver.device_list);
 
 	mutex_unlock(&drm_global_mutex);
@@ -154,6 +153,10 @@ static struct drm_driver driver = {
 	.driver_features = DRIVER_MODESET | DRIVER_GEM,
 	.load = virtgpu_driver_load,
 	.unload = virtgpu_driver_unload,
+
+	.dumb_create = virtgpu_mode_dumb_create,
+	.dumb_map_offset = virtgpu_mode_dumb_mmap,
+	.dumb_destroy = virtgpu_mode_dumb_destroy,
 
 	.gem_init_object = virtgpu_gem_init_object,
 	.gem_free_object = virtgpu_gem_free_object,

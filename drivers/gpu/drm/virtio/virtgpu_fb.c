@@ -139,7 +139,38 @@ static struct fb_ops virtgpufb_ops = {
 	.fb_debug_enter = drm_fb_helper_debug_enter,
 	.fb_debug_leave = drm_fb_helper_debug_leave,
 };
- 
+
+static int virtgpu_vmap_fb(struct virtgpu_device *vgdev,
+			   struct virtgpu_object *obj)
+{
+	struct page **pages;
+	struct sg_page_iter sg_iter;
+	int i;
+	int ret;
+	if (!obj->pages) {
+		ret = virtgpu_gem_object_get_pages(obj);
+		if (ret)
+			goto error;
+	}
+	pages = drm_malloc_ab(obj->gem_base.size >> PAGE_SHIFT, sizeof(*pages));
+	if (pages == NULL)
+		goto error;
+
+	i = 0;
+	for_each_sg_page(obj->pages->sgl, &sg_iter, obj->pages->nents, 0)
+		pages[i++] = sg_page_iter_page(&sg_iter);
+
+	obj->vmap = vmap(pages, i, 0, PAGE_KERNEL);
+	drm_free_large(pages);
+
+	if (!obj->vmap)
+		goto error;
+
+	return 0;
+error:
+	return -ENOMEM;
+}
+
 static int virtgpufb_create(struct drm_fb_helper *helper,
 			struct drm_fb_helper_surface_size *sizes)
 {
@@ -151,7 +182,7 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	struct drm_framebuffer *fb;
 	struct drm_mode_fb_cmd2 mode_cmd = {};
 	struct virtgpu_object *obj;
-	struct device *device = &dev->pdev->dev;
+	struct device *device = vgdev->dev;
 	uint32_t resid, format, size;
 	int ret;
 
@@ -186,13 +217,18 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	if (ret)
 		goto fail;
 
-	obj->hw_res_handle = resid;
-
 	ret = virtgpu_cmd_create_resource(vgdev, resid,
 					  format, mode_cmd.width, mode_cmd.height);
 	if (ret)
 		goto fail;
+
+	virtgpu_vmap_fb(vgdev, obj);
 	  
+	/* attach the object to the resource */
+	ret = virtgpu_object_attach(vgdev, obj, resid);
+	if (ret)
+		goto fail;
+
 	info = framebuffer_alloc(0, device);
 	if (!info) {
 		ret = -ENOMEM;
@@ -213,15 +249,20 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	strcpy(info->fix.id, "virtiodrmfb");
 	info->flags = FBINFO_DEFAULT;
 	info->fbops = &virtgpufb_ops;
-	
+	info->pixmap.flags = FB_PIXMAP_SYSTEM;
 	ret = fb_alloc_cmap(&info->cmap, 256, 0);
 	if (ret) {
 		ret = -ENOMEM;
 		goto fail;
 	}
 
+	info->screen_base = obj->vmap;
+	info->screen_size = obj->gem_base.size;
 	drm_fb_helper_fill_fix(info, fb->pitches[0], fb->depth);
 	drm_fb_helper_fill_var(info, &vfbdev->helper, sizes->fb_width, sizes->fb_height);
+
+	info->fix.mmio_start = 0;
+	info->fix.mmio_len = 0;
 
 	return 0;
 fail:

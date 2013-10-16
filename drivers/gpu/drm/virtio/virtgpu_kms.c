@@ -23,7 +23,7 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	vgdev->ddev = dev;
 	dev->dev_private = vgdev;
 	vgdev->vdev = dev->virtdev;
-
+	vgdev->dev = dev->dev;
 	init_waitqueue_head(&vgdev->ctrl_ack_queue);
 	INIT_WORK(&vgdev->dequeue_work, virtgpu_dequeue_work_func);
 
@@ -38,6 +38,12 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 
 	vgdev->ctrlq = vqs[0];
 
+	ret = virtgpu_modeset_init(vgdev);
+	if (ret) {
+		kfree(vgdev);
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -45,6 +51,7 @@ int virtgpu_driver_unload(struct drm_device *dev)
 {
 	struct virtgpu_device *vgdev = dev->dev_private;
 
+	virtgpu_modeset_fini(vgdev);
 	kfree(vgdev);
 	return 0;
 }
