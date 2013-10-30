@@ -25,6 +25,7 @@
 
 #include "virtgpu_drv.h"
 #include "drm_crtc_helper.h"
+#include "virtio_hw.h"
 
 static int virtgpu_add_common_modes(struct drm_connector *connector)
 {
@@ -84,7 +85,11 @@ static void virtgpu_crtc_destroy(struct drm_crtc *crtc)
 static void
 virtgpu_hide_cursor(struct virtgpu_device *vgdev)
 {
-
+	{
+		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
+		cursor_page->cursor_id = 0;
+	}
+	virtgpu_cursor_ping(vgdev);
 }
 
 static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
@@ -114,6 +119,13 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 		goto out;
 	}
 
+	virtgpu_cmd_transfer_send_2d(vgdev, qobj->hw_res_handle,
+				     0, 0, 0, 64, 64);
+	{
+		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
+		cursor_page->cursor_id = qobj->hw_res_handle;
+	}
+	virtgpu_cursor_ping(vgdev);
 out:
 	drm_gem_object_unreference_unlocked(gobj);
 	return ret;
@@ -123,6 +135,13 @@ static int virtgpu_crtc_cursor_move(struct drm_crtc *crtc,
 				int x, int y)
 {
 	struct virtgpu_device *vgdev = crtc->dev->dev_private;
+
+	{
+		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
+		cursor_page->cursor_x = x;
+		cursor_page->cursor_y = y;
+	}
+	virtgpu_cursor_ping(vgdev);
 	return 0;
 }
 
@@ -159,7 +178,7 @@ int virtgpu_framebuffer_surface_dirty(struct drm_framebuffer *fb,
 				  struct drm_clip_rect *clips,
 				  unsigned num_clips)
 {
-	return -EINVAL;
+	return virtgpu_surface_dirty(to_virtgpu_framebuffer(fb), clips, num_clips);
 }
 
 static const struct drm_framebuffer_funcs virtgpu_fb_funcs = {
@@ -178,7 +197,6 @@ virtgpu_framebuffer_init(struct drm_device *dev,
 	vgfb->obj = obj;
 
 	bo = gem_to_virtgpu_obj(obj);
-//	vgfb->res_3d_handle = bo->res_handle;
 
 	ret = drm_framebuffer_init(dev, &vgfb->base, &virtgpu_fb_funcs);
 	if (ret) {
@@ -517,7 +535,7 @@ int virtgpu_modeset_init(struct virtgpu_device *vgdev)
 	if (ret)
 		return ret;
 
-	ret = drm_vblank_init(vgdev->ddev, 1);
+	ret = drm_vblank_init(vgdev->ddev, VIRTGPU_NUM_OUTPUTS);
 	
 	return ret;
 }

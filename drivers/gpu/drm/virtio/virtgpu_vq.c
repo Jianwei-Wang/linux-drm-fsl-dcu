@@ -1,6 +1,7 @@
 #include <drm/drmP.h>
 #include "virtgpu_drv.h"
 #include <linux/virtio.h>
+#include <linux/virtio_config.h>
 #include <linux/virtio_ring.h>
 #include "virtio_hw.h"
 
@@ -34,7 +35,14 @@ void virtgpu_ctrl_ack(struct virtqueue *vq)
 {
 	struct drm_device *dev = vq->vdev->priv;
 	struct virtgpu_device *vgdev = dev->dev_private;
-	schedule_work(&vgdev->dequeue_work);
+	schedule_work(&vgdev->ctrlq.dequeue_work);
+}
+
+void virtgpu_cursor_ack(struct virtqueue *vq)
+{
+	struct drm_device *dev = vq->vdev->priv;
+	struct virtgpu_device *vgdev = dev->dev_private;
+	schedule_work(&vgdev->cursorq.dequeue_work);
 }
 
 static struct virtgpu_vbuffer *virtgpu_allocate_vbuf(struct virtgpu_device *vgdev,
@@ -91,36 +99,52 @@ static int reclaim_vbufs(struct virtqueue *vq, struct list_head *reclaim_list)
 	return freed;
 }
 	
-void virtgpu_dequeue_work_func(struct work_struct *work)
+void virtgpu_dequeue_ctrl_func(struct work_struct *work)
 {
 	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
-						    dequeue_work);
+						    ctrlq.dequeue_work);
 	int ret;
 	struct list_head reclaim_list;
 	struct virtgpu_vbuffer *entry, *tmp;
 	
 	INIT_LIST_HEAD(&reclaim_list);
-	spin_lock(&vgdev->ctrlq_lock);
+	spin_lock(&vgdev->ctrlq.qlock);
 	do {
-		virtqueue_disable_cb(vgdev->ctrlq);
-		ret = reclaim_vbufs(vgdev->ctrlq, &reclaim_list);
+		virtqueue_disable_cb(vgdev->ctrlq.vq);
+		ret = reclaim_vbufs(vgdev->ctrlq.vq, &reclaim_list);
 		if (ret == 0)
 			printk("cleaned 0 buffers wierd\n");
 
-	} while (!virtqueue_enable_cb(vgdev->ctrlq));
-	spin_unlock(&vgdev->ctrlq_lock);
+	} while (!virtqueue_enable_cb(vgdev->ctrlq.vq));
+	spin_unlock(&vgdev->ctrlq.qlock);
 
 	list_for_each_entry_safe(entry, tmp, &reclaim_list, destroy_list) {
 		list_del(&entry->destroy_list);
 		free_vbuf(vgdev, entry);
 	}
-	wake_up(&vgdev->ctrl_ack_queue);
+	wake_up(&vgdev->ctrlq.ack_queue);
 }
-			
+
+void virtgpu_dequeue_cursor_func(struct work_struct *work)
+{
+	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
+						    cursorq.dequeue_work);
+	struct virtqueue *vq = vgdev->cursorq.vq;
+	unsigned int len;
+	spin_lock(&vgdev->cursorq.qlock);
+	do {
+		virtqueue_disable_cb(vgdev->cursorq.vq);
+		while (virtqueue_get_buf(vq, &len)) {
+		}
+	} while (!virtqueue_enable_cb(vgdev->cursorq.vq));
+	spin_unlock(&vgdev->cursorq.qlock);
+	wake_up(&vgdev->cursorq.ack_queue);
+}
+
 int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
 			      struct virtgpu_vbuffer *vbuf)
 {
-	struct virtqueue *vq = vgdev->ctrlq;
+	struct virtqueue *vq = vgdev->ctrlq.vq;
 	struct scatterlist *sgs[2], vcmd, vout;
 	int outcnt, incnt = 0;
 	int ret;
@@ -134,19 +158,49 @@ int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
 		sgs[1] = &vout;
 		outcnt++;
 	}
-	spin_lock(&vgdev->ctrlq_lock);
+	spin_lock(&vgdev->ctrlq.qlock);
 retry:
 	ret = virtqueue_add_sgs(vq, sgs, outcnt, incnt, vbuf, GFP_ATOMIC);
 	if (ret == -ENOSPC) {
-		spin_unlock(&vgdev->ctrlq_lock);
-		wait_event(vgdev->ctrl_ack_queue, vq->num_free);
-		spin_lock(&vgdev->ctrlq_lock);
+		spin_unlock(&vgdev->ctrlq.qlock);
+		wait_event(vgdev->ctrlq.ack_queue, vq->num_free);
+		spin_lock(&vgdev->ctrlq.qlock);
 		goto retry;
 	} else {
 		virtqueue_kick(vq);
 	}
 
-	spin_unlock(&vgdev->ctrlq_lock);
+	spin_unlock(&vgdev->ctrlq.qlock);
+
+	if (!ret)
+		ret = vq->num_free;
+	return ret;
+}
+
+int virtgpu_queue_cursor(struct virtgpu_device *vgdev)
+{
+	struct virtqueue *vq = vgdev->cursorq.vq;
+	struct scatterlist *sgs[1], ccmd;
+	int ret;
+	int outcnt;
+
+	sg_init_one(&ccmd, vgdev->cursor_page, sizeof(struct virtgpu_hw_cursor_page));
+	sgs[0] = &ccmd;
+	outcnt = 1;
+
+	spin_lock(&vgdev->cursorq.qlock);
+retry:
+	ret = virtqueue_add_sgs(vq, sgs, outcnt, 0, vgdev->cursor_page, GFP_ATOMIC);
+	if (ret == -ENOSPC) {
+		spin_unlock(&vgdev->cursorq.qlock);
+		wait_event(vgdev->cursorq.ack_queue, vq->num_free);
+		spin_lock(&vgdev->cursorq.qlock);
+		goto retry;
+	} else {
+		virtqueue_kick(vq);
+	}
+
+	spin_unlock(&vgdev->cursorq.qlock);
 
 	if (!ret)
 		ret = vq->num_free;
@@ -196,16 +250,6 @@ int virtgpu_cmd_unref_resource(struct virtgpu_device *vgdev,
 	       
 	return 0;
 }
-
-/* we want to attach backing store and invalidate it for GEM objects
-   only so pass the GEM object then internally allocate pages to store
-   the sg lists to give to the host */
-int virtgpu_cmd_attach_status_page(struct virtgpu_device *vgdev,
-				   uint64_t page_addr)
-{
-
-}
-
 
 int virtgpu_cmd_resource_inval_backing(struct virtgpu_device *vgdev,
 				       uint32_t resource_id)
@@ -352,4 +396,8 @@ int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *o
 	return 0;
 }
 
+void virtgpu_cursor_ping(struct virtgpu_device *vgdev)
+{
+	virtgpu_queue_cursor(vgdev);
+}
 
