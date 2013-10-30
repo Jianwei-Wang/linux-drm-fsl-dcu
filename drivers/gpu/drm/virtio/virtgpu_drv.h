@@ -34,6 +34,7 @@ struct virtgpu_object {
 
 	struct sg_table *pages;
 	void *vmap;
+	bool dumb;
 };
 #define gem_to_virtgpu_obj(gobj) container_of((gobj), struct virtgpu_object, gem_base)
 
@@ -79,6 +80,13 @@ struct virtgpu_mman {
 
 struct virtgpu_fbdev;
 
+struct virtgpu_queue {
+	struct virtqueue *vq;
+	spinlock_t qlock;
+      	wait_queue_head_t ack_queue;
+	struct work_struct dequeue_work;
+};
+
 struct virtgpu_device {
 	struct device *dev;
 	struct drm_device *ddev;
@@ -89,12 +97,11 @@ struct virtgpu_device {
 
 	/* pointer to fbdev info structure */
 	struct virtgpu_fbdev *vgfbdev;
-	
-	struct virtqueue *ctrlq;
-	spinlock_t ctrlq_lock;
-	wait_queue_head_t ctrl_ack_queue;
-	struct work_struct dequeue_work;
 
+	struct virtgpu_queue ctrlq;
+	struct virtgpu_queue cursorq;
+
+	void *cursor_page;
 	struct idr	resource_idr;
 	spinlock_t resource_idr_lock;
 
@@ -121,11 +128,15 @@ int virtgpu_mode_dumb_destroy(struct drm_file *file_priv,
 int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 			   struct drm_device *dev,
 			   uint32_t handle, uint64_t *offset_p);
+int virtgpu_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf);
+int virtgpu_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
 /* virtio_fb */
 #define VIRTGPUFB_CONN_LIMIT 1
 int virtgpu_fbdev_init(struct virtgpu_device *vgdev);
 void virtgpu_fbdev_fini(struct virtgpu_device *vgdev);
-
+int virtgpu_surface_dirty(struct virtgpu_framebuffer *qfb,
+			  struct drm_clip_rect *clips,
+			  unsigned num_clips);
 /* virtio vg */
 int virtgpu_resource_id_get(struct virtgpu_device *vgdev, uint32_t *resid);
 int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
@@ -146,8 +157,13 @@ int virtgpu_cmd_set_scanout(struct virtgpu_device *vgdev,
 			    uint32_t width, uint32_t height,
 			    uint32_t x, uint32_t y);
 void virtgpu_ctrl_ack(struct virtqueue *vq);
-void virtgpu_dequeue_work_func(struct work_struct *work);
+void virtgpu_cursor_ack(struct virtqueue *vq);
+void virtgpu_dequeue_ctrl_func(struct work_struct *work);
+void virtgpu_dequeue_cursor_func(struct work_struct *work);
 int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id);
+int virtgpu_attach_status_page(struct virtgpu_device *vgdev);
+int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
+void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
 
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,

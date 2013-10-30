@@ -87,6 +87,46 @@ static int virtgpu_dirty_update(struct virtgpu_framebuffer *fb, bool store,
 	return 0;
 }
 
+int virtgpu_surface_dirty(struct virtgpu_framebuffer *vgfb,
+			  struct drm_clip_rect *clips,
+			  unsigned num_clips)
+{
+	struct virtgpu_device *vgdev = vgfb->base.dev->dev_private;
+	struct virtgpu_object *obj = gem_to_virtgpu_obj(vgfb->obj);
+	struct drm_clip_rect norect;
+	struct drm_clip_rect *clips_ptr;
+	int left, right, top, bottom;
+	int i;
+	int inc = 1;
+	if (!num_clips) {
+		num_clips = 1;
+		clips = &norect;
+		norect.x1 = norect.y1 = 0;
+		norect.x2 = vgfb->base.width;
+		norect.y2 = vgfb->base.height;
+	}
+	left = clips->x1;
+	right = clips->x2;
+	top = clips->y1;
+	bottom = clips->y2;
+
+	/* skip the first clip rect */
+	for (i = 1, clips_ptr = clips + inc;
+	     i < num_clips; i++, clips_ptr += inc) {
+		left = min_t(int, left, (int)clips_ptr->x1);
+		right = max_t(int, right, (int)clips_ptr->x2);
+		top = min_t(int, top, (int)clips_ptr->y1);
+		bottom = max_t(int, bottom, (int)clips_ptr->y2);
+	}
+
+	if (obj->dumb)
+		return virtgpu_dirty_update(vgfb, false, left, top, right - left, bottom - top);
+ 
+	virtgpu_cmd_resource_flush(vgdev, obj->hw_res_handle, left, top, right - left, bottom - top);
+
+	return 0;
+}
+
 static void virtgpu_fb_dirty_work(struct work_struct *work)
 {
 	struct delayed_work *delayed_work = to_delayed_work(work);
@@ -309,7 +349,7 @@ int virtgpu_fbdev_init(struct virtgpu_device *vgdev)
 	INIT_DELAYED_WORK(&vgfbdev->work, virtgpu_fb_dirty_work);
 
 	ret = drm_fb_helper_init(vgdev->ddev, &vgfbdev->helper,
-				 1 /* num_crtc - VIRTGPU supports just 1 */,
+				 VIRTGPU_NUM_OUTPUTS /* num_crtc - VIRTGPU supports just 1 */,
 				 VIRTGPUFB_CONN_LIMIT);
 	if (ret) {
 		kfree(vgfbdev);

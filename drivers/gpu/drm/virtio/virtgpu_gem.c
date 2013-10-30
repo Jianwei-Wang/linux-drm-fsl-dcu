@@ -231,7 +231,8 @@ int virtgpu_mode_dumb_create(struct drm_file *file_priv,
 	if (ret)
 		goto fail;
 
-
+	obj->dumb = true;
+	args->pitch = pitch;
 	drm_gem_object_unreference(&obj->gem_base);
 	return ret;
 fail:
@@ -261,9 +262,58 @@ int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 	ret = virtgpu_create_mmap_offset(obj);
 	if (ret)
 		goto out;
-	*offset_p = (u64)obj->gem_base.map_list.map << PAGE_SHIFT;
+	*offset_p = (u64)obj->gem_base.map_list.hash.key << PAGE_SHIFT;
 
 out:
 	drm_gem_object_unreference_unlocked(gobj);
 	return ret;
+}
+
+int virtgpu_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+        int ret;
+
+        ret = drm_gem_mmap(filp, vma);
+        if (ret)
+                return ret;
+
+        vma->vm_flags &= ~VM_PFNMAP;
+        vma->vm_flags |= VM_MIXEDMAP;
+
+        return ret;
+}
+
+int virtgpu_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct virtgpu_object *obj = gem_to_virtgpu_obj(vma->vm_private_data);
+	struct page *page = NULL;
+	unsigned int page_offset;
+	struct sg_page_iter sg_iter;
+	int ret = 0;
+
+	page_offset = ((unsigned long)vmf->virtual_address - vma->vm_start) >>
+		PAGE_SHIFT;	    
+
+	if (!obj->pages)
+		return VM_FAULT_SIGBUS;
+
+	for_each_sg_page(obj->pages->sgl, &sg_iter, obj->pages->nents, page_offset) {
+		page = sg_page_iter_page(&sg_iter);
+		break;
+	}
+
+	if (!page)
+		return VM_FAULT_NOPAGE;
+
+	ret = vm_insert_page(vma, (unsigned long)vmf->virtual_address, page);
+	switch (ret) {
+	case -EAGAIN:
+	case 0:
+	case -ERESTARTSYS:
+		return VM_FAULT_NOPAGE;
+	case -ENOMEM:
+		return VM_FAULT_OOM;
+	default:
+		return VM_FAULT_SIGBUS;
+	}
 }

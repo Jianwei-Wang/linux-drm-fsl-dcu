@@ -3,7 +3,6 @@
 
 enum virtgpu_ctrl_cmd {
 	VIRTGPU_CMD_NOP,
-	VIRTGPU_CMD_ATTACH_STATUS_PAGE,
 	VIRTGPU_CMD_GET_DISPLAY_INFO,
 	VIRTGPU_CMD_GET_CAPS,
 	VIRTGPU_CMD_RESOURCE_CREATE_2D,
@@ -15,16 +14,11 @@ enum virtgpu_ctrl_cmd {
 	VIRTGPU_CMD_RESOURCE_INVAL_BACKING,
 };
 
-struct virtgpu_hw_status_page {
+/* data passed in the cursor vq */
+struct virtgpu_hw_cursor_page {
 	uint32_t cursor_x, cursor_y;
 	uint32_t cursor_hot_x, cursor_hot_y;
 	uint32_t cursor_id;
-	uint32_t error_state;
-	uint64_t fence_id;
-};
-
-struct virtgpu_attach_status_page {
-	uint64_t page_address;
 };
 
 struct virtgpu_resource_unref {
@@ -99,7 +93,6 @@ struct virtgpu_command {
 	uint32_t flags;
 	uint64_t rsvd;
 	union virtgpu_cmds {
-		struct virtgpu_attach_status_page attach_status_page;
 		struct virtgpu_resource_create_2d resource_create_2d;
 		struct virtgpu_resource_unref resource_unref;
 		struct virtgpu_resource_flush resource_flush;
