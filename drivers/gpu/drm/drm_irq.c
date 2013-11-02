@@ -341,27 +341,10 @@ int drm_irq_install(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_irq_install);
 
-/**
- * Uninstall the IRQ handler.
- *
- * \param dev DRM device.
- *
- * Calls the driver's \c irq_uninstall() function, and stops the irq.
- */
-int drm_irq_uninstall(struct drm_device *dev)
+void drm_irq_wakeup_waiters(struct drm_device *dev)
 {
 	unsigned long irqflags;
-	bool irq_enabled;
 	int i;
-
-	if (!drm_core_check_feature(dev, DRIVER_HAVE_IRQ))
-		return -EINVAL;
-
-	mutex_lock(&dev->struct_mutex);
-	irq_enabled = dev->irq_enabled;
-	dev->irq_enabled = false;
-	mutex_unlock(&dev->struct_mutex);
-
 	/*
 	 * Wake up any waiters so they don't hang.
 	 */
@@ -375,6 +358,29 @@ int drm_irq_uninstall(struct drm_device *dev)
 		}
 		spin_unlock_irqrestore(&dev->vbl_lock, irqflags);
 	}
+}
+EXPORT_SYMBOL(drm_irq_wakeup_waiters);
+
+/**
+ * Uninstall the IRQ handler.
+ *
+ * \param dev DRM device.
+ *
+ * Calls the driver's \c irq_uninstall() function, and stops the irq.
+ */
+int drm_irq_uninstall(struct drm_device *dev)
+{
+	bool irq_enabled;
+
+	if (!drm_core_check_feature(dev, DRIVER_HAVE_IRQ))
+		return -EINVAL;
+
+	mutex_lock(&dev->struct_mutex);
+	irq_enabled = dev->irq_enabled;
+	dev->irq_enabled = false;
+	mutex_unlock(&dev->struct_mutex);
+
+	drm_irq_wakeup_waiters(dev);
 
 	if (!irq_enabled)
 		return -EINVAL;

@@ -1670,6 +1670,9 @@ void drm_pci_driver_init(struct drm_driver *driver, struct pci_driver *pdriver);
 int drm_dev_init(struct drm_device *dev,
 		 struct drm_driver *driver,
 		 struct device *parent);
+void drm_dev_fini(struct drm_device *dev);
+int drm_register_minors(struct drm_device *dev);
+void drm_irq_wakeup_waiters(struct drm_device *dev);
 #define DRM_PCIE_SPEED_25 1
 #define DRM_PCIE_SPEED_50 2
 #define DRM_PCIE_SPEED_80 4

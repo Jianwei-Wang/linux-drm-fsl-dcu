@@ -476,6 +476,17 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 }
 EXPORT_SYMBOL(drm_dev_alloc);
 
+void drm_dev_fini(struct drm_device *dev)
+{
+	if (dev->driver->driver_features & DRIVER_GEM)
+		drm_gem_destroy(dev);
+
+	drm_ctxbitmap_cleanup(dev);
+	drm_ht_remove(&dev->map_hash);
+
+	kfree(dev->devname);
+}
+EXPORT_SYMBOL(drm_dev_fini);
 /**
  * drm_dev_free - Free DRM device
  * @dev: DRM device to free
@@ -488,13 +499,7 @@ EXPORT_SYMBOL(drm_dev_alloc);
  */
 void drm_dev_free(struct drm_device *dev)
 {
-	if (dev->driver->driver_features & DRIVER_GEM)
-		drm_gem_destroy(dev);
-
-	drm_ctxbitmap_cleanup(dev);
-	drm_ht_remove(&dev->map_hash);
-
-	kfree(dev->devname);
+	drm_dev_fini(dev);
 	kfree(dev);
 }
 EXPORT_SYMBOL(drm_dev_free);
