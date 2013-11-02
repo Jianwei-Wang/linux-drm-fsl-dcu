@@ -1666,7 +1666,10 @@ extern void drm_pci_exit(struct drm_driver *driver, struct pci_driver *pdriver);
 extern int drm_get_pci_dev(struct pci_dev *pdev,
 			   const struct pci_device_id *ent,
 			   struct drm_driver *driver);
-
+void drm_pci_driver_init(struct drm_driver *driver, struct pci_driver *pdriver);
+int drm_dev_init(struct drm_device *dev,
+		 struct drm_driver *driver,
+		 struct device *parent);
 #define DRM_PCIE_SPEED_25 1
 #define DRM_PCIE_SPEED_50 2
 #define DRM_PCIE_SPEED_80 4

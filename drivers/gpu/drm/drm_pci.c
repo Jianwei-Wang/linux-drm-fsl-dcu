@@ -356,6 +356,13 @@ err_free:
 }
 EXPORT_SYMBOL(drm_get_pci_dev);
 
+void drm_pci_driver_init(struct drm_driver *driver, struct pci_driver *pdriver)
+{
+	INIT_LIST_HEAD(&driver->device_list);
+	driver->kdriver.pci = pdriver;
+	driver->bus = &drm_pci_bus;
+}
+EXPORT_SYMBOL(drm_pci_driver_init);
 /**
  * PCI device initialization. Called direct from modules at load time.
  *
@@ -375,9 +382,7 @@ int drm_pci_init(struct drm_driver *driver, struct pci_driver *pdriver)
 
 	DRM_DEBUG("\n");
 
-	INIT_LIST_HEAD(&driver->device_list);
-	driver->kdriver.pci = pdriver;
-	driver->bus = &drm_pci_bus;
+	drm_pci_driver_init(driver, pdriver);
 
 	if (driver->driver_features & DRIVER_MODESET)
 		return pci_register_driver(pdriver);

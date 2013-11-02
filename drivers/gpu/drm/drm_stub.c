@@ -407,15 +407,11 @@ EXPORT_SYMBOL(drm_unplug_dev);
  * RETURNS:
  * Pointer to new DRM device, or NULL if out of memory.
  */
-struct drm_device *drm_dev_alloc(struct drm_driver *driver,
-				 struct device *parent)
+int drm_dev_init(struct drm_device *dev,
+		 struct drm_driver *driver,
+		 struct device *parent)
 {
-	struct drm_device *dev;
 	int ret;
-
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev)
-		return NULL;
 
 	dev->dev = parent;
 	dev->driver = driver;
@@ -431,8 +427,9 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 	mutex_init(&dev->struct_mutex);
 	mutex_init(&dev->ctxlist_mutex);
 
-	if (drm_ht_create(&dev->map_hash, 12))
-		goto err_free;
+	ret = drm_ht_create(&dev->map_hash, 12);
+	if (ret)
+		goto err_out;
 
 	ret = drm_ctxbitmap_init(dev);
 	if (ret) {
@@ -448,15 +445,34 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 		}
 	}
 
-	return dev;
+	return 0;
 
 err_ctxbitmap:
 	drm_ctxbitmap_cleanup(dev);
 err_ht:
 	drm_ht_remove(&dev->map_hash);
-err_free:
-	kfree(dev);
-	return NULL;
+err_out:
+	return ret;
+}
+EXPORT_SYMBOL(drm_dev_init);
+
+struct drm_device *drm_dev_alloc(struct drm_driver *driver,
+				 struct device *parent)
+{
+	struct drm_device *dev;
+	int ret;
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return NULL;
+
+	ret = drm_dev_init(dev, driver, parent);
+	if (ret) {
+		kfree(dev);
+		return NULL;
+	}
+
+	return dev;
 }
 EXPORT_SYMBOL(drm_dev_alloc);
 
@@ -483,6 +499,45 @@ void drm_dev_free(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_dev_free);
 
+void drm_remove_minors(struct drm_device *dev)
+{
+	if (dev->control)
+		drm_put_minor(&dev->control);
+	if (dev->render)
+		drm_put_minor(&dev->render);
+	drm_put_minor(&dev->primary);
+}
+EXPORT_SYMBOL(drm_remove_minors);
+
+int drm_register_minors(struct drm_device *dev)
+{
+	int ret;
+
+	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
+		ret = drm_get_minor(dev, &dev->control, DRM_MINOR_CONTROL);
+		if (ret)
+			return ret;
+	}
+
+	if (drm_core_check_feature(dev, DRIVER_RENDER) && drm_rnodes) {
+		ret = drm_get_minor(dev, &dev->render, DRM_MINOR_RENDER);
+		if (ret)
+			goto err_control_node;
+	}
+	ret = drm_get_minor(dev, &dev->primary, DRM_MINOR_LEGACY);
+	if (ret)
+		goto err_render_node;
+	return 0;
+err_render_node:
+	if (dev->render)
+		drm_put_minor(&dev->render);
+err_control_node:
+	if (dev->control)
+		drm_put_minor(&dev->control);
+	return ret;
+}
+EXPORT_SYMBOL(drm_register_minors);
+
 /**
  * drm_dev_register - Register DRM device
  * @dev: Device to register
@@ -508,26 +563,14 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 			goto out_unlock;
 	}
 
-	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
-		ret = drm_get_minor(dev, &dev->control, DRM_MINOR_CONTROL);
-		if (ret)
-			goto err_agp;
-	}
-
-	if (drm_core_check_feature(dev, DRIVER_RENDER) && drm_rnodes) {
-		ret = drm_get_minor(dev, &dev->render, DRM_MINOR_RENDER);
-		if (ret)
-			goto err_control_node;
-	}
-
-	ret = drm_get_minor(dev, &dev->primary, DRM_MINOR_LEGACY);
+	ret = drm_register_minors(dev);
 	if (ret)
-		goto err_render_node;
+		goto err_agp;
 
 	if (dev->driver->load) {
 		ret = dev->driver->load(dev, flags);
 		if (ret)
-			goto err_primary_node;
+			goto err_minors;
 	}
 
 	/* setup grouping for legacy outputs */
@@ -546,14 +589,8 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 err_unload:
 	if (dev->driver->unload)
 		dev->driver->unload(dev);
-err_primary_node:
-	drm_put_minor(&dev->primary);
-err_render_node:
-	if (dev->render)
-		drm_put_minor(&dev->render);
-err_control_node:
-	if (dev->control)
-		drm_put_minor(&dev->control);
+err_minors:
+	drm_remove_minors(dev);
 err_agp:
 	if (dev->driver->bus->agp_destroy)
 		dev->driver->bus->agp_destroy(dev);
@@ -588,11 +625,7 @@ void drm_dev_unregister(struct drm_device *dev)
 	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head)
 		drm_rmmap(dev, r_list->map);
 
-	if (dev->control)
-		drm_put_minor(&dev->control);
-	if (dev->render)
-		drm_put_minor(&dev->render);
-	drm_put_minor(&dev->primary);
+	drm_remove_minors(dev);
 
 	list_del(&dev->driver_item);
 }
