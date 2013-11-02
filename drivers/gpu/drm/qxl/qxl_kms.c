@@ -123,7 +123,7 @@ int qxl_device_init(struct qxl_device *qdev,
 	int r;
 
 	qdev->dev = &pdev->dev;
-	qdev->ddev = ddev;
+	//	qdev->ddev = ddev;
 	qdev->pdev = pdev;
 	qdev->flags = flags;
 
@@ -254,7 +254,7 @@ static void qxl_device_fini(struct qxl_device *qdev)
 	flush_workqueue(qdev->gc_queue);
 	destroy_workqueue(qdev->gc_queue);
 	qdev->gc_queue = NULL;
-
+	qxl_irq_fini(qdev);
 	qxl_ring_free(qdev->command_ring);
 	qxl_ring_free(qdev->cursor_ring);
 	qxl_ring_free(qdev->release_ring);
@@ -269,34 +269,17 @@ static void qxl_device_fini(struct qxl_device *qdev)
 	qxl_debugfs_remove_files(qdev);
 }
 
-int qxl_driver_unload(struct drm_device *dev)
+int qxl_driver_unload(struct qxl_device *qdev)
 {
-	struct qxl_device *qdev = dev->dev_private;
-
-	if (qdev == NULL)
-		return 0;
 	qxl_modeset_fini(qdev);
 	qxl_device_fini(qdev);
-
-	kfree(qdev);
-	dev->dev_private = NULL;
 	return 0;
 }
 
-int qxl_driver_load(struct drm_device *dev, unsigned long flags)
+int qxl_driver_load(struct qxl_device *qdev, unsigned long flags)
 {
-	struct qxl_device *qdev;
+	struct drm_device *dev = &qdev->ddev;
 	int r;
-
-	/* require kms */
-	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		return -ENODEV;
-
-	qdev = kzalloc(sizeof(struct qxl_device), GFP_KERNEL);
-	if (qdev == NULL)
-		return -ENOMEM;
-
-	dev->dev_private = qdev;
 
 	r = qxl_device_init(qdev, dev, dev->pdev, flags);
 	if (r)
@@ -304,11 +287,11 @@ int qxl_driver_load(struct drm_device *dev, unsigned long flags)
 
 	r = qxl_modeset_init(qdev);
 	if (r) {
-		qxl_driver_unload(dev);
+		qxl_driver_unload(qdev);
 		goto out;
 	}
 
-	drm_kms_helper_poll_init(qdev->ddev);
+	drm_kms_helper_poll_init(&qdev->ddev);
 
 	return 0;
 out:

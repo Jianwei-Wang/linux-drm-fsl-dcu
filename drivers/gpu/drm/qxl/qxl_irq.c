@@ -27,8 +27,7 @@
 
 irqreturn_t qxl_irq_handler(DRM_IRQ_ARGS)
 {
-	struct drm_device *dev = (struct drm_device *) arg;
-	struct qxl_device *qdev = (struct qxl_device *)dev->dev_private;
+	struct qxl_device *qdev = (struct qxl_device *) arg;
 	uint32_t pending;
 
 	pending = xchg(&qdev->ram_header->int_pending, 0);
@@ -87,11 +86,20 @@ int qxl_irq_init(struct qxl_device *qdev)
 	atomic_set(&qdev->irq_received_cursor, 0);
 	atomic_set(&qdev->irq_received_io_cmd, 0);
 	qdev->irq_received_error = 0;
-	ret = drm_irq_install(qdev->ddev);
+
+	ret = request_irq(qdev->ddev.pdev->irq, qxl_irq_handler,
+			  IRQF_SHARED, DRIVER_NAME, qdev);
+
 	qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed installing irq: %d\n", ret);
 		return 1;
 	}
 	return 0;
+}
+
+int qxl_irq_fini(struct qxl_device *qdev)
+{
+	drm_irq_wakeup_waiters(&qdev->ddev);
+	free_irq(qdev->ddev.pdev->irq, qdev);
 }

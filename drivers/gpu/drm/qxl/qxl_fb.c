@@ -544,7 +544,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 
 	info->par = qfbdev;
 
-	qxl_framebuffer_init(qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj);
+	qxl_framebuffer_init(&qdev->ddev, &qfbdev->qfb, &mode_cmd, gobj);
 
 	fb = &qfbdev->qfb.base;
 
@@ -577,7 +577,7 @@ static int qxlfb_create(struct qxl_fbdev *qfbdev,
 		ret = -ENOMEM;
 		goto out_unref;
 	}
-	info->apertures->ranges[0].base = qdev->ddev->mode_config.fb_base;
+	info->apertures->ranges[0].base = qdev->ddev.mode_config.fb_base;
 	info->apertures->ranges[0].size = qdev->vram_size;
 
 	info->fix.mmio_start = 0;
@@ -679,7 +679,7 @@ int qxl_fbdev_init(struct qxl_device *qdev)
 	qfbdev->helper.funcs = &qxl_fb_helper_funcs;
 	spin_lock_init(&qfbdev->delayed_ops_lock);
 	INIT_LIST_HEAD(&qfbdev->delayed_ops);
-	ret = drm_fb_helper_init(qdev->ddev, &qfbdev->helper,
+	ret = drm_fb_helper_init(&qdev->ddev, &qfbdev->helper,
 				 qxl_num_crtc /* num_crtc - QXL supports just 1 */,
 				 QXLFB_CONN_LIMIT);
 	if (ret) {
@@ -697,7 +697,7 @@ void qxl_fbdev_fini(struct qxl_device *qdev)
 	if (!qdev->mode_info.qfbdev)
 		return;
 
-	qxl_fbdev_destroy(qdev->ddev, qdev->mode_info.qfbdev);
+	qxl_fbdev_destroy(&qdev->ddev, qdev->mode_info.qfbdev);
 	kfree(qdev->mode_info.qfbdev);
 	qdev->mode_info.qfbdev = NULL;
 }

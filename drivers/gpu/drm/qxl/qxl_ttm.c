@@ -133,12 +133,7 @@ int qxl_mmap(struct file *filp, struct vm_area_struct *vma)
 	}
 
 	file_priv = filp->private_data;
-	qdev = file_priv->minor->dev->dev_private;
-	if (qdev == NULL) {
-		DRM_ERROR(
-		 "filp->private_data->minor->dev->dev_private == NULL\n");
-		return -EINVAL;
-	}
+	qdev = file_priv->minor->dev;
 	QXL_INFO(qdev, "%s: filp->private_data = 0x%p, vma->vm_pgoff = %lx\n",
 		 __func__, filp->private_data, vma->vm_pgoff);
 
@@ -455,7 +450,7 @@ static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
 	if (!qxl_ttm_bo_is_qxl_bo(bo))
 		return;
 	qbo = container_of(bo, struct qxl_bo, tbo);
-	qdev = qbo->gem_base.dev->dev_private;
+	qdev = to_qxl_device(qbo->gem_base.dev);
 
 	if (bo->mem.mem_type == TTM_PL_PRIV0 && qbo->surface_id)
 		qxl_surface_evict(qdev, qbo, new_mem ? true : false);
@@ -517,7 +512,7 @@ int qxl_ttm_init(struct qxl_device *qdev)
 	DRM_INFO("qxl: %luM of IO pages memory ready (VRAM domain)\n",
 		 ((unsigned)num_io_pages * PAGE_SIZE) / (1024 * 1024));
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
-		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
+		qdev->mman.bdev.dev_mapping = qdev->ddev.dev_mapping;
 	r = qxl_ttm_debugfs_init(qdev);
 	if (r) {
 		DRM_ERROR("Failed to init debugfs\n");
@@ -544,7 +539,7 @@ static int qxl_mm_dump_table(struct seq_file *m, void *data)
 	struct drm_info_node *node = (struct drm_info_node *)m->private;
 	struct drm_mm *mm = (struct drm_mm *)node->info_ent->data;
 	struct drm_device *dev = node->minor->dev;
-	struct qxl_device *rdev = dev->dev_private;
+	struct qxl_device *rdev = to_qxl_device(dev);
 	int ret;
 	struct ttm_bo_global *glob = rdev->mman.bdev.glob;
 

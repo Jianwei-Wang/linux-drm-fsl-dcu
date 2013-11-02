@@ -34,7 +34,7 @@ static inline int qxl_bo_reserve(struct qxl_bo *bo, bool no_wait)
 	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS) {
-			struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+			struct qxl_device *qdev = to_qxl_device(bo->gem_base.dev);
 			dev_err(qdev->dev, "%p reserve failed\n", bo);
 		}
 		return r;
@@ -70,7 +70,7 @@ static inline int qxl_bo_wait(struct qxl_bo *bo, u32 *mem_type,
 	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS) {
-			struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+			struct qxl_device *qdev = to_qxl_device(bo->gem_base.dev);
 			dev_err(qdev->dev, "%p reserve failed for wait\n",
 				bo);
 		}

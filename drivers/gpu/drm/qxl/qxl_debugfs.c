@@ -40,7 +40,7 @@ static int
 qxl_debugfs_irq_received(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
-	struct qxl_device *qdev = node->minor->dev->dev_private;
+	struct qxl_device *qdev = to_qxl_device(node->minor->dev);
 
 	seq_printf(m, "%d\n", atomic_read(&qdev->irq_received));
 	seq_printf(m, "%d\n", atomic_read(&qdev->irq_received_display));
@@ -54,7 +54,7 @@ static int
 qxl_debugfs_buffers_info(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
-	struct qxl_device *qdev = node->minor->dev->dev_private;
+	struct qxl_device *qdev = to_qxl_device(node->minor->dev);
 	struct qxl_bo *bo;
 
 	list_for_each_entry(bo, &qdev->gem.objects, list) {
@@ -115,11 +115,11 @@ int qxl_debugfs_add_files(struct qxl_device *qdev,
 	qdev->debugfs_count = i;
 #if defined(CONFIG_DEBUG_FS)
 	drm_debugfs_create_files(files, nfiles,
-				 qdev->ddev->control->debugfs_root,
-				 qdev->ddev->control);
+				 qdev->ddev.control->debugfs_root,
+				 qdev->ddev.control);
 	drm_debugfs_create_files(files, nfiles,
-				 qdev->ddev->primary->debugfs_root,
-				 qdev->ddev->primary);
+				 qdev->ddev.primary->debugfs_root,
+				 qdev->ddev.primary);
 #endif
 	return 0;
 }
@@ -132,10 +132,10 @@ void qxl_debugfs_remove_files(struct qxl_device *qdev)
 	for (i = 0; i < qdev->debugfs_count; i++) {
 		drm_debugfs_remove_files(qdev->debugfs[i].files,
 					 qdev->debugfs[i].num_files,
-					 qdev->ddev->control);
+					 qdev->ddev.control);
 		drm_debugfs_remove_files(qdev->debugfs[i].files,
 					 qdev->debugfs[i].num_files,
-					 qdev->ddev->primary);
+					 qdev->ddev.primary);
 	}
 #endif
 }

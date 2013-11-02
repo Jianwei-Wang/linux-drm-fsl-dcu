@@ -33,7 +33,7 @@ static void qxl_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	struct qxl_device *qdev;
 
 	bo = container_of(tbo, struct qxl_bo, tbo);
-	qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+	qdev = (struct qxl_device *)bo->gem_base.dev;
 
 	qxl_surface_evict(qdev, bo, false);
 	qxl_fence_fini(&bo->fence);
@@ -83,7 +83,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	int r;
 
 	if (unlikely(qdev->mman.bdev.dev_mapping == NULL))
-		qdev->mman.bdev.dev_mapping = qdev->ddev->dev_mapping;
+		qdev->mman.bdev.dev_mapping = qdev->ddev.dev_mapping;
 	if (kernel)
 		type = ttm_bo_type_kernel;
 	else
@@ -93,7 +93,7 @@ int qxl_bo_create(struct qxl_device *qdev,
 	if (bo == NULL)
 		return -ENOMEM;
 	size = roundup(size, PAGE_SIZE);
-	r = drm_gem_object_init(qdev->ddev, &bo->gem_base, size);
+	r = drm_gem_object_init(&qdev->ddev, &bo->gem_base, size);
 	if (unlikely(r)) {
 		kfree(bo);
 		return r;
@@ -227,7 +227,7 @@ struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo)
 
 int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 {
-	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev;
 	int r;
 
 	if (bo->pin_count) {
@@ -250,7 +250,7 @@ int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr)
 
 int qxl_bo_unpin(struct qxl_bo *bo)
 {
-	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+	struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev;
 	int r, i;
 
 	if (!bo->pin_count) {
@@ -276,7 +276,7 @@ void qxl_bo_force_delete(struct qxl_device *qdev)
 		return;
 	dev_err(qdev->dev, "Userspace still has active objects !\n");
 	list_for_each_entry_safe(bo, n, &qdev->gem.objects, list) {
-		mutex_lock(&qdev->ddev->struct_mutex);
+		mutex_lock(&qdev->ddev.struct_mutex);
 		dev_err(qdev->dev, "%p %p %lu %lu force free\n",
 			&bo->gem_base, bo, (unsigned long)bo->gem_base.size,
 			*((unsigned long *)&bo->gem_base.refcount));
@@ -285,7 +285,7 @@ void qxl_bo_force_delete(struct qxl_device *qdev)
 		mutex_unlock(&qdev->gem.mutex);
 		/* this should unref the ttm bo */
 		drm_gem_object_unreference(&bo->gem_base);
-		mutex_unlock(&qdev->ddev->struct_mutex);
+		mutex_unlock(&qdev->ddev.struct_mutex);
 	}
 }
 

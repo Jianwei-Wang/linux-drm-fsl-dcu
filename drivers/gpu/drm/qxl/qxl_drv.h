@@ -240,8 +240,9 @@ void qxl_debugfs_remove_files(struct qxl_device *qdev);
 struct qxl_device;
 
 struct qxl_device {
+	struct drm_device		ddev;
+
 	struct device			*dev;
-	struct drm_device		*ddev;
 	struct pci_dev			*pdev;
 	unsigned long flags;
 
@@ -325,14 +326,16 @@ struct qxl_device {
 	struct work_struct fb_work;
 };
 
+#define to_qxl_device(x) container_of(x, struct qxl_device, ddev)
+
 /* forward declaration for QXL_INFO_IO */
 void qxl_io_log(struct qxl_device *qdev, const char *fmt, ...);
 
 extern const struct drm_ioctl_desc qxl_ioctls[];
 extern int qxl_max_ioctl;
 
-int qxl_driver_load(struct drm_device *dev, unsigned long flags);
-int qxl_driver_unload(struct drm_device *dev);
+int qxl_driver_load(struct qxl_device *qdev, unsigned long flags);
+int qxl_driver_unload(struct qxl_device *qdev);
 
 int qxl_modeset_init(struct qxl_device *qdev);
 void qxl_modeset_fini(struct qxl_device *qdev);
@@ -532,7 +535,7 @@ void qxl_debugfs_takedown(struct drm_minor *minor);
 
 /* qxl_irq.c */
 int qxl_irq_init(struct qxl_device *qdev);
-irqreturn_t qxl_irq_handler(DRM_IRQ_ARGS);
+int qxl_irq_fini(struct qxl_device *qdev);
 
 /* qxl_fb.c */
 int qxl_fb_init(struct qxl_device *qdev);
