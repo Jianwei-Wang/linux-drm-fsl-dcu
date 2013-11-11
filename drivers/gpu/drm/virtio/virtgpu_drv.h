@@ -98,6 +98,7 @@ struct virtgpu_device {
 	/* pointer to fbdev info structure */
 	struct virtgpu_fbdev *vgfbdev;
 
+	struct virtgpu_queue eventq;
 	struct virtgpu_queue ctrlq;
 	struct virtgpu_queue cursorq;
 
@@ -158,8 +159,10 @@ int virtgpu_cmd_set_scanout(struct virtgpu_device *vgdev,
 			    uint32_t x, uint32_t y);
 void virtgpu_ctrl_ack(struct virtqueue *vq);
 void virtgpu_cursor_ack(struct virtqueue *vq);
+void virtgpu_event_ack(struct virtqueue *vq);
 void virtgpu_dequeue_ctrl_func(struct work_struct *work);
 void virtgpu_dequeue_cursor_func(struct work_struct *work);
+void virtgpu_dequeue_event_func(struct work_struct *work);
 int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id);
 int virtgpu_attach_status_page(struct virtgpu_device *vgdev);
 int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
