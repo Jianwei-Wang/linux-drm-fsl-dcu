@@ -17,8 +17,8 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	struct virtgpu_device *vgdev;
 	/* this will expand later */
 	struct virtqueue *vqs[2];
-	vq_callback_t *callbacks[] = { virtgpu_ctrl_ack, virtgpu_cursor_ack };
-	const char *names[] = { "control", "cursor" };
+	vq_callback_t *callbacks[] = { virtgpu_ctrl_ack, virtgpu_cursor_ack, virtgpu_event_ack };
+	const char *names[] = { "control", "cursor", "event" };
 	int nvqs;
 	int ret;
 	vgdev = kzalloc(sizeof(struct virtgpu_device), GFP_KERNEL);
@@ -32,6 +32,7 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 
 	virtgpu_init_vq(&vgdev->ctrlq, virtgpu_dequeue_ctrl_func);
 	virtgpu_init_vq(&vgdev->cursorq, virtgpu_dequeue_cursor_func);
+	virtgpu_init_vq(&vgdev->eventq, virtgpu_dequeue_event_func);
 	
 	vgdev->cursor_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!vgdev->cursor_page) {

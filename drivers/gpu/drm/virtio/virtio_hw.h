@@ -14,6 +14,12 @@ enum virtgpu_ctrl_cmd {
 	VIRTGPU_CMD_RESOURCE_INVAL_BACKING,
 };
 
+enum virtgpu_ctrl_event {
+	VIRTGPU_EVENT_NOP,
+	VIRTGPU_EVENT_DISPLAY_CHANGE,
+	VIRTGPU_EVENT_ERROR,
+};
+
 /* data passed in the cursor vq */
 struct virtgpu_hw_cursor_page {
 	uint32_t cursor_x, cursor_y;
@@ -100,6 +106,14 @@ struct virtgpu_command {
 		struct virtgpu_transfer_send_2d transfer_send_2d;
 		struct virtgpu_resource_attach_backing resource_attach_backing;
 		struct virtgpu_resource_inval_backing resource_inval_backing;
+	} u;
+};
+
+struct virtgpu_event {
+	uint32_t type;
+	uint32_t err_code;
+	union virtgpu_events {
+		struct virtgpu_display_info display_info;
 	} u;
 };
 

@@ -45,6 +45,13 @@ void virtgpu_cursor_ack(struct virtqueue *vq)
 	schedule_work(&vgdev->cursorq.dequeue_work);
 }
 
+void virtgpu_event_ack(struct virtqueue *vq)
+{
+	struct drm_device *dev = vq->vdev->priv;
+	struct virtgpu_device *vgdev = dev->dev_private;
+	schedule_work(&vgdev->eventq.dequeue_work);
+}
+
 static struct virtgpu_vbuffer *virtgpu_allocate_vbuf(struct virtgpu_device *vgdev,
 						     int size)
 {
@@ -139,6 +146,21 @@ void virtgpu_dequeue_cursor_func(struct work_struct *work)
 	} while (!virtqueue_enable_cb(vgdev->cursorq.vq));
 	spin_unlock(&vgdev->cursorq.qlock);
 	wake_up(&vgdev->cursorq.ack_queue);
+}
+
+void virtgpu_dequeue_event_func(struct work_struct *work)
+{
+	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
+						    eventq.dequeue_work);
+	struct virtqueue *vq = vgdev->eventq.vq;
+	unsigned int len;
+	spin_lock(&vgdev->eventq.qlock);
+	do {
+		virtqueue_disable_cb(vgdev->eventq.vq);
+		while (virtqueue_get_buf(vq, &len)) {
+		}
+	} while (!virtqueue_enable_cb(vgdev->eventq.vq));
+	spin_unlock(&vgdev->eventq.qlock);
 }
 
 int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
