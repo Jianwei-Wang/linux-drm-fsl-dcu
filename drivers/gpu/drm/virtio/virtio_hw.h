@@ -109,6 +109,14 @@ struct virtgpu_command {
 	} u;
 };
 
+struct virtgpu_response {
+	uint32_t type;
+	uint32_t flags;
+	union virtgpu_resps {
+		struct virtgpu_display_info display_info;
+	} u;
+};
+
 struct virtgpu_event {
 	uint32_t type;
 	uint32_t err_code;
