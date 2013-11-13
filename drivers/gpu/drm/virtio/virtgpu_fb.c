@@ -349,7 +349,7 @@ int virtgpu_fbdev_init(struct virtgpu_device *vgdev)
 	INIT_DELAYED_WORK(&vgfbdev->work, virtgpu_fb_dirty_work);
 
 	ret = drm_fb_helper_init(vgdev->ddev, &vgfbdev->helper,
-				 VIRTGPU_NUM_OUTPUTS /* num_crtc - VIRTGPU supports just 1 */,
+				 vgdev->num_hw_scanouts,
 				 VIRTGPUFB_CONN_LIMIT);
 	if (ret) {
 		kfree(vgfbdev);

@@ -27,7 +27,8 @@
 #include "drm_crtc_helper.h"
 #include "virtio_hw.h"
 
-static int virtgpu_add_common_modes(struct drm_connector *connector)
+static int virtgpu_add_common_modes(struct drm_connector *connector, unsigned pwidth,
+				    unsigned pheight)
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode = NULL;
@@ -61,7 +62,7 @@ static int virtgpu_add_common_modes(struct drm_connector *connector)
 
 		mode = drm_cvt_mode(dev, common_modes[i].w, common_modes[i].h,
 				    60, false, false, false);
-		if (common_modes[i].w == 1024 && common_modes[i].h == 768)
+		if (common_modes[i].w == pwidth && common_modes[i].h == pheight)
 			mode->type |= DRM_MODE_TYPE_PREFERRED;
 		drm_mode_probed_add(connector, mode);
 	}
@@ -219,9 +220,6 @@ static bool virtgpu_crtc_mode_fixup(struct drm_crtc *crtc,
 				  const struct drm_display_mode *mode,
 				  struct drm_display_mode *adjusted_mode)
 {
-	struct drm_device *dev = crtc->dev;
-	struct virtgpu_device *vgdev = dev->dev_private;
-
 	return true;
 }
 
@@ -236,7 +234,6 @@ static int virtgpu_crtc_mode_set(struct drm_crtc *crtc,
 	struct virtgpu_framebuffer *vgfb;
 	struct virtgpu_object *bo, *old_bo = NULL;
 	struct virtgpu_crtc *vgcrtc = to_virtgpu_crtc(crtc);
-	int ret;
 
 	if (!crtc->fb) {
 		DRM_DEBUG_KMS("No FB bound\n");
@@ -343,12 +340,39 @@ static void virtgpu_enc_mode_set(struct drm_encoder *encoder,
 	DRM_DEBUG("\n");
 }
 
+static int virtgpu_add_display_info_modes(struct drm_connector *connector,
+					  unsigned *pwidth, unsigned *pheight)
+{
+	struct virtgpu_output *output = drm_connector_to_virtgpu_output(connector);
+	struct drm_device *dev = connector->dev;
+	struct virtgpu_device *vgdev = connector->dev->dev_private;
+	struct drm_display_mode *mode = NULL;
+	int idx = output->index;
+
+	if (!vgdev->display_info.pmodes[idx].enabled)
+		return 0;
+
+	mode = drm_cvt_mode(dev, vgdev->display_info.pmodes[idx].width,
+			    vgdev->display_info.pmodes[idx].height, 60, false, false,
+			    false);
+	mode->type |= DRM_MODE_TYPE_PREFERRED;
+	*pwidth = vgdev->display_info.pmodes[idx].width;
+	*pheight = vgdev->display_info.pmodes[idx].height;
+	drm_mode_probed_add(connector, mode);
+	return 1;
+}
+
 static int virtgpu_conn_get_modes(struct drm_connector *connector)
 {
 	int ret = 0;
 	struct virtgpu_device *vgdev = connector->dev->dev_private;
+	struct virtgpu_output *output = drm_connector_to_virtgpu_output(connector);
+	int pwidth = 0, pheight = 0;
+	if (vgdev->display_info.pmodes[output->index].enabled) {
+		ret = virtgpu_add_display_info_modes(connector, &pwidth, &pheight);
+	}
 
-	ret += virtgpu_add_common_modes(connector);
+	ret += virtgpu_add_common_modes(connector, pwidth, pheight);
 	return ret;
 }
 
@@ -400,9 +424,11 @@ static enum drm_connector_status virtgpu_conn_detect(
 		drm_connector_to_virtgpu_output(connector);
 	struct drm_device *ddev = connector->dev;
 	struct virtgpu_device *vgdev = ddev->dev_private;
-	int connected;
 
-	return connector_status_connected;
+	if (vgdev->display_info.pmodes[output->index].enabled)
+		return connector_status_connected;
+	else
+		return connector_status_unknown;
 }
 
 static int virtgpu_conn_set_property(struct drm_connector *connector,
@@ -479,7 +505,6 @@ virtgpu_user_framebuffer_create(struct drm_device *dev,
 {
 	struct drm_gem_object *obj = NULL;
 	struct virtgpu_framebuffer *virtgpu_fb;
-	struct virtgpu_device *vgdev = dev->dev_private;
 	int ret;
 
 	/* lookup object associated with res handle */
@@ -510,8 +535,6 @@ int virtgpu_modeset_init(struct virtgpu_device *vgdev)
 {
 	int i;
 	int ret;
-	struct drm_gem_object *gobj;
-	int max_allowed = VIRTGPU_NUM_OUTPUTS;
 
 	drm_mode_config_init(vgdev->ddev);
 	vgdev->ddev->mode_config.funcs = (void *)&virtgpu_mode_funcs;
@@ -523,7 +546,7 @@ int virtgpu_modeset_init(struct virtgpu_device *vgdev)
 	vgdev->ddev->mode_config.max_height = 8192;
 
 //	vgdev->ddev->mode_config.fb_base = vgdev->vram_base;
-	for (i = 0 ; i < VIRTGPU_NUM_OUTPUTS; ++i) {
+	for (i = 0 ; i < vgdev->num_hw_scanouts; ++i) {
 		vgdev_crtc_init(vgdev->ddev, i);
 		vgdev_output_init(vgdev->ddev, i);
 	}
@@ -535,7 +558,7 @@ int virtgpu_modeset_init(struct virtgpu_device *vgdev)
 	if (ret)
 		return ret;
 
-	ret = drm_vblank_init(vgdev->ddev, VIRTGPU_NUM_OUTPUTS);
+	ret = drm_vblank_init(vgdev->ddev, vgdev->num_hw_scanouts);
 	
 	return ret;
 }
