@@ -53,17 +53,25 @@ void virtgpu_event_ack(struct virtqueue *vq)
 }
 
 static struct virtgpu_vbuffer *virtgpu_allocate_vbuf(struct virtgpu_device *vgdev,
-						     int size)
+						     int size, int resp_size,
+						     virtgpu_resp_cb resp_cb)
 {
 	struct virtgpu_vbuffer *vbuf;
 
-	vbuf = kmalloc(sizeof(*vbuf) + size, GFP_KERNEL);
+	vbuf = kmalloc(sizeof(*vbuf) + size + resp_size, GFP_KERNEL);
 	if (!vbuf)
 		goto fail;
 
 	vbuf->buf = (void *)vbuf + sizeof(*vbuf);
 	vbuf->size = size;
 	vbuf->vaddr = NULL;
+
+	vbuf->resp_cb = resp_cb;
+	if (resp_size) {
+		vbuf->resp_buf = (void *)vbuf->buf + size;
+	} else
+		vbuf->resp_buf = NULL;
+	vbuf->resp_size = resp_size;
 
 	return vbuf;
 fail:
@@ -76,7 +84,22 @@ struct virtgpu_command *virtgpu_alloc_cmd(struct virtgpu_device *vgdev,
 {
 	struct virtgpu_vbuffer *vbuf;
 
-	vbuf = virtgpu_allocate_vbuf(vgdev, sizeof(struct virtgpu_command));
+	vbuf = virtgpu_allocate_vbuf(vgdev, sizeof(struct virtgpu_command), 0, NULL);
+	if (IS_ERR(vbuf)) {
+		*vbuffer_p = NULL;
+		return ERR_CAST(vbuf);
+	}
+	*vbuffer_p = vbuf;
+	return (struct virtgpu_command *)vbuf->buf;
+}
+
+struct virtgpu_command *virtgpu_alloc_cmd_resp(struct virtgpu_device *vgdev,
+					       virtgpu_resp_cb cb,
+					       struct virtgpu_vbuffer **vbuffer_p)
+{
+	struct virtgpu_vbuffer *vbuf;
+
+	vbuf = virtgpu_allocate_vbuf(vgdev, sizeof(struct virtgpu_command), sizeof(struct virtgpu_response), cb);
 	if (IS_ERR(vbuf)) {
 		*vbuffer_p = NULL;
 		return ERR_CAST(vbuf);
@@ -126,6 +149,9 @@ void virtgpu_dequeue_ctrl_func(struct work_struct *work)
 	spin_unlock(&vgdev->ctrlq.qlock);
 
 	list_for_each_entry_safe(entry, tmp, &reclaim_list, destroy_list) {
+		if (entry->resp_cb)
+			entry->resp_cb(vgdev, entry);
+
 		list_del(&entry->destroy_list);
 		free_vbuf(vgdev, entry);
 	}
@@ -167,7 +193,7 @@ int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
 			      struct virtgpu_vbuffer *vbuf)
 {
 	struct virtqueue *vq = vgdev->ctrlq.vq;
-	struct scatterlist *sgs[2], vcmd, vout;
+	struct scatterlist *sgs[2], vcmd, vout, vresp;
 	int outcnt, incnt = 0;
 	int ret;
 
@@ -179,6 +205,10 @@ int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
 		sg_init_one(&vout, vbuf->vaddr, vbuf->vaddr_len);
 		sgs[1] = &vout;
 		outcnt++;
+	} else if (vbuf->resp_buf) {
+		sg_init_one(&vresp, vbuf->resp_buf, vbuf->resp_size);
+		sgs[1] = &vresp;
+		incnt++;
 	}
 	spin_lock(&vgdev->ctrlq.qlock);
 retry:
@@ -378,6 +408,28 @@ int virtgpu_cmd_resource_attach_backing(struct virtgpu_device *vgdev, uint32_t r
 	cmd_p->u.resource_attach_backing.nr_entries = nents;
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       
+	return 0;
+}
+
+void virtgpu_cmd_get_display_info_cb(struct virtgpu_device *vgdev,
+				     struct virtgpu_vbuffer *vbuf)
+{
+	spin_lock(&vgdev->display_info_lock);
+	memcpy(&vgdev->display_info, vbuf->resp_buf, vbuf->resp_size);
+	spin_unlock(&vgdev->display_info_lock);
+	wake_up(&vgdev->resp_wq);
+}
+
+int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_display_info_cb, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_GET_DISPLAY_INFO;
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
 

@@ -16,6 +16,7 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 
+#include "virtio_hw.h"
 #define DRIVER_NAME "virtio-gpu"
 #define DRIVER_DESC "virtio GPU"
 #define DRIVER_DATE ""
@@ -23,8 +24,6 @@
 #define DRIVER_MAJOR 0
 #define DRIVER_MINOR 0
 #define DRIVER_PATCHLEVEL 1
-
-#define VIRTGPU_NUM_OUTPUTS 2
 
 void virtio_set_driver_bus(struct drm_driver *driver);
 
@@ -38,9 +37,20 @@ struct virtgpu_object {
 };
 #define gem_to_virtgpu_obj(gobj) container_of((gobj), struct virtgpu_object, gem_base)
 
+struct virtgpu_vbuffer;
+struct virtgpu_device;
+
+typedef void (*virtgpu_resp_cb)(struct virtgpu_device *vgdev,
+				struct virtgpu_vbuffer *vbuf);
+
 struct virtgpu_vbuffer {
 	char *buf;
 	int size;
+
+	int resp_size;
+	char *resp_buf;
+
+	virtgpu_resp_cb resp_cb;
 
 	void *vaddr;
 	dma_addr_t busaddr;
@@ -107,6 +117,13 @@ struct virtgpu_device {
 	spinlock_t resource_idr_lock;
 
 	int num_outputs;
+
+	wait_queue_head_t resp_wq;
+	/* current display info */
+	spinlock_t display_info_lock;
+	struct virtgpu_display_info display_info;
+
+	int num_hw_scanouts;
 };
 
 int virtgpu_driver_load(struct drm_device *dev, unsigned long flags);
@@ -167,6 +184,7 @@ int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *o
 int virtgpu_attach_status_page(struct virtgpu_device *vgdev);
 int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
 void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
+int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev);
 
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
