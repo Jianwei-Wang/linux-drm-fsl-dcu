@@ -484,7 +484,7 @@ int vgdev_output_init(struct drm_device *dev, int num_output)
 	encoder = &virtgpu_output->enc;
 	drm_connector_init(dev, &virtgpu_output->base,
 			   &virtgpu_connector_funcs, DRM_MODE_CONNECTOR_VIRTUAL);
-
+	connector->polled = DRM_CONNECTOR_POLL_HPD;
 	drm_encoder_init(dev, &virtgpu_output->enc, &virtgpu_enc_funcs,
 			 DRM_MODE_ENCODER_VIRTUAL);
 

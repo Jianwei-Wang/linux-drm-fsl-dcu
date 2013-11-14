@@ -185,6 +185,7 @@ int virtgpu_attach_status_page(struct virtgpu_device *vgdev);
 int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
 void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev);
+int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries);
 
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
