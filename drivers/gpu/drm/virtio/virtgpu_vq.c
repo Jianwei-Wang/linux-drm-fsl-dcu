@@ -108,6 +108,20 @@ struct virtgpu_command *virtgpu_alloc_cmd_resp(struct virtgpu_device *vgdev,
 	return (struct virtgpu_command *)vbuf->buf;
 }
 
+static int add_inbuf(struct virtqueue *vq, struct virtgpu_vbuffer *vbuf)
+{
+	struct scatterlist sg[1];
+	int ret;
+
+	sg_init_one(sg, vbuf->resp_buf, vbuf->resp_size);
+
+	ret = virtqueue_add_inbuf(vq, sg, 1, vbuf, GFP_ATOMIC);
+	virtqueue_kick(vq);
+	if (!ret)
+		ret = vq->num_free;
+	return ret;
+}
+
 static void free_vbuf(struct virtgpu_device *vgdev, struct virtgpu_vbuffer *vbuf)
 {
 	if (vbuf->vaddr)
@@ -179,11 +193,19 @@ void virtgpu_dequeue_event_func(struct work_struct *work)
 	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
 						    eventq.dequeue_work);
 	struct virtqueue *vq = vgdev->eventq.vq;
+	struct virtgpu_vbuffer *vbuf;
 	unsigned int len;
 	spin_lock(&vgdev->eventq.qlock);
 	do {
 		virtqueue_disable_cb(vgdev->eventq.vq);
-		while (virtqueue_get_buf(vq, &len)) {
+		while ((vbuf = virtqueue_get_buf(vq, &len))) {
+
+			if (vbuf->resp_cb)
+				vbuf->resp_cb(vgdev, vbuf);			
+			if (add_inbuf(vgdev->eventq.vq, vbuf) < 0) {
+				DRM_ERROR("Error adding buffer to queue\n");
+				free_vbuf(vgdev, vbuf);
+			}
 		}
 	} while (!virtqueue_enable_cb(vgdev->eventq.vq));
 	spin_unlock(&vgdev->eventq.qlock);
@@ -475,3 +497,43 @@ void virtgpu_cursor_ping(struct virtgpu_device *vgdev)
 	virtgpu_queue_cursor(vgdev);
 }
 
+void virtgpu_event_cb(struct virtgpu_device *vgdev,
+		      struct virtgpu_vbuffer *vbuf)
+{
+	struct virtgpu_event *event;
+
+	event = (struct virtgpu_event *)vbuf->resp_buf;
+
+	DRM_INFO("drm got event cb %d\n", event->type);
+	if (event->type == VIRTGPU_EVENT_DISPLAY_CHANGE) {
+		spin_lock(&vgdev->display_info_lock);
+		memcpy(&vgdev->display_info, &event->u.display_info, sizeof(struct virtgpu_display_info));
+		       
+		spin_unlock(&vgdev->display_info_lock);
+		drm_helper_hpd_irq_event(vgdev->ddev);
+	}
+}
+
+int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries)
+{
+	struct virtgpu_vbuffer *vbuf;
+	int i;
+	int ret;
+	for (i = 0; i < entries; i++) {
+		vbuf = virtgpu_allocate_vbuf(vgdev, 0, sizeof(struct virtgpu_event), virtgpu_event_cb);
+		if (!vbuf)
+			break;
+
+		spin_lock_irq(&vgdev->eventq.qlock);
+		
+		ret = add_inbuf(vgdev->eventq.vq, vbuf);
+		if (ret < 0) {
+			free_vbuf(vgdev, vbuf);
+			spin_unlock_irq(&vgdev->eventq.qlock);
+			break;
+		}
+		spin_unlock_irq(&vgdev->eventq.qlock);
+	}
+	return i;
+		
+}
