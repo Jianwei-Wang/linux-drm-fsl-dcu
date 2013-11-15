@@ -1,7 +1,6 @@
 #include <drm/drmP.h>
 #include <drm/drm_fb_helper.h>
 #include "virtgpu_drv.h"
-#include "virtio_hw.h"
 
 #define VIRTGPU_FBCON_POLL_PERIOD (HZ / 60)
 

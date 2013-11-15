@@ -16,7 +16,7 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 
-#include "virtio_hw.h"
+#include "virtgpu_hw.h"
 #define DRIVER_NAME "virtio-gpu"
 #define DRIVER_DESC "virtio GPU"
 #define DRIVER_DATE ""

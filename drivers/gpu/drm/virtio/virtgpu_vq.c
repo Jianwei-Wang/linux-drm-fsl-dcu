@@ -3,7 +3,6 @@
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_ring.h>
-#include "virtio_hw.h"
 
 int virtgpu_resource_id_get(struct virtgpu_device *vgdev, uint32_t *resid)
 {
