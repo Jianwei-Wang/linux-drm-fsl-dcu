@@ -25,7 +25,6 @@
 
 #include "virtgpu_drv.h"
 #include "drm_crtc_helper.h"
-#include "virtio_hw.h"
 
 static int virtgpu_add_common_modes(struct drm_connector *connector, unsigned pwidth,
 				    unsigned pheight)
