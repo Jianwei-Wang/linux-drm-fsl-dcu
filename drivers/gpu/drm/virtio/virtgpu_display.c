@@ -560,6 +560,7 @@ int virtgpu_modeset_init(struct virtgpu_device *vgdev)
 
 	ret = drm_vblank_init(vgdev->ddev, vgdev->num_hw_scanouts);
 	
+	drm_kms_helper_poll_init(vgdev->ddev);
 	return ret;
 }
 
