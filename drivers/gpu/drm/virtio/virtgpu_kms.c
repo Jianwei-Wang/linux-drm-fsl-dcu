@@ -80,7 +80,6 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 int virtgpu_driver_unload(struct drm_device *dev)
 {
 	struct virtgpu_device *vgdev = dev->dev_private;
-	int ret;
 
 	virtgpu_modeset_fini(vgdev);
 
