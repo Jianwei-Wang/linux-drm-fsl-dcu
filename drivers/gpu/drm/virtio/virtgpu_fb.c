@@ -25,7 +25,7 @@ static int virtgpu_dirty_update(struct virtgpu_framebuffer *fb, bool store,
 	int x2, y2;
 	unsigned long flags;
 	struct virtgpu_object *obj = gem_to_virtgpu_obj(fb->obj);
-	int size;
+
 	aligned_x = DL_ALIGN_DOWN(x, sizeof(unsigned long));
 	width = DL_ALIGN_UP(width + (x-aligned_x), sizeof(unsigned long));
 	x = aligned_x;

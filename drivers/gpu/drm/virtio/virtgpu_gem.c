@@ -3,6 +3,8 @@
 #include <linux/shmem_fs.h>
 #include "virtgpu_drv.h"
 
+static void virtgpu_free_mmap_offset(struct virtgpu_object *obj);
+
 static void *virtgpu_gem_object_alloc(struct drm_device *dev)
 {
 	return kzalloc(sizeof(struct virtgpu_object), GFP_KERNEL);
@@ -25,6 +27,8 @@ void virtgpu_gem_free_object(struct drm_gem_object *gem_obj)
 
 	/* put pages */
 	drm_gem_object_release(&obj->gem_base);
+
+	virtgpu_free_mmap_offset(obj);
 	virtgpu_gem_object_free(obj);
 }
 
@@ -86,7 +90,6 @@ virtgpu_gem_create(struct drm_file *file,
 int
 virtgpu_gem_object_get_pages(struct virtgpu_object *obj)
 {
-	struct virtgpu_device *vgdev = obj->gem_base.dev->dev_private;
 	int page_count, i;
 	struct address_space *mapping;
 	struct sg_table *st;
@@ -187,7 +190,7 @@ static int virtgpu_create_mmap_offset(struct virtgpu_object *obj)
 	return 0;
 }
 
-static int virtgpu_free_mmap_offset(struct virtgpu_object *obj)
+static void virtgpu_free_mmap_offset(struct virtgpu_object *obj)
 {
 	if (!obj->gem_base.map_list.map)
 		return;
@@ -202,7 +205,6 @@ int virtgpu_mode_dumb_create(struct drm_file *file_priv,
 	struct virtgpu_device *vgdev = dev->dev_private;
 	struct drm_gem_object *gobj;
 	struct virtgpu_object *obj;
-	uint32_t handle;
 	int ret;
 	uint32_t pitch;
 	uint32_t resid;
