@@ -2,6 +2,7 @@
 #define VIRTGPU_HW_H
 
 #define VIRTGPU_CMD_HAS_RESP (1 << 31)
+#define VIRTGPU_CMD_3D_ONLY  (1 << 30)
 enum virtgpu_ctrl_cmd {
 	VIRTGPU_CMD_NOP,
 	VIRTGPU_CMD_GET_DISPLAY_INFO = (1 | VIRTGPU_CMD_HAS_RESP),
@@ -13,6 +14,18 @@ enum virtgpu_ctrl_cmd {
 	VIRTGPU_CMD_TRANSFER_SEND_2D = 7,
 	VIRTGPU_CMD_RESOURCE_ATTACH_BACKING = 8,
 	VIRTGPU_CMD_RESOURCE_INVAL_BACKING = 9,
+       
+	VIRTGPU_CMD_CTX_CREATE = (10 | VIRTGPU_CMD_3D_ONLY),
+	VIRTGPU_CMD_CTX_DESTROY = (11 | VIRTGPU_CMD_3D_ONLY),
+	VIRTGPU_CMD_CTX_ATTACH_RESOURCE = (12 | VIRTGPU_CMD_3D_ONLY),
+	VIRTGPU_CMD_CTX_DETACH_RESOURCE = (13 | VIRTGPU_CMD_3D_ONLY),
+
+	VIRTGPU_CMD_RESOURCE_CREATE_3D = (14 | VIRTGPU_CMD_3D_ONLY),
+
+	VIRTGPU_CMD_TRANSFER_SEND_3D = (15 | VIRTGPU_CMD_3D_ONLY),
+	VIRTGPU_CMD_TRANSFER_RECV_3D = (16 | VIRTGPU_CMD_3D_ONLY),
+
+	VIRTGPU_CMD_SUBMIT_3D = (17 | VIRTGPU_CMD_3D_ONLY),
 };
 
 enum virtgpu_ctrl_event {
@@ -95,6 +108,69 @@ struct virtgpu_display_info {
 	} pmodes[VIRTGPU_MAX_SCANOUTS];
 };
 
+
+/* 3d related */
+struct virtgpu_box {
+	uint32_t x, y, z;
+	uint32_t w, h, d;
+};
+
+struct virtgpu_transfer_send_3d {
+	uint64_t data;
+	uint32_t resource_id;
+	uint32_t level;
+	struct virtgpu_box box;
+	uint32_t stride;
+	uint32_t layer_stride;
+	uint32_t ctx_id;
+};
+
+struct virtgpu_transfer_recv_3d {
+	uint64_t data;
+	uint32_t resource_id;
+	uint32_t level;
+	struct virtgpu_box box;
+	uint32_t stride;
+	uint32_t layer_stride;
+	uint32_t ctx_id;
+};
+
+#define VIRTGPU_RESOURCE_FLAG_Y_0_TOP (1 << 0)
+struct virtgpu_resource_create_3d {
+	uint32_t resource_id;
+	uint32_t target;
+	uint32_t format;
+	uint32_t bind;
+	uint32_t width;
+	uint32_t height;
+	uint32_t depth;
+	uint32_t array_size;
+	uint32_t last_level;
+	uint32_t nr_samples;
+	uint32_t flags;
+};
+
+struct virtgpu_ctx_create {
+	uint32_t ctx_id;
+	uint32_t nlen;
+	char debug_name[64];
+};
+
+struct virtgpu_ctx_destroy {
+	uint32_t ctx_id;
+};
+
+struct virtgpu_ctx_resource {
+	uint32_t resource_id;
+	uint32_t ctx_id;
+};
+
+struct virtgpu_cmd_submit {
+	uint64_t phy_addr;
+	uint32_t size;
+	uint32_t ctx_id;
+};
+
 struct virtgpu_command {
 	uint32_t type;
 	uint32_t flags;
@@ -107,6 +183,14 @@ struct virtgpu_command {
 		struct virtgpu_transfer_send_2d transfer_send_2d;
 		struct virtgpu_resource_attach_backing resource_attach_backing;
 		struct virtgpu_resource_inval_backing resource_inval_backing;
+
+		struct virtgpu_cmd_submit cmd_submit;
+		struct virtgpu_ctx_create ctx_create;
+		struct virtgpu_ctx_destroy ctx_destroy;
+		struct virtgpu_ctx_resource ctx_resource;
+		struct virtgpu_resource_create_3d resource_create_3d;
+		struct virtgpu_transfer_send_3d transfer_send_3d;
+		struct virtgpu_transfer_recv_3d transfer_recv_3d;
 	} u;
 };
 
