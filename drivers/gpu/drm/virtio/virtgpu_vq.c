@@ -193,21 +193,32 @@ void virtgpu_dequeue_event_func(struct work_struct *work)
 						    eventq.dequeue_work);
 	struct virtqueue *vq = vgdev->eventq.vq;
 	struct virtgpu_vbuffer *vbuf;
+	struct list_head reclaim_list;
 	unsigned int len;
+	struct virtgpu_vbuffer *entry, *tmp;
+
+	INIT_LIST_HEAD(&reclaim_list);
 	spin_lock(&vgdev->eventq.qlock);
 	do {
 		virtqueue_disable_cb(vgdev->eventq.vq);
 		while ((vbuf = virtqueue_get_buf(vq, &len))) {
-
-			if (vbuf->resp_cb)
-				vbuf->resp_cb(vgdev, vbuf);			
-			if (add_inbuf(vgdev->eventq.vq, vbuf) < 0) {
-				DRM_ERROR("Error adding buffer to queue\n");
-				free_vbuf(vgdev, vbuf);
-			}
+			list_add(&vbuf->destroy_list, &reclaim_list);
 		}
 	} while (!virtqueue_enable_cb(vgdev->eventq.vq));
 	spin_unlock(&vgdev->eventq.qlock);
+
+
+	list_for_each_entry_safe(entry, tmp, &reclaim_list, destroy_list) {
+		if (entry->resp_cb)
+			entry->resp_cb(vgdev, entry);
+
+		spin_lock(&vgdev->eventq.qlock);
+		if (add_inbuf(vgdev->eventq.vq, entry) < 0) {
+			DRM_ERROR("Error adding buffer to queue\n");
+			free_vbuf(vgdev, entry);
+		}
+		spin_unlock(&vgdev->eventq.qlock);
+	}
 }
 
 int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
