@@ -63,7 +63,7 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	if (ret == 0) {
 		DRM_ERROR("failed to get display info resp from hw in 5s\n");
 		kfree(vgdev);
-		return ret;
+		return -EINVAL;
 	}
 	
 	vgdev->num_hw_scanouts = vgdev->display_info.num_scanouts;
