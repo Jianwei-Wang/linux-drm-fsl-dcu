@@ -93,10 +93,10 @@ virtgpu_hide_cursor(struct virtgpu_device *vgdev)
 }
 
 static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
-			       struct drm_file *file_priv,
-			       uint32_t handle,
-			       uint32_t width,
-			       uint32_t height)
+				   struct drm_file *file_priv,
+				   uint32_t handle,
+				   uint32_t width,
+				   uint32_t height, int32_t hot_x, int32_t hot_y)
 {
 	struct virtgpu_device *vgdev = crtc->dev->dev_private;
 	struct drm_gem_object *gobj = NULL;
@@ -124,6 +124,8 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 	{
 		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
 		cursor_page->cursor_id = qobj->hw_res_handle;
+		cursor_page->cursor_hot_x = hot_x;
+		cursor_page->cursor_hot_y = hot_y;
 	}
 	virtgpu_cursor_ping(vgdev);
 out:
@@ -154,7 +156,7 @@ static int virtgpu_crtc_page_flip(struct drm_crtc *crtc,
 
 
 static const struct drm_crtc_funcs virtgpu_crtc_funcs = {
-	.cursor_set = virtgpu_crtc_cursor_set,
+	.cursor_set2 = virtgpu_crtc_cursor_set,
 	.cursor_move = virtgpu_crtc_cursor_move,
 	.gamma_set = virtgpu_crtc_gamma_set,
 	.set_config = drm_crtc_helper_set_config,
