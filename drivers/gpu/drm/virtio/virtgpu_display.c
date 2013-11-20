@@ -429,7 +429,7 @@ static enum drm_connector_status virtgpu_conn_detect(
 	if (vgdev->display_info.pmodes[output->index].enabled)
 		return connector_status_connected;
 	else
-		return connector_status_unknown;
+		return connector_status_disconnected;
 }
 
 static int virtgpu_conn_set_property(struct drm_connector *connector,
