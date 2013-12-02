@@ -34,6 +34,10 @@ struct virtgpu_object {
 	struct sg_table *pages;
 	void *vmap;
 	bool dumb;
+	u32				placement_code;
+	struct ttm_placement		placement;
+	struct ttm_buffer_object	tbo;
+	struct ttm_bo_kmap_obj		kmap;
 };
 #define gem_to_virtgpu_obj(gobj) container_of((gobj), struct virtgpu_object, gem_base)
 
@@ -42,6 +46,26 @@ struct virtgpu_device;
 
 typedef void (*virtgpu_resp_cb)(struct virtgpu_device *vgdev,
 				struct virtgpu_vbuffer *vbuf);
+
+#define VIRTGPU_FENCE_SIGNALED_SEQ 0LL
+#define VIRTGPU_FENCE_JIFFIES_TIMEOUT		(HZ / 2)
+
+struct virtgpu_fence_driver {
+	atomic64_t last_seq;
+        unsigned long last_activity;
+	bool initialized;
+	uint64_t			sync_seq;
+       
+	spinlock_t event_lock;
+	struct list_head event_list;
+	uint64_t first_seq_event_list;
+};
+
+struct virtgpu_fence {
+	struct virtgpu_device *vgdev;
+	struct kref kref;
+	uint64_t seq;
+};
 
 struct virtgpu_vbuffer {
 	char *buf;
@@ -84,8 +108,10 @@ struct virtgpu_framebuffer {
 #define to_virtgpu_framebuffer(x) container_of(x, struct virtgpu_framebuffer, base)
 
 struct virtgpu_mman {
-	struct list_head bound_list;
-	struct list_head unbound_list;
+	struct ttm_bo_global_ref        bo_global_ref;
+	struct drm_global_reference	mem_global_ref;
+	bool				mem_global_referenced;
+	struct ttm_bo_device		bdev;
 };
 
 struct virtgpu_fbdev;
@@ -124,6 +150,14 @@ struct virtgpu_device {
 	struct virtgpu_display_info display_info;
 
 	int num_hw_scanouts;
+
+	struct virtgpu_fence_driver fence_drv;
+	wait_queue_head_t		fence_queue;
+
+	struct idr	ctx_id_idr;
+	spinlock_t ctx_id_idr_lock;
+
+
 };
 
 int virtgpu_driver_load(struct drm_device *dev, unsigned long flags);
@@ -194,4 +228,17 @@ int virtgpu_framebuffer_init(struct drm_device *dev,
 			     struct drm_gem_object *obj);
 int virtgpu_modeset_init(struct virtgpu_device *vgdev);
 void virtgpu_modeset_fini(struct virtgpu_device *vgdev);
+
+bool virtgpu_ttm_bo_is_virtgpu_object(struct ttm_buffer_object *bo);
+void virtgpu_ttm_placement_from_domain(struct virtgpu_object *qbo, u32 domain);
+
+/* virtgpu_fence.c */
+int virtgpu_fence_wait(struct virtgpu_fence *fence, bool intr);
+int virtgpu_fence_emit(struct virtgpu_device *vgdev,
+		      struct virtgpu_command *cmd,
+		       struct virtgpu_fence **fence);
+void virtgpu_fence_process(struct virtgpu_device *vgdev);
+void virtgpu_fence_unref(struct virtgpu_fence **fence);
+struct virtgpu_fence *virtgpu_fence_ref(struct virtgpu_fence *fence);
+bool virtgpu_fence_signaled(struct virtgpu_fence *fence, bool process);
 #endif

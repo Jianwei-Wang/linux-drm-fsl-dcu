@@ -5,6 +5,33 @@
 
 int virtgpu_max_ioctls;
 
+static int virtgpu_ctx_id_get(struct virtgpu_device *vgdev, uint32_t *resid)
+{
+	int handle;
+	int idr_ret = -ENOMEM;
+again:
+	if (idr_pre_get(&vgdev->ctx_id_idr, GFP_KERNEL) == 0) {
+		goto fail;
+	}
+	spin_lock(&vgdev->ctx_id_idr_lock);
+	idr_ret = idr_get_new_above(&vgdev->ctx_id_idr, NULL, 1, &handle);
+	spin_unlock(&vgdev->ctx_id_idr_lock);
+	if (idr_ret == -EAGAIN)
+		goto again;
+
+	*resid = handle;
+fail:
+	return idr_ret;
+}
+
+static void virtgpu_ctx_id_put(struct virtgpu_device *vgdev, uint32_t id)
+{
+	spin_lock(&vgdev->ctx_id_idr_lock);
+	idr_remove(&vgdev->ctx_id_idr, id);
+	spin_unlock(&vgdev->ctx_id_idr_lock);	
+}
+
+
 static void virtgpu_init_vq(struct virtgpu_queue *vgvq, void (*work_func)(struct work_struct *work))
 {
 	spin_lock_init(&vgvq->qlock);

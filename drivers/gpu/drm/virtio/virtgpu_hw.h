@@ -171,10 +171,12 @@ struct virtgpu_cmd_submit {
 	uint32_t ctx_id;
 };
 
+#define VIRTGPU_COMMAND_EMIT_FENCE (1 << 0)
+
 struct virtgpu_command {
 	uint32_t type;
 	uint32_t flags;
-	uint64_t rsvd;
+	uint64_t fence_id;
 	union virtgpu_cmds {
 		struct virtgpu_resource_create_2d resource_create_2d;
 		struct virtgpu_resource_unref resource_unref;
