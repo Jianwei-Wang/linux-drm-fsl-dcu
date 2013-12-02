@@ -151,7 +151,7 @@ int virtgpu_driver_unload(struct drm_device *dev)
 
 int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file)
 {
-	struct virtgpu_device *qdev = dev->dev_private;
+	struct virtgpu_device *vgdev = dev->dev_private;
 	struct virtgpu_fpriv *vfpriv;
 	uint32_t id;
 	int ret;
@@ -165,7 +165,7 @@ int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file)
 	if (!vfpriv)
 		return -ENOMEM;
 
-	ret = virtgpu_context_create(qdev, strlen(dbgname), dbgname, &id);
+	ret = virtgpu_context_create(vgdev, strlen(dbgname), dbgname, &id);
 	if (ret) {
 		kfree(vfpriv);
 		return ret;
@@ -178,12 +178,12 @@ int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file)
 
 void virtgpu_driver_postclose(struct drm_device *dev, struct drm_file *file)
 {
-	struct virtgpu_device *qdev = dev->dev_private;
+	struct virtgpu_device *vgdev = dev->dev_private;
 	struct virtgpu_fpriv *vfpriv;
 
 	vfpriv = file->driver_priv;
 
-	virtgpu_context_destroy(qdev, vfpriv->ctx_id);
+	virtgpu_context_destroy(vgdev, vfpriv->ctx_id);
 	kfree(vfpriv);
 	file->driver_priv = NULL;
 }

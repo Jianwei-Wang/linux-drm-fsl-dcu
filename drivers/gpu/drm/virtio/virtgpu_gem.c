@@ -32,12 +32,12 @@ void virtgpu_gem_free_object(struct drm_gem_object *gem_obj)
 	virtgpu_gem_object_free(obj);
 }
 
-int virtgpu_gem_init(struct virtgpu_device *qdev)
+int virtgpu_gem_init(struct virtgpu_device *vgdev)
 {
 	return 0;
 }
 
-void virtgpu_gem_fini(struct virtgpu_device *qdev)
+void virtgpu_gem_fini(struct virtgpu_device *vgdev)
 {
 }
 
