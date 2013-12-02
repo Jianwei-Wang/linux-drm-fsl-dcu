@@ -162,7 +162,7 @@ int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
 				uint32_t format,
 				uint32_t width,
 				uint32_t height);
-int virtgpu_cmd_transfer_send_2d(struct virtgpu_device *vgdev,
+int virtgpu_cmd_transfer_to_host_2d(struct virtgpu_device *vgdev,
 				 uint32_t resource_id, uint32_t offset,
 				 uint32_t width, uint32_t height,
 				 uint32_t x, uint32_t y);

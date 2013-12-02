@@ -398,7 +398,7 @@ int virtgpu_cmd_resource_flush(struct virtgpu_device *vgdev,
 	return 0;
 }
 
-int virtgpu_cmd_transfer_send_2d(struct virtgpu_device *vgdev,
+int virtgpu_cmd_transfer_to_host_2d(struct virtgpu_device *vgdev,
 				 uint32_t resource_id, uint32_t offset,
 				 uint32_t width, uint32_t height,
 				 uint32_t x, uint32_t y)
@@ -409,13 +409,13 @@ int virtgpu_cmd_transfer_send_2d(struct virtgpu_device *vgdev,
 	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_TRANSFER_SEND_2D;
-	cmd_p->u.transfer_send_2d.resource_id = resource_id;
-	cmd_p->u.transfer_send_2d.offset = offset;
-	cmd_p->u.transfer_send_2d.width = width;
-	cmd_p->u.transfer_send_2d.height = height;
-	cmd_p->u.transfer_send_2d.x = x;
-	cmd_p->u.transfer_send_2d.y = y;
+	cmd_p->type = VIRTGPU_CMD_TRANSFER_TO_HOST_2D;
+	cmd_p->u.transfer_to_host_2d.resource_id = resource_id;
+	cmd_p->u.transfer_to_host_2d.offset = offset;
+	cmd_p->u.transfer_to_host_2d.width = width;
+	cmd_p->u.transfer_to_host_2d.height = height;
+	cmd_p->u.transfer_to_host_2d.x = x;
+	cmd_p->u.transfer_to_host_2d.y = y;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       
@@ -518,7 +518,7 @@ void virtgpu_event_cb(struct virtgpu_device *vgdev,
 	if (event->type == VIRTGPU_EVENT_DISPLAY_CHANGE) {
 		spin_lock(&vgdev->display_info_lock);
 		memcpy(&vgdev->display_info, &event->u.display_info, sizeof(struct virtgpu_display_info));
-		       
+		DRM_INFO("enabled displays %d %d\n", vgdev->display_info.pmodes[0].enabled, vgdev->display_info.pmodes[1].enabled);
 		spin_unlock(&vgdev->display_info_lock);
 		drm_helper_hpd_irq_event(vgdev->ddev);
 	}

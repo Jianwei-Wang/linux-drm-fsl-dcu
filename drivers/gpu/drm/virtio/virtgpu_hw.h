@@ -11,7 +11,7 @@ enum virtgpu_ctrl_cmd {
 	VIRTGPU_CMD_RESOURCE_UNREF = 4,
 	VIRTGPU_CMD_SET_SCANOUT = 5,
 	VIRTGPU_CMD_RESOURCE_FLUSH = 6,
-	VIRTGPU_CMD_TRANSFER_SEND_2D = 7,
+	VIRTGPU_CMD_TRANSFER_TO_HOST_2D = 7,
 	VIRTGPU_CMD_RESOURCE_ATTACH_BACKING = 8,
 	VIRTGPU_CMD_RESOURCE_INVAL_BACKING = 9,
        
@@ -22,8 +22,8 @@ enum virtgpu_ctrl_cmd {
 
 	VIRTGPU_CMD_RESOURCE_CREATE_3D = (14 | VIRTGPU_CMD_3D_ONLY),
 
-	VIRTGPU_CMD_TRANSFER_SEND_3D = (15 | VIRTGPU_CMD_3D_ONLY),
-	VIRTGPU_CMD_TRANSFER_RECV_3D = (16 | VIRTGPU_CMD_3D_ONLY),
+	VIRTGPU_CMD_TRANSFER_TO_HOST_3D = (15 | VIRTGPU_CMD_3D_ONLY),
+	VIRTGPU_CMD_TRANSFER_FROM_HOST_3D = (16 | VIRTGPU_CMD_3D_ONLY),
 
 	VIRTGPU_CMD_SUBMIT_3D = (17 | VIRTGPU_CMD_3D_ONLY),
 };
@@ -70,8 +70,8 @@ struct virtgpu_resource_flush {
 	uint32_t y;
 };
 
-/* simple transfer send */
-struct virtgpu_transfer_send_2d {
+/* simple transfer to_host */
+struct virtgpu_transfer_to_host_2d {
 	uint32_t resource_id;
 	uint32_t offset;
 	uint32_t width;
@@ -115,7 +115,7 @@ struct virtgpu_box {
 	uint32_t w, h, d;
 };
 
-struct virtgpu_transfer_send_3d {
+struct virtgpu_transfer_to_host_3d {
 	uint64_t data;
 	uint32_t resource_id;
 	uint32_t level;
@@ -125,7 +125,7 @@ struct virtgpu_transfer_send_3d {
 	uint32_t ctx_id;
 };
 
-struct virtgpu_transfer_recv_3d {
+struct virtgpu_transfer_from_host_3d {
 	uint64_t data;
 	uint32_t resource_id;
 	uint32_t level;
@@ -180,7 +180,7 @@ struct virtgpu_command {
 		struct virtgpu_resource_unref resource_unref;
 		struct virtgpu_resource_flush resource_flush;
 		struct virtgpu_set_scanout set_scanout;
-		struct virtgpu_transfer_send_2d transfer_send_2d;
+		struct virtgpu_transfer_to_host_2d transfer_to_host_2d;
 		struct virtgpu_resource_attach_backing resource_attach_backing;
 		struct virtgpu_resource_inval_backing resource_inval_backing;
 
@@ -189,8 +189,8 @@ struct virtgpu_command {
 		struct virtgpu_ctx_destroy ctx_destroy;
 		struct virtgpu_ctx_resource ctx_resource;
 		struct virtgpu_resource_create_3d resource_create_3d;
-		struct virtgpu_transfer_send_3d transfer_send_3d;
-		struct virtgpu_transfer_recv_3d transfer_recv_3d;
+		struct virtgpu_transfer_to_host_3d transfer_to_host_3d;
+		struct virtgpu_transfer_from_host_3d transfer_from_host_3d;
 	} u;
 };
 

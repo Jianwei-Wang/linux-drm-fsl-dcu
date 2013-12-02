@@ -119,7 +119,7 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 		goto out;
 	}
 
-	virtgpu_cmd_transfer_send_2d(vgdev, qobj->hw_res_handle,
+	virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
 				     0, 64, 64, 0, 0);
 	{
 		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
