@@ -241,4 +241,24 @@ void virtgpu_fence_process(struct virtgpu_device *vgdev);
 void virtgpu_fence_unref(struct virtgpu_fence **fence);
 struct virtgpu_fence *virtgpu_fence_ref(struct virtgpu_fence *fence);
 bool virtgpu_fence_signaled(struct virtgpu_fence *fence, bool process);
+
+/* virtgpu_object */
+static inline struct virtgpu_object *virtgpu_object_ref(struct virtgpu_object *bo)
+{
+	ttm_bo_reference(&bo->tbo);
+	return bo;
+}
+
+static inline void virtgpu_object_unref(struct virtgpu_object **bo)
+{
+	struct ttm_buffer_object *tbo;
+
+	if ((*bo) == NULL)
+		return;
+	tbo = &((*bo)->tbo);
+	ttm_bo_unref(&tbo);
+	if (tbo == NULL)
+		*bo = NULL;
+}
+
 #endif
