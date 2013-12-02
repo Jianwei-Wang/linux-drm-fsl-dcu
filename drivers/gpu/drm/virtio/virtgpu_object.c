@@ -10,8 +10,8 @@ static void virtgpu_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 
 	//	if (bo->res_handle)
 	//		virtgpu_resource_unref(vgdev, bo->res_handle);
-	//	if (bo->pages)
-	//		virtgpu_object_free_sg_table(bo);
+	if (bo->pages)
+		virtgpu_object_free_sg_table(bo);
 	drm_gem_object_release(&bo->gem_base);
 	kfree(bo);
 }
@@ -133,3 +133,38 @@ void virtgpu_object_force_delete(struct virtgpu_device *vgdev)
 	}
 }
 #endif
+
+int virtgpu_object_get_sg_table(struct virtgpu_device *qdev,
+				struct virtgpu_object *bo)
+{
+	int ret;
+	struct page **pages = bo->tbo.ttm->pages;
+	int nr_pages = bo->tbo.num_pages;
+
+	/* wtf swapping */
+	if (bo->pages)
+		return 0;
+
+	if (bo->tbo.ttm->state == tt_unpopulated)
+		bo->tbo.ttm->bdev->driver->ttm_tt_populate(bo->tbo.ttm);
+	bo->pages = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
+	if (!bo->pages)
+		goto out;
+
+	ret = sg_alloc_table_from_pages(bo->pages, pages, nr_pages, 0,
+					nr_pages << PAGE_SHIFT, GFP_KERNEL);
+	if (ret)
+		goto out;
+	return 0;
+out:
+	kfree(bo->pages);
+	bo->pages = NULL;
+	return -ENOMEM;
+}
+
+void virtgpu_object_free_sg_table(struct virtgpu_object *bo)
+{
+	sg_free_table(bo->pages);
+	kfree(bo->pages);
+	bo->pages = NULL;
+}

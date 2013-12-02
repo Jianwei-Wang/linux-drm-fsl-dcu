@@ -1,6 +1,5 @@
 
 #include <drm/drmP.h>
-#include <linux/shmem_fs.h>
 #include "virtgpu_drv.h"
 
 int virtgpu_gem_init_object(struct drm_gem_object *obj)
@@ -56,117 +55,6 @@ virtgpu_gem_create(struct drm_file *file,
 
 	*handle_p = handle;
 	return 0;
-}
-
-int
-virtgpu_gem_object_get_pages(struct virtgpu_object *obj)
-{
-	int page_count, i;
-	struct address_space *mapping;
-	struct sg_table *st;
-	struct scatterlist *sg;
-	struct sg_page_iter sg_iter;
-	struct page *page;
-	unsigned long last_pfn = 0;	/* suppress gcc warning */
-	gfp_t gfp;
-
-	st = kmalloc(sizeof(*st), GFP_KERNEL);
-	if (st == NULL)
-		return -ENOMEM;
-
-	page_count = obj->gem_base.size / PAGE_SIZE;
-	if (sg_alloc_table(st, page_count, GFP_KERNEL)) {
-		sg_free_table(st);
-		kfree(st);
-		return -ENOMEM;
-	}
-
-	/* Get the list of pages out of our struct file.  They'll be pinned
-	 * at this point until we release them.
-	 *
-	 * Fail silently without starting the shrinker
-	 */
-	mapping = file_inode(obj->gem_base.filp)->i_mapping;
-	gfp = mapping_gfp_mask(mapping);
-	gfp |= __GFP_NORETRY | __GFP_NOWARN | __GFP_NO_KSWAPD;
-	gfp &= ~(__GFP_IO | __GFP_WAIT);
-	sg = st->sgl;
-	st->nents = 0;
-	for (i = 0; i < page_count; i++) {
-		page = shmem_read_mapping_page_gfp(mapping, i, gfp);
-		if (IS_ERR(page)) {
-		  //	i915_gem_purge(dev_priv, page_count);
-			page = shmem_read_mapping_page_gfp(mapping, i, gfp);
-		}
-		if (IS_ERR(page)) {
-			/* We've tried hard to allocate the memory by reaping
-			 * our own buffer, now let the real VM do its job and
-			 * go down in flames if truly OOM.
-			 */
-			gfp &= ~(__GFP_NORETRY | __GFP_NOWARN | __GFP_NO_KSWAPD);
-			gfp |= __GFP_IO | __GFP_WAIT;
-
-			//			i915_gem_shrink_all(dev_priv);
-			page = shmem_read_mapping_page_gfp(mapping, i, gfp);
-			if (IS_ERR(page))
-				goto err_pages;
-
-			gfp |= __GFP_NORETRY | __GFP_NOWARN | __GFP_NO_KSWAPD;
-			gfp &= ~(__GFP_IO | __GFP_WAIT);
-		}
-#ifdef CONFIG_SWIOTLB
-		if (swiotlb_nr_tbl()) {
-			st->nents++;
-			sg_set_page(sg, page, PAGE_SIZE, 0);
-			sg = sg_next(sg);
-			continue;
-		}
-#endif
-		if (!i || page_to_pfn(page) != last_pfn + 1) {
-			if (i)
-				sg = sg_next(sg);
-			st->nents++;
-			sg_set_page(sg, page, PAGE_SIZE, 0);
-		} else {
-			sg->length += PAGE_SIZE;
-		}
-		last_pfn = page_to_pfn(page);
-	}
-#ifdef CONFIG_SWIOTLB
-	if (!swiotlb_nr_tbl())
-#endif
-		sg_mark_end(sg);
-	obj->pages = st;
-
-	return 0;
-
-err_pages:
-	sg_mark_end(sg);
-	for_each_sg_page(st->sgl, &sg_iter, st->nents, 0)
-		page_cache_release(sg_page_iter_page(&sg_iter));
-	sg_free_table(st);
-	kfree(st);
-	return PTR_ERR(page);
-}
-
-static int virtgpu_create_mmap_offset(struct virtgpu_object *obj)
-{
-	int ret;
-
-	if (drm_vma_node_has_offset(&obj->gem_base.vma_node))
-		return 0;
-
-	ret = drm_gem_create_mmap_offset(&obj->gem_base);
-	if (ret)
-		return ret;
-	return 0;
-}
-
-static void virtgpu_free_mmap_offset(struct virtgpu_object *obj)
-{
-	if (!drm_vma_node_has_offset(&obj->gem_base.vma_node))
-		return;
-	drm_gem_free_mmap_offset(&obj->gem_base);
 }
 
 int virtgpu_mode_dumb_create(struct drm_file *file_priv,
@@ -225,68 +113,13 @@ int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 {
 	struct drm_gem_object *gobj;
 	struct virtgpu_object *obj;
-	int ret;
 	BUG_ON(!offset_p);
 	gobj = drm_gem_object_lookup(dev, file_priv, handle);
 	if (gobj == NULL)
 		return -ENOENT;
 	obj = gem_to_virtgpu_obj(gobj);
-
-	ret = virtgpu_create_mmap_offset(obj);
-	if (ret)
-		goto out;
-	*offset_p = drm_vma_node_offset_addr(&obj->gem_base.vma_node);
-
-out:
+	*offset_p = virtgpu_object_mmap_offset(obj);
 	drm_gem_object_unreference_unlocked(gobj);
-	return ret;
+	return 0;
 }
 
-int virtgpu_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
-{
-        int ret;
-
-        ret = drm_gem_mmap(filp, vma);
-        if (ret)
-                return ret;
-
-        vma->vm_flags &= ~VM_PFNMAP;
-        vma->vm_flags |= VM_MIXEDMAP;
-
-        return ret;
-}
-
-int virtgpu_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
-{
-	struct virtgpu_object *obj = gem_to_virtgpu_obj(vma->vm_private_data);
-	struct page *page = NULL;
-	unsigned int page_offset;
-	struct sg_page_iter sg_iter;
-	int ret = 0;
-
-	page_offset = ((unsigned long)vmf->virtual_address - vma->vm_start) >>
-		PAGE_SHIFT;	    
-
-	if (!obj->pages)
-		return VM_FAULT_SIGBUS;
-
-	for_each_sg_page(obj->pages->sgl, &sg_iter, obj->pages->nents, page_offset) {
-		page = sg_page_iter_page(&sg_iter);
-		break;
-	}
-
-	if (!page)
-		return VM_FAULT_NOPAGE;
-
-	ret = vm_insert_page(vma, (unsigned long)vmf->virtual_address, page);
-	switch (ret) {
-	case -EAGAIN:
-	case 0:
-	case -ERESTARTSYS:
-		return VM_FAULT_NOPAGE;
-	case -ENOMEM:
-		return VM_FAULT_OOM;
-	default:
-		return VM_FAULT_SIGBUS;
-	}
-}

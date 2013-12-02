@@ -175,7 +175,6 @@ int virtgpu_gem_init(struct virtgpu_device *vgdev);
 void virtgpu_gem_fini(struct virtgpu_device *vgdev);
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 					    size_t size, bool kernel, bool pinned);
-int virtgpu_gem_object_get_pages(struct virtgpu_object *obj);
 int virtgpu_mode_dumb_create(struct drm_file *file_priv,
 			     struct drm_device *dev,
 			     struct drm_mode_create_dumb *args);
@@ -185,8 +184,7 @@ int virtgpu_mode_dumb_destroy(struct drm_file *file_priv,
 int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 			   struct drm_device *dev,
 			   uint32_t handle, uint64_t *offset_p);
-int virtgpu_gem_fault(struct vm_area_struct *vma, struct vm_fault *vmf);
-int virtgpu_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
+
 /* virtio_fb */
 #define VIRTGPUFB_CONN_LIMIT 1
 int virtgpu_fbdev_init(struct virtgpu_device *vgdev);
@@ -240,6 +238,7 @@ void virtgpu_modeset_fini(struct virtgpu_device *vgdev);
 int virtgpu_ttm_init(struct virtgpu_device *vgdev);
 void virtgpu_ttm_fini(struct virtgpu_device *vgdev);
 bool virtgpu_ttm_bo_is_virtgpu_object(struct ttm_buffer_object *bo);
+int virtgpu_mmap(struct file *filp, struct vm_area_struct *vma);
 
 /* virtgpu_fence.c */
 int virtgpu_fence_wait(struct virtgpu_fence *fence, bool intr);
@@ -256,6 +255,9 @@ int virtgpu_object_create(struct virtgpu_device *vgdev,
 			  unsigned long size, bool kernel, bool pinned,
 			  struct virtgpu_object **bo_ptr);
 int virtgpu_object_kmap(struct virtgpu_object *bo, void **ptr);
+int virtgpu_object_get_sg_table(struct virtgpu_device *qdev,
+				struct virtgpu_object *bo);
+void virtgpu_object_free_sg_table(struct virtgpu_object *bo);
 static inline struct virtgpu_object *virtgpu_object_ref(struct virtgpu_object *bo)
 {
 	ttm_bo_reference(&bo->tbo);
@@ -272,6 +274,11 @@ static inline void virtgpu_object_unref(struct virtgpu_object **bo)
 	ttm_bo_unref(&tbo);
 	if (tbo == NULL)
 		*bo = NULL;
+}
+
+static inline u64 virtgpu_object_mmap_offset(struct virtgpu_object *bo)
+{
+        return drm_vma_node_offset_addr(&bo->tbo.vma_node);
 }
 
 #endif

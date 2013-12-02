@@ -134,16 +134,10 @@ MODULE_DEVICE_TABLE(virtio, id_table);
 MODULE_DESCRIPTION("Virtio GPU driver");
 MODULE_LICENSE("GPL");
 
-static const struct vm_operations_struct virtgpu_gem_vm_ops = {
-	.fault = virtgpu_gem_fault,
-	.open = drm_gem_vm_open,
-	.close = drm_gem_vm_close,
-};
-
 static const struct file_operations virtgpu_driver_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
-	.mmap = virtgpu_drm_gem_mmap,
+	.mmap = virtgpu_mmap,
 	.poll = drm_poll,
 	.read = drm_read,
 	.unlocked_ioctl	= drm_ioctl,
@@ -168,7 +162,6 @@ static struct drm_driver driver = {
 
 	.gem_init_object = virtgpu_gem_init_object,
 	.gem_free_object = virtgpu_gem_free_object,
-	.gem_vm_ops = &virtgpu_gem_vm_ops,
 
 	.fops = &virtgpu_driver_fops,
 

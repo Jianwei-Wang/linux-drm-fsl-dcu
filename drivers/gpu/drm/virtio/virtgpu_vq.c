@@ -502,7 +502,7 @@ int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *o
 
 	if (!obj->pages) {
 		int ret;
-		ret = virtgpu_gem_object_get_pages(obj);
+		ret = virtgpu_object_get_sg_table(vgdev, obj);
 		if (ret)
 			return ret;
 	}
