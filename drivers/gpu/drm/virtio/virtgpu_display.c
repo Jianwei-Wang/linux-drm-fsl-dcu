@@ -149,7 +149,7 @@ static int virtgpu_crtc_cursor_move(struct drm_crtc *crtc,
 
 static int virtgpu_crtc_page_flip(struct drm_crtc *crtc,
 				struct drm_framebuffer *fb,
-				struct drm_pending_vblank_event *event)
+				  struct drm_pending_vblank_event *event, uint32_t flags)
 {
 	return -EINVAL;
 }
