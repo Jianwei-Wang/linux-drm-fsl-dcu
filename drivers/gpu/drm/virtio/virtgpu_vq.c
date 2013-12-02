@@ -326,7 +326,6 @@ int virtgpu_cmd_unref_resource(struct virtgpu_device *vgdev,
 	cmd_p->u.resource_unref.resource_id = resource_id;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
-	       
 	return 0;
 }
 
@@ -488,6 +487,122 @@ int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id)
 
 	cmd_p->type = VIRTGPU_CMD_CTX_DESTROY;
 	cmd_p->u.ctx_destroy.ctx_id = id;
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
+int virtgpu_cmd_context_attach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
+					uint32_t resource_id)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_CTX_ATTACH_RESOURCE;
+	cmd_p->u.ctx_resource.ctx_id = ctx_id;
+	cmd_p->u.ctx_resource.resource_id = resource_id;
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+
+}
+
+int virtgpu_cmd_context_detach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
+					uint32_t resource_id)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_CTX_DETACH_RESOURCE;
+	cmd_p->u.ctx_resource.ctx_id = ctx_id;
+	cmd_p->u.ctx_resource.resource_id = resource_id;
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
+int virtgpu_cmd_resource_create_3d(struct virtgpu_device *vgdev,
+				   struct virtgpu_resource_create_3d *rc_3d,
+				   struct virtgpu_fence **fence)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_RESOURCE_CREATE_3D;
+	cmd_p->u.resource_create_3d = *rc_3d;
+	if (fence)
+		virtgpu_fence_emit(vgdev, cmd_p, fence);
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
+int virtgpu_cmd_transfer_to_host_3d(struct virtgpu_device *vgdev, uint32_t resource_id,
+				    uint32_t ctx_id,
+				    uint64_t offset, uint32_t level, struct virtgpu_box *box,
+				    struct virtgpu_fence **fence)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_TRANSFER_TO_HOST_3D;
+	cmd_p->u.transfer_to_host_3d.ctx_id = ctx_id;
+	cmd_p->u.transfer_to_host_3d.resource_id = resource_id;
+	cmd_p->u.transfer_to_host_3d.box = *box;
+	cmd_p->u.transfer_to_host_3d.data = offset;
+	cmd_p->u.transfer_to_host_3d.level = level;
+	if (fence)
+		virtgpu_fence_emit(vgdev, cmd_p, fence);
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
+int virtgpu_cmd_transfer_from_host_3d(struct virtgpu_device *vgdev, uint32_t resource_id,
+				      uint32_t ctx_id, uint64_t offset, uint32_t level, struct virtgpu_box *box,
+				      struct virtgpu_fence **fence)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_TRANSFER_FROM_HOST_3D;
+	cmd_p->u.transfer_from_host_3d.ctx_id = ctx_id;
+	cmd_p->u.transfer_from_host_3d.resource_id = resource_id;
+	cmd_p->u.transfer_from_host_3d.box = *box;
+	cmd_p->u.transfer_from_host_3d.data = offset;
+	cmd_p->u.transfer_from_host_3d.level = level;
+	if (fence)
+		virtgpu_fence_emit(vgdev, cmd_p, fence);
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
+int virtgpu_cmd_submit(struct virtgpu_device *vgdev, uint64_t offset,
+		       uint32_t size, uint32_t ctx_id,
+		       struct virtgpu_fence **fence)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_SUBMIT_3D;
+	cmd_p->u.cmd_submit.phy_addr = offset;
+	cmd_p->u.cmd_submit.size = size;
+	cmd_p->u.cmd_submit.ctx_id = ctx_id;
+	if (fence)
+		virtgpu_fence_emit(vgdev, cmd_p, fence);
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }

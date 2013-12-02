@@ -164,7 +164,7 @@ int virtgpu_fence_emit(struct virtgpu_device *vgdev,
 	(*fence)->seq = ++vgdev->fence_drv.sync_seq;
 
 	cmd->flags |= VIRTGPU_COMMAND_EMIT_FENCE;
-	//	cmd->fence_id = (*fence)->seq;
+	cmd->fence_id = (*fence)->seq;
 
 	return 0;
 }

@@ -173,6 +173,11 @@ int virtgpu_gem_init_object(struct drm_gem_object *obj);
 void virtgpu_gem_free_object(struct drm_gem_object *gem_obj);
 int virtgpu_gem_init(struct virtgpu_device *vgdev);
 void virtgpu_gem_fini(struct virtgpu_device *vgdev);
+int virtgpu_gem_create(struct drm_file *file,
+		       struct drm_device *dev,
+		       uint64_t size,
+		       struct drm_gem_object **obj_p,
+		       uint32_t *handle_p);
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 					    size_t size, bool kernel, bool pinned);
 int virtgpu_mode_dumb_create(struct drm_file *file_priv,
@@ -194,6 +199,7 @@ int virtgpu_surface_dirty(struct virtgpu_framebuffer *qfb,
 			  unsigned num_clips);
 /* virtio vg */
 int virtgpu_resource_id_get(struct virtgpu_device *vgdev, uint32_t *resid);
+void virtgpu_resource_id_put(struct virtgpu_device *vgdev, uint32_t id);
 int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
 				uint32_t resource_id,
 				uint32_t format,
@@ -226,6 +232,23 @@ int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries);
 int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
 			       uint32_t nlen, const char *name);
 int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id);
+int virtgpu_cmd_context_attach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
+					uint32_t resource_id);
+int virtgpu_cmd_context_detach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
+					uint32_t resource_id);
+int virtgpu_cmd_submit(struct virtgpu_device *vgdev, uint64_t offset,
+		       uint32_t size, uint32_t ctx_id,
+		       struct virtgpu_fence **fence);
+int virtgpu_cmd_transfer_from_host_3d(struct virtgpu_device *vgdev, uint32_t resource_id,
+				      uint32_t ctx_id, uint64_t offset, uint32_t level, struct virtgpu_box *box,
+				      struct virtgpu_fence **fence);
+int virtgpu_cmd_transfer_to_host_3d(struct virtgpu_device *vgdev, uint32_t resource_id,
+				    uint32_t ctx_id,
+				    uint64_t offset, uint32_t level, struct virtgpu_box *box,
+				    struct virtgpu_fence **fence);
+int virtgpu_cmd_resource_create_3d(struct virtgpu_device *vgdev,
+				   struct virtgpu_resource_create_3d *rc_3d,
+				   struct virtgpu_fence **fence);
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
 			     struct virtgpu_framebuffer *vgfb,
@@ -258,6 +281,7 @@ int virtgpu_object_kmap(struct virtgpu_object *bo, void **ptr);
 int virtgpu_object_get_sg_table(struct virtgpu_device *qdev,
 				struct virtgpu_object *bo);
 void virtgpu_object_free_sg_table(struct virtgpu_object *bo);
+int virtgpu_object_wait(struct virtgpu_object *bo, bool no_wait);
 static inline struct virtgpu_object *virtgpu_object_ref(struct virtgpu_object *bo)
 {
 	ttm_bo_reference(&bo->tbo);
@@ -279,6 +303,26 @@ static inline void virtgpu_object_unref(struct virtgpu_object **bo)
 static inline u64 virtgpu_object_mmap_offset(struct virtgpu_object *bo)
 {
         return drm_vma_node_offset_addr(&bo->tbo.vma_node);
+}
+
+static inline int virtgpu_object_reserve(struct virtgpu_object *bo, bool no_wait)
+{
+	int r;
+
+	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
+	if (unlikely(r != 0)) {
+		if (r != -ERESTARTSYS) {
+			struct virtgpu_device *qdev = (struct virtgpu_device *)bo->gem_base.dev->dev_private;
+			dev_err(qdev->dev, "%p reserve failed\n", bo);
+		}
+		return r;
+	}
+	return 0;
+}
+
+static inline void virtgpu_object_unreserve(struct virtgpu_object *bo)
+{
+	ttm_bo_unreserve(&bo->tbo);
 }
 
 #endif

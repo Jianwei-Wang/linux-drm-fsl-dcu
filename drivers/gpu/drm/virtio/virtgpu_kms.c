@@ -3,8 +3,6 @@
 #include <drm/drmP.h>
 #include "virtgpu_drv.h"
 
-int virtgpu_max_ioctls;
-
 static int virtgpu_ctx_id_get(struct virtgpu_device *vgdev, uint32_t *resid)
 {
 	int handle;

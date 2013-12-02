@@ -30,12 +30,11 @@ struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 	return obj;
 }
 
-int
-virtgpu_gem_create(struct drm_file *file,
-		   struct drm_device *dev,
-		   uint64_t size,
-		   struct drm_gem_object **obj_p,
-		   uint32_t *handle_p)
+int virtgpu_gem_create(struct drm_file *file,
+		       struct drm_device *dev,
+		       uint64_t size,
+		       struct drm_gem_object **obj_p,
+		       uint32_t *handle_p)
 {
 	struct virtgpu_object *obj;
 	int ret;

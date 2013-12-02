@@ -168,3 +168,19 @@ void virtgpu_object_free_sg_table(struct virtgpu_object *bo)
 	kfree(bo->pages);
 	bo->pages = NULL;
 }
+
+int virtgpu_object_wait(struct virtgpu_object *bo, bool no_wait)
+{
+	int r;
+
+	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
+	if (unlikely(r != 0))
+		return r;
+	spin_lock(&bo->tbo.bdev->fence_lock);
+	if (bo->tbo.sync_obj)
+		r = ttm_bo_wait(&bo->tbo, true, true, no_wait);
+	spin_unlock(&bo->tbo.bdev->fence_lock);
+	ttm_bo_unreserve(&bo->tbo);
+	return r;
+}
+

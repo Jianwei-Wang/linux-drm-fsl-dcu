@@ -40,8 +40,8 @@
 #define DRM_VIRTGPU_GETPARAM    0x03
 #define DRM_VIRTGPU_RESOURCE_CREATE 0x04
 #define DRM_VIRTGPU_RESOURCE_INFO     0x05
-#define DRM_VIRTGPU_TRANSFER_GET 0x06
-#define DRM_VIRTGPU_TRANSFER_PUT 0x07
+#define DRM_VIRTGPU_TRANSFER_FROM_HOST 0x06
+#define DRM_VIRTGPU_TRANSFER_TO_HOST 0x07
 #define DRM_VIRTGPU_WAIT     0x08
 #define DRM_VIRTGPU_GET_CAPS  0x09
 
@@ -102,22 +102,22 @@ struct drm_virtgpu_3d_box {
 	uint32_t w, h, d;
 };
 
-struct drm_virtgpu_3d_transfer_put {
+struct drm_virtgpu_3d_transfer_to_host {
 	uint32_t bo_handle;
 	struct drm_virtgpu_3d_box box;
 	uint32_t level;
 	uint32_t offset;
-	uint32_t stride;
-	uint32_t layer_stride;
+  //	uint32_t stride;
+  //	uint32_t layer_stride;
 };
 
-struct drm_virtgpu_3d_transfer_get {
+struct drm_virtgpu_3d_transfer_from_host {
 	uint32_t bo_handle;
 	struct drm_virtgpu_3d_box box;
 	uint32_t level;
 	uint32_t offset;
-	uint32_t stride;
-	uint32_t layer_stride;
+  //	uint32_t stride;
+  //	uint32_t layer_stride;
 };
 
 #define VIRTGPU_WAIT_NOWAIT 1 /* like it */
@@ -152,13 +152,13 @@ struct drm_virtgpu_get_caps {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_RESOURCE_INFO, \
 		 struct drm_virtgpu_resource_info)
 
-#define DRM_IOCTL_VIRTGPU_TRANSFER_GET \
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_TRANSFER_GET,	\
-		struct drm_virtgpu_3d_transfer_get)
+#define DRM_IOCTL_VIRTGPU_TRANSFER_FROM_HOST \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_TRANSFER_FROM_HOST,	\
+		struct drm_virtgpu_3d_transfer_from_host)
 
-#define DRM_IOCTL_VIRTGPU_TRANSFER_PUT \
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_TRANSFER_PUT,	\
-		struct drm_virtgpu_3d_transfer_put)
+#define DRM_IOCTL_VIRTGPU_TRANSFER_TO_HOST \
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_TRANSFER_TO_HOST,	\
+		struct drm_virtgpu_3d_transfer_to_host)
 
 #define DRM_IOCTL_VIRTGPU_WAIT				\
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_WAIT,	\
