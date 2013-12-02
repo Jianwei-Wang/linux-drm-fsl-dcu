@@ -8,20 +8,14 @@ int virtgpu_max_ioctls;
 static int virtgpu_ctx_id_get(struct virtgpu_device *vgdev, uint32_t *resid)
 {
 	int handle;
-	int idr_ret = -ENOMEM;
-again:
-	if (idr_pre_get(&vgdev->ctx_id_idr, GFP_KERNEL) == 0) {
-		goto fail;
-	}
-	spin_lock(&vgdev->ctx_id_idr_lock);
-	idr_ret = idr_get_new_above(&vgdev->ctx_id_idr, NULL, 1, &handle);
-	spin_unlock(&vgdev->ctx_id_idr_lock);
-	if (idr_ret == -EAGAIN)
-		goto again;
 
+	idr_preload(GFP_KERNEL);
+	spin_lock(&vgdev->ctx_id_idr_lock);
+	handle = idr_alloc(&vgdev->ctx_id_idr, NULL, 1, 0, 0);
+	spin_unlock(&vgdev->ctx_id_idr_lock);
+	idr_preload_end();
 	*resid = handle;
-fail:
-	return idr_ret;
+	return 0;
 }
 
 static void virtgpu_ctx_id_put(struct virtgpu_device *vgdev, uint32_t id)
@@ -83,6 +77,10 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	vgdev->dev = dev->dev;
 
 	spin_lock_init(&vgdev->display_info_lock);
+	spin_lock_init(&vgdev->ctx_id_idr_lock);
+	idr_init(&vgdev->ctx_id_idr);
+	spin_lock_init(&vgdev->resource_idr_lock);
+	idr_init(&vgdev->resource_idr);
 	init_waitqueue_head(&vgdev->resp_wq);
 	virtgpu_init_vq(&vgdev->ctrlq, virtgpu_dequeue_ctrl_func);
 	virtgpu_init_vq(&vgdev->cursorq, virtgpu_dequeue_cursor_func);

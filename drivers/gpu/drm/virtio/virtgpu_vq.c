@@ -8,20 +8,14 @@
 int virtgpu_resource_id_get(struct virtgpu_device *vgdev, uint32_t *resid)
 {
 	int handle;
-	int idr_ret = -ENOMEM;
-again:
-	if (idr_pre_get(&vgdev->resource_idr, GFP_KERNEL) == 0) {
-		goto fail;
-	}
-	spin_lock(&vgdev->resource_idr_lock);
-	idr_ret = idr_get_new_above(&vgdev->resource_idr, NULL, 1, &handle);
-	spin_unlock(&vgdev->resource_idr_lock);
-	if (idr_ret == -EAGAIN)
-		goto again;
 
+	idr_preload(GFP_KERNEL);
+	spin_lock(&vgdev->resource_idr_lock);
+	handle = idr_alloc(&vgdev->resource_idr, NULL, 1, 0, GFP_NOWAIT);
+	spin_unlock(&vgdev->resource_idr_lock);
+	idr_preload_end();
 	*resid = handle;
-fail:
-	return idr_ret;
+	return 0;
 }
 
 void virtgpu_resource_id_put(struct virtgpu_device *vgdev, uint32_t id)

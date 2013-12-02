@@ -3,18 +3,6 @@
 #include <linux/shmem_fs.h>
 #include "virtgpu_drv.h"
 
-static void virtgpu_free_mmap_offset(struct virtgpu_object *obj);
-
-static void *virtgpu_gem_object_alloc(struct drm_device *dev)
-{
-	return kzalloc(sizeof(struct virtgpu_object), GFP_KERNEL);
-}
-
-static void virtgpu_gem_object_free(struct virtgpu_object *obj)
-{
-	kfree(obj);
-}
-
 int virtgpu_gem_init_object(struct drm_gem_object *obj)
 {
 	/* we do nothings here */
@@ -25,37 +13,21 @@ void virtgpu_gem_free_object(struct drm_gem_object *gem_obj)
 {
 	struct virtgpu_object *obj = gem_to_virtgpu_obj(gem_obj);
 
-	/* put pages */
-	drm_gem_object_release(&obj->gem_base);
-
-	virtgpu_free_mmap_offset(obj);
-	virtgpu_gem_object_free(obj);
+	if (obj)
+		virtgpu_object_unref(&obj);
 }
 
-int virtgpu_gem_init(struct virtgpu_device *vgdev)
-{
-	return 0;
-}
-
-void virtgpu_gem_fini(struct virtgpu_device *vgdev)
-{
-}
-
-		      
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
-					    size_t size)
+					    size_t size, bool kernel, bool pinned)
 {
+	struct virtgpu_device *vgdev = dev->dev_private;
 	struct virtgpu_object *obj;
+	int ret;
 
-	obj = virtgpu_gem_object_alloc(dev);
-	if (obj == NULL)
-		return NULL;
+	ret = virtgpu_object_create(vgdev, size, kernel, pinned, &obj);
+	if (ret)
+		return ERR_PTR(ret);
 
-	if (drm_gem_object_init(dev, &obj->gem_base, size) != 0) {
-		virtgpu_gem_object_free(obj);
-		return NULL;
-	}
-	
 	return obj;
 }
 
@@ -70,14 +42,13 @@ virtgpu_gem_create(struct drm_file *file,
 	int ret;
 	u32 handle;
 
-	obj = virtgpu_alloc_object(dev, size);
+	obj = virtgpu_alloc_object(dev, size, false, false);
 	if (obj == NULL)
 		return -ENOMEM;
 
 	ret = drm_gem_handle_create(file, &obj->gem_base, &handle);
 	if (ret) {
 		drm_gem_object_release(&obj->gem_base);
-		virtgpu_gem_object_free(obj);
 		return ret;
 	}
 

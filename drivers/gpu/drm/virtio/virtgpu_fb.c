@@ -182,32 +182,7 @@ static struct fb_ops virtgpufb_ops = {
 static int virtgpu_vmap_fb(struct virtgpu_device *vgdev,
 			   struct virtgpu_object *obj)
 {
-	struct page **pages;
-	struct sg_page_iter sg_iter;
-	int i;
-	int ret;
-	if (!obj->pages) {
-		ret = virtgpu_gem_object_get_pages(obj);
-		if (ret)
-			goto error;
-	}
-	pages = drm_malloc_ab(obj->gem_base.size >> PAGE_SHIFT, sizeof(*pages));
-	if (pages == NULL)
-		goto error;
-
-	i = 0;
-	for_each_sg_page(obj->pages->sgl, &sg_iter, obj->pages->nents, 0)
-		pages[i++] = sg_page_iter_page(&sg_iter);
-
-	obj->vmap = vmap(pages, i, 0, PAGE_KERNEL);
-	drm_free_large(pages);
-
-	if (!obj->vmap)
-		goto error;
-
-	return 0;
-error:
-	return -ENOMEM;
+	return virtgpu_object_kmap(obj, NULL);
 }
 
 static int virtgpufb_create(struct drm_fb_helper *helper,
@@ -246,7 +221,7 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	}
 
 	size = mode_cmd.pitches[0] * mode_cmd.height;
-	obj = virtgpu_alloc_object(dev, size);
+	obj = virtgpu_alloc_object(dev, size, false, true);
 	if (!obj) {
 		ret = -ENOMEM;
 		goto fail;

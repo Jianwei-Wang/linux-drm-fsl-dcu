@@ -23,22 +23,24 @@ bool virtgpu_ttm_bo_is_virtgpu_object(struct ttm_buffer_object *bo)
 	return false;
 }
 
-void virtgpu_ttm_placement_from_domain(struct virtgpu_object *qbo, u32 domain)
+static void virtgpu_init_ttm_placement(struct virtgpu_object *vgbo, bool pinned)
 {
 	u32 c = 1;
+	u32 pflag = pinned ? TTM_PL_FLAG_NO_EVICT : 0;
 
-	qbo->placement.fpfn = 0;
-	qbo->placement.lpfn = 0;
-	qbo->placement.placement = &qbo->placement_code;
-	qbo->placement.busy_placement = &qbo->placement_code;
-	qbo->placement_code = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
-	qbo->placement.num_placement = c;
-	qbo->placement.num_busy_placement = c;
+	vgbo->placement.fpfn = 0;
+	vgbo->placement.lpfn = 0;
+	vgbo->placement.placement = &vgbo->placement_code;
+	vgbo->placement.busy_placement = &vgbo->placement_code;
+	vgbo->placement_code = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM | pflag;
+	vgbo->placement.num_placement = c;
+	vgbo->placement.num_busy_placement = c;
+
 }
 
 int virtgpu_object_create(struct virtgpu_device *vgdev,
-		  unsigned long size, bool kernel, u32 domain,
-		  struct virtgpu_object **bo_ptr)
+			  unsigned long size, bool kernel, bool pinned,
+			  struct virtgpu_object **bo_ptr)
 {
 	struct virtgpu_object *bo;
 	enum ttm_bo_type type;
@@ -68,16 +70,15 @@ int virtgpu_object_create(struct virtgpu_device *vgdev,
 	bo->gem_base.driver_private = NULL;
 	bo->dumb = false;
 
-	virtgpu_ttm_placement_from_domain(bo, domain);
-
+	virtgpu_init_ttm_placement(bo, pinned);
 	r = ttm_bo_init(&vgdev->mman.bdev, &bo->tbo, size, type,
 			&bo->placement, 0, !kernel, NULL, acc_size,
 			NULL, &virtgpu_ttm_bo_destroy);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS)
 			dev_err(vgdev->dev,
-				"object_init failed for (%lu, 0x%08X)\n",
-				size, domain);
+				"object_init failed for (%lu)\n",
+				size);
 		return r;
 	}
 	*bo_ptr = bo;

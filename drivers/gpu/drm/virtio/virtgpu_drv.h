@@ -174,7 +174,7 @@ void virtgpu_gem_free_object(struct drm_gem_object *gem_obj);
 int virtgpu_gem_init(struct virtgpu_device *vgdev);
 void virtgpu_gem_fini(struct virtgpu_device *vgdev);
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
-					    size_t size);
+					    size_t size, bool kernel, bool pinned);
 int virtgpu_gem_object_get_pages(struct virtgpu_object *obj);
 int virtgpu_mode_dumb_create(struct drm_file *file_priv,
 			     struct drm_device *dev,
@@ -240,7 +240,6 @@ void virtgpu_modeset_fini(struct virtgpu_device *vgdev);
 int virtgpu_ttm_init(struct virtgpu_device *vgdev);
 void virtgpu_ttm_fini(struct virtgpu_device *vgdev);
 bool virtgpu_ttm_bo_is_virtgpu_object(struct ttm_buffer_object *bo);
-void virtgpu_ttm_placement_from_domain(struct virtgpu_object *qbo, u32 domain);
 
 /* virtgpu_fence.c */
 int virtgpu_fence_wait(struct virtgpu_fence *fence, bool intr);
@@ -253,6 +252,10 @@ struct virtgpu_fence *virtgpu_fence_ref(struct virtgpu_fence *fence);
 bool virtgpu_fence_signaled(struct virtgpu_fence *fence, bool process);
 
 /* virtgpu_object */
+int virtgpu_object_create(struct virtgpu_device *vgdev,
+			  unsigned long size, bool kernel, bool pinned,
+			  struct virtgpu_object **bo_ptr);
+int virtgpu_object_kmap(struct virtgpu_object *bo, void **ptr);
 static inline struct virtgpu_object *virtgpu_object_ref(struct virtgpu_object *bo)
 {
 	ttm_bo_reference(&bo->tbo);

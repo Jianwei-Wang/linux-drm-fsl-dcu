@@ -180,21 +180,15 @@ static int virtgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 static void virtgpu_evict_flags(struct ttm_buffer_object *bo,
 				struct ttm_placement *placement)
 {
-	struct virtgpu_object *qbo;
 	static u32 placements = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM;
 
-	if (!virtgpu_ttm_bo_is_virtgpu_object(bo)) {
-		placement->fpfn = 0;
-		placement->lpfn = 0;
-		placement->placement = &placements;
-		placement->busy_placement = &placements;
-		placement->num_placement = 1;
-		placement->num_busy_placement = 1;
-		return;
-	}
-	qbo = container_of(bo, struct virtgpu_object, tbo);
-	virtgpu_ttm_placement_from_domain(qbo, 0);
-	*placement = qbo->placement;
+	placement->fpfn = 0;
+	placement->lpfn = 0;
+	placement->placement = &placements;
+	placement->busy_placement = &placements;
+	placement->num_placement = 1;
+	placement->num_busy_placement = 1;
+	return;
 }
 
 static int virtgpu_verify_access(struct ttm_buffer_object *bo, struct file *filp)
