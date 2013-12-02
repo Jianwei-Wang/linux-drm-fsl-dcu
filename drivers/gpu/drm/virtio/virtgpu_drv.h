@@ -221,12 +221,6 @@ int virtgpu_cmd_set_scanout(struct virtgpu_device *vgdev,
 			    uint32_t scanout_id, uint32_t resource_id,
 			    uint32_t width, uint32_t height,
 			    uint32_t x, uint32_t y);
-void virtgpu_ctrl_ack(struct virtqueue *vq);
-void virtgpu_cursor_ack(struct virtqueue *vq);
-void virtgpu_event_ack(struct virtqueue *vq);
-void virtgpu_dequeue_ctrl_func(struct work_struct *work);
-void virtgpu_dequeue_cursor_func(struct work_struct *work);
-void virtgpu_dequeue_event_func(struct work_struct *work);
 int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id);
 int virtgpu_attach_status_page(struct virtgpu_device *vgdev);
 int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
@@ -253,6 +247,14 @@ int virtgpu_cmd_transfer_to_host_3d(struct virtgpu_device *vgdev, uint32_t resou
 int virtgpu_cmd_resource_create_3d(struct virtgpu_device *vgdev,
 				   struct virtgpu_resource_create_3d *rc_3d,
 				   struct virtgpu_fence **fence);
+
+void virtgpu_ctrl_ack(struct virtqueue *vq);
+void virtgpu_cursor_ack(struct virtqueue *vq);
+void virtgpu_event_ack(struct virtqueue *vq);
+void virtgpu_dequeue_ctrl_func(struct work_struct *work);
+void virtgpu_dequeue_cursor_func(struct work_struct *work);
+void virtgpu_dequeue_event_func(struct work_struct *work);
+
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
 			     struct virtgpu_framebuffer *vgfb,
