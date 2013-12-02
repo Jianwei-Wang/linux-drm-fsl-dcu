@@ -181,7 +181,8 @@ err_pages:
 static int virtgpu_create_mmap_offset(struct virtgpu_object *obj)
 {
 	int ret;
-	if (obj->gem_base.map_list.map)
+
+	if (drm_vma_node_has_offset(&obj->gem_base.vma_node))
 		return 0;
 
 	ret = drm_gem_create_mmap_offset(&obj->gem_base);
@@ -192,9 +193,8 @@ static int virtgpu_create_mmap_offset(struct virtgpu_object *obj)
 
 static void virtgpu_free_mmap_offset(struct virtgpu_object *obj)
 {
-	if (!obj->gem_base.map_list.map)
+	if (!drm_vma_node_has_offset(&obj->gem_base.vma_node))
 		return;
-
 	drm_gem_free_mmap_offset(&obj->gem_base);
 }
 
@@ -264,7 +264,7 @@ int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 	ret = virtgpu_create_mmap_offset(obj);
 	if (ret)
 		goto out;
-	*offset_p = (u64)obj->gem_base.map_list.hash.key << PAGE_SHIFT;
+	*offset_p = drm_vma_node_offset_addr(&obj->gem_base.vma_node);
 
 out:
 	drm_gem_object_unreference_unlocked(gobj);
