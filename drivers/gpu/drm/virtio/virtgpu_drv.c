@@ -162,7 +162,8 @@ static struct drm_driver driver = {
 
 	.gem_init_object = virtgpu_gem_init_object,
 	.gem_free_object = virtgpu_gem_free_object,
-
+	.gem_open_object = virtgpu_gem_object_open,
+	.gem_close_object = virtgpu_gem_object_close,
 	.fops = &virtgpu_driver_fops,
 
 	.name = DRIVER_NAME,

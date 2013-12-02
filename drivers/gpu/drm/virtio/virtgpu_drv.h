@@ -178,6 +178,10 @@ int virtgpu_gem_create(struct drm_file *file,
 		       uint64_t size,
 		       struct drm_gem_object **obj_p,
 		       uint32_t *handle_p);
+int virtgpu_gem_object_open(struct drm_gem_object *obj,
+			    struct drm_file *file);
+void virtgpu_gem_object_close(struct drm_gem_object *obj,
+			      struct drm_file *file);
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 					    size_t size, bool kernel, bool pinned);
 int virtgpu_mode_dumb_create(struct drm_file *file_priv,

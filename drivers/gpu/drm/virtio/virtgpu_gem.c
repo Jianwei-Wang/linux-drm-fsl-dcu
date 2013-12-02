@@ -122,3 +122,36 @@ int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 	return 0;
 }
 
+int virtgpu_gem_object_open(struct drm_gem_object *obj,
+			  struct drm_file *file)
+{
+	struct virtgpu_device *qdev = (struct virtgpu_device *)obj->dev->dev_private;
+	struct virtgpu_fpriv *vfpriv = file->driver_priv;
+	struct virtgpu_object *qobj = gem_to_virtgpu_obj(obj);
+	int r;
+
+	r = virtgpu_object_reserve(qobj, false);
+	if (r)
+		return r;
+
+	r = virtgpu_cmd_context_attach_resource(qdev, vfpriv->ctx_id, qobj->hw_res_handle);
+	virtgpu_object_unreserve(qobj);
+	return r;
+}
+
+void virtgpu_gem_object_close(struct drm_gem_object *obj,
+			      struct drm_file *file)
+{
+	struct virtgpu_device *qdev = (struct virtgpu_device *)obj->dev->dev_private;
+	struct virtgpu_fpriv *vfpriv = file->driver_priv;
+	struct virtgpu_object *qobj = gem_to_virtgpu_obj(obj);
+	int r;
+
+	r = virtgpu_object_reserve(qobj, false);
+	if (r)
+		return;
+
+	r = virtgpu_cmd_context_detach_resource(qdev, vfpriv->ctx_id, qobj->hw_res_handle);
+	virtgpu_object_unreserve(qobj);
+	return;
+}
