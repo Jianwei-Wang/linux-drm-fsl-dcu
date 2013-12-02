@@ -31,6 +31,31 @@ static void virtgpu_ctx_id_put(struct virtgpu_device *vgdev, uint32_t id)
 	spin_unlock(&vgdev->ctx_id_idr_lock);	
 }
 
+static int virtgpu_context_create(struct virtgpu_device *vgdev, uint32_t nlen,
+				   const char *name, uint32_t *ctx_id)
+{
+	int ret;
+
+	ret = virtgpu_ctx_id_get(vgdev, ctx_id);
+	if (ret)
+		return ret;
+
+	ret = virtgpu_cmd_context_create(vgdev, *ctx_id, nlen, name);
+	if (ret) {
+		virtgpu_ctx_id_put(vgdev, *ctx_id);
+		return ret;
+	}
+	return 0;
+}
+
+static int virtgpu_context_destroy(struct virtgpu_device *vgdev, uint32_t ctx_id)
+{
+	int ret;
+
+	ret = virtgpu_cmd_context_destroy(vgdev, ctx_id);
+	virtgpu_ctx_id_put(vgdev, ctx_id);
+	return ret;
+}
 
 static void virtgpu_init_vq(struct virtgpu_queue *vgvq, void (*work_func)(struct work_struct *work))
 {
@@ -84,6 +109,13 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 
 	virtgpu_fill_event_vq(vgdev, 64);
 
+	ret = virtgpu_ttm_init(vgdev);
+	if (ret) {
+		DRM_ERROR("failed to init ttm %d\n", ret);
+		kfree(vgdev);
+		return ret;
+	}
+
         /* get display info */
 	virtgpu_cmd_get_display_info(vgdev);
 	ret = wait_event_timeout(vgdev->resp_wq, vgdev->display_info.num_scanouts > 0, 5 * HZ);
@@ -95,6 +127,7 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	
 	vgdev->num_hw_scanouts = vgdev->display_info.num_scanouts;
 	DRM_INFO("got %d outputs\n", vgdev->display_info.num_scanouts);
+
 	ret = virtgpu_modeset_init(vgdev);
 	if (ret) {
 		kfree(vgdev);
@@ -110,7 +143,47 @@ int virtgpu_driver_unload(struct drm_device *dev)
 
 	virtgpu_modeset_fini(vgdev);
 
+	virtgpu_ttm_fini(vgdev);
 	kfree(vgdev->cursor_page);
 	kfree(vgdev);
 	return 0;
+}
+
+int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file)
+{
+	struct virtgpu_device *qdev = dev->dev_private;
+	struct virtgpu_fpriv *vfpriv;
+	uint32_t id;
+	int ret;
+	char dbgname[64], tmpname[TASK_COMM_LEN];
+	
+	get_task_comm(tmpname, current);
+	snprintf(dbgname, sizeof(dbgname), "%s", tmpname);
+	dbgname[63] = 0;
+	/* allocate a virt GPU context for this opener */
+	vfpriv = kzalloc(sizeof(*vfpriv), GFP_KERNEL);
+	if (!vfpriv)
+		return -ENOMEM;
+
+	ret = virtgpu_context_create(qdev, strlen(dbgname), dbgname, &id);
+	if (ret) {
+		kfree(vfpriv);
+		return ret;
+	}
+
+	vfpriv->ctx_id = id;
+	file->driver_priv = vfpriv;
+	return 0;
+}
+
+void virtgpu_driver_postclose(struct drm_device *dev, struct drm_file *file)
+{
+	struct virtgpu_device *qdev = dev->dev_private;
+	struct virtgpu_fpriv *vfpriv;
+
+	vfpriv = file->driver_priv;
+
+	virtgpu_context_destroy(qdev, vfpriv->ctx_id);
+	kfree(vfpriv);
+	file->driver_priv = NULL;
 }

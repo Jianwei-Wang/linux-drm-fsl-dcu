@@ -159,6 +159,8 @@ static struct drm_driver driver = {
 	.driver_features = DRIVER_MODESET | DRIVER_GEM,
 	.load = virtgpu_driver_load,
 	.unload = virtgpu_driver_unload,
+	.open = virtgpu_driver_open,
+	.postclose = virtgpu_driver_postclose,
 
 	.dumb_create = virtgpu_mode_dumb_create,
 	.dumb_map_offset = virtgpu_mode_dumb_mmap,

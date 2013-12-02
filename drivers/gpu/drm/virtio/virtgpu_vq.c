@@ -466,6 +466,38 @@ int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev)
 	return 0;
 }
 
+int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
+			       uint32_t nlen, const char *name)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_CTX_CREATE;
+	cmd_p->u.ctx_create.ctx_id = id;
+	cmd_p->u.ctx_create.nlen = nlen;
+	strncpy(cmd_p->u.ctx_create.debug_name, name, 63);
+	cmd_p->u.ctx_create.debug_name[63] = 0;
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
+int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id)
+{
+	struct virtgpu_command *cmd_p;
+	struct virtgpu_vbuffer *vbuf;
+
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	memset(cmd_p, 0, sizeof(*cmd_p));
+
+	cmd_p->type = VIRTGPU_CMD_CTX_DESTROY;
+	cmd_p->u.ctx_destroy.ctx_id = id;
+	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
+	return 0;
+}
+
 int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id)
 {
 	uint32_t sz;

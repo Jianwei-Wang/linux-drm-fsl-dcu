@@ -160,14 +160,19 @@ struct virtgpu_device {
 
 };
 
+struct virtgpu_fpriv {
+	uint32_t ctx_id;
+};
+
 int virtgpu_driver_load(struct drm_device *dev, unsigned long flags);
 int virtgpu_driver_unload(struct drm_device *dev);
-
+int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file);
+void virtgpu_driver_postclose(struct drm_device *dev, struct drm_file *file);
 /* virtio_gem.c */
 int virtgpu_gem_init_object(struct drm_gem_object *obj);
 void virtgpu_gem_free_object(struct drm_gem_object *gem_obj);
-int virtgpu_gem_init(struct virtgpu_device *qdev);
-void virtgpu_gem_fini(struct virtgpu_device *qdev);
+int virtgpu_gem_init(struct virtgpu_device *vgdev);
+void virtgpu_gem_fini(struct virtgpu_device *vgdev);
 struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 					    size_t size);
 int virtgpu_gem_object_get_pages(struct virtgpu_object *obj);
@@ -220,7 +225,9 @@ int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
 void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev);
 int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries);
-
+int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
+			       uint32_t nlen, const char *name);
+int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id);
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
 			     struct virtgpu_framebuffer *vgfb,
@@ -229,6 +236,9 @@ int virtgpu_framebuffer_init(struct drm_device *dev,
 int virtgpu_modeset_init(struct virtgpu_device *vgdev);
 void virtgpu_modeset_fini(struct virtgpu_device *vgdev);
 
+/* virtgpu_ttm.c */
+int virtgpu_ttm_init(struct virtgpu_device *vgdev);
+void virtgpu_ttm_fini(struct virtgpu_device *vgdev);
 bool virtgpu_ttm_bo_is_virtgpu_object(struct ttm_buffer_object *bo);
 void virtgpu_ttm_placement_from_domain(struct virtgpu_object *qbo, u32 domain);
 
