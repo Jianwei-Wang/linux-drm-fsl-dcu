@@ -84,6 +84,10 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	virtgpu_init_vq(&vgdev->cursorq, virtgpu_dequeue_cursor_func);
 	virtgpu_init_vq(&vgdev->eventq, virtgpu_dequeue_event_func);
 
+	spin_lock_init(&vgdev->fence_drv.event_lock);
+	INIT_LIST_HEAD(&vgdev->fence_drv.event_list);
+	init_waitqueue_head(&vgdev->fence_queue);
+
 	vgdev->cursor_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!vgdev->cursor_page) {
 		kfree(vgdev);
@@ -120,7 +124,14 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 		kfree(vgdev);
 		return -EINVAL;
 	}
-	
+
+	virtgpu_cmd_get_3d_caps(vgdev);
+	ret = wait_event_timeout(vgdev->resp_wq, vgdev->caps.max_version > 0, 5 * HZ);
+	if (ret == 0) {
+		DRM_ERROR("failed to get 3d caps resp from hw in 5s\n");
+		kfree(vgdev);
+		return -EINVAL;
+	}
 	vgdev->num_hw_scanouts = vgdev->display_info.num_scanouts;
 	DRM_INFO("got %d outputs\n", vgdev->display_info.num_scanouts);
 

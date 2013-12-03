@@ -166,6 +166,8 @@ static struct drm_driver driver = {
 	.gem_close_object = virtgpu_gem_object_close,
 	.fops = &virtgpu_driver_fops,
 
+	.ioctls = virtgpu_ioctls,
+
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
 	.date = DRIVER_DATE,

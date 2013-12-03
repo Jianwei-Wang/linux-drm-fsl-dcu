@@ -114,8 +114,6 @@ int virtgpu_execbuffer(struct drm_device *dev,
 	struct drm_gem_object *gobj;
 	struct virtgpu_fence *fence;
 	struct virtgpu_object *qobj;
-	void *optr;
-	void *osyncobj;
 	int ret;
 	uint32_t *bo_handles = NULL;
 	struct list_head validate_list;
@@ -123,6 +121,7 @@ int virtgpu_execbuffer(struct drm_device *dev,
 	struct ttm_validate_buffer cmdbuffer;
 	int i;
 	struct ww_acquire_ctx ticket;
+	void *cmdbuf;
 	//printk("user cmd size %d\n", user_cmd.command_size);
 
 	memset(&cmdbuffer, 0, sizeof(struct ttm_validate_buffer));
@@ -160,56 +159,24 @@ int virtgpu_execbuffer(struct drm_device *dev,
 		drm_free_large(bo_handles);
 	}
 
-#if 0
-	ret = virtgpu_gem_object_create(vgdev, execbuffer->size,
-				    0, 0, false,
-				    true, &gobj);
-
-	if (ret)
-		return ret;
-#endif
-	qobj = gem_to_virtgpu_obj(gobj);
-
-	cmdbuffer.bo = &qobj->tbo;
-	list_add(&cmdbuffer.head, &validate_list);
+	cmdbuf = drm_malloc_ab(1, execbuffer->size);
+	if (!cmdbuf) {
+		ret = -ENOMEM;
+		goto out_free;
+	}
 
 	ret = virtgpu_object_list_validate(&ticket, &validate_list);
 	if (ret)
-		goto out_free;
+		goto out_free_cmd;
 
-#if 0
-	ret = virtgpu_object_kmap(qobj, &optr);
-	if (ret)
-		goto out_unresv;
-
-	if (DRM_COPY_FROM_USER(optr, (void *)(unsigned long)execbuffer->command,
+	if (DRM_COPY_FROM_USER(cmdbuf, (void *)(unsigned long)execbuffer->command,
 			       execbuffer->size)) {
 		ret = -EFAULT;
-		goto out_kunmap;
+		goto out_unresv;
 	}
 
-	virtgpu_object_kunmap(qobj);
-#endif
-	{
-		virtgpu_cmd_submit(vgdev, 0, execbuffer->size,
-				   vfpriv->ctx_id, &fence);
-#if 0
-		struct virtgpu_command *cmd_p;
-		struct virtgpu_vbuffer *vbuf = NULL;
-
-		cmd_p = virtgpu_alloc_cmd(vgdev, qobj, false, NULL, 0, &vbuf);
-		if (IS_ERR(cmd_p))
-			goto out_unresv;
-
-		cmd_p->type = VIRTGPU_CMD_SUBMIT;
-		cmd_p->u.cmd_submit.size = execbuffer->size;
-		cmd_p->u.cmd_submit.ctx_id = vfpriv->ctx_id;
-		cmd_p->u.cmd_submit.phy_addr = 0;
-		ret = virtgpu_fence_emit(vgdev, cmd_p, &fence);
-
-		virtgpu_queue_cmd_buf(vgdev, vbuf);
-#endif
-	}
+	virtgpu_cmd_submit(vgdev, cmdbuf, execbuffer->size,
+			   vfpriv->ctx_id, &fence);
 
 	ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 
@@ -217,10 +184,10 @@ int virtgpu_execbuffer(struct drm_device *dev,
 	virtgpu_unref_list(&validate_list);
 	drm_free_large(buflist);
 	return 0;
-out_kunmap:
-//	virtgpu_object_kunmap(qobj);
 out_unresv:
 	ttm_eu_backoff_reservation(&ticket, &validate_list);
+out_free_cmd:
+	drm_free_large(cmdbuf);
 out_free:
 	virtgpu_unref_list(&validate_list);
 	drm_free_large(buflist);
@@ -259,19 +226,18 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	struct virtgpu_object *qobj;
 	struct drm_gem_object *obj;
 	uint32_t handle = 0;
-	uint32_t size, pg_size;
+	uint32_t size;
 	void *optr;
 	int si;
 	struct scatterlist *sg;
 	struct list_head validate_list;
-	struct ttm_validate_buffer mainbuf, page_info_buf;
+	struct ttm_validate_buffer mainbuf;
 	struct virtgpu_fence *fence;
 	struct ww_acquire_ctx ticket;
 	struct virtgpu_resource_create_3d rc_3d;
 
 	INIT_LIST_HEAD(&validate_list);
 	memset(&mainbuf, 0, sizeof(struct ttm_validate_buffer));
-	memset(&page_info_buf, 0, sizeof(struct ttm_validate_buffer));
 
 	ret = virtgpu_resource_id_get(vgdev, &res_id);
 	if (ret) 
@@ -295,17 +261,12 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	mainbuf.bo = &qobj->tbo;
 	list_add(&mainbuf.head, &validate_list);
 
-	ret = virtgpu_object_get_sg_table(vgdev, qobj);
-	if (ret)
-		goto fail_obj;
-
-#if 0
-	ret = virtgpu_bo_list_validate(&ticket, &validate_list);
+	ret = virtgpu_object_list_validate(&ticket, &validate_list);
 	if (ret) {
 		printk("failed to validate\n");
 		goto fail_unref;
 	}
-#endif
+
 	rc_3d.resource_id = res_id;
 	rc_3d.target = rc->target;
 	rc_3d.format = rc->format;
@@ -318,7 +279,9 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	rc_3d.nr_samples = rc->nr_samples;
 	rc_3d.flags = 0;
 
-	ret = virtgpu_cmd_resource_create_3d(vgdev, &rc_3d, &fence);
+	ret = virtgpu_cmd_resource_create_3d(vgdev, &rc_3d, NULL);
+
+	ret = virtgpu_object_attach(vgdev, qobj, res_id, &fence);
 
 	ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 
@@ -327,12 +290,12 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
 
-//	virtgpu_unref_list(&validate_list);
+	virtgpu_unref_list(&validate_list);
 
 
 	return 0;
 fail_unref:
-//	virtgpu_unref_list(&validate_list);
+	virtgpu_unref_list(&validate_list);
 fail_obj:
 //	drm_gem_object_handle_unreference_unlocked(obj);
 fail_id:
@@ -469,24 +432,23 @@ static int virtgpu_wait_ioctl(struct drm_device *dev, void *data,
 	return ret;
 }
 
-#if 0
 static int virtgpu_get_caps_ioctl(struct drm_device *dev,
 				void *data, struct drm_file *file)
 {
-	struct virtgpu_device *vdev = dev->dev_private;
+	struct virtgpu_device *vgdev = dev->dev_private;
 	struct drm_virtgpu_get_caps *args = data;	
-	struct drm_gem_object *gobj = &vdev->caps_bo->gem_base;
-	uint32_t handle;
-	int r;
+	int size;
 
-	r = drm_gem_handle_create(file, gobj, &handle);
-	if (r)
-		return r;
+	size = sizeof(union virtgpu_caps);
+	if (args->size < sizeof(union virtgpu_caps))
+		size = args->size;
 
-	args->handle = handle;
+	if (DRM_COPY_TO_USER((void *)(unsigned long)args->addr, &vgdev->caps, size))
+		return -EFAULT;
+
 	return 0;
 }
-#endif
+
 
 struct drm_ioctl_desc virtgpu_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIRTGPU_ALLOC, virtgpu_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
@@ -508,7 +470,7 @@ struct drm_ioctl_desc virtgpu_ioctls[] = {
 
 	DRM_IOCTL_DEF_DRV(VIRTGPU_WAIT, virtgpu_wait_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
-//	DRM_IOCTL_DEF_DRV(VIRTGPU_GET_CAPS, virtgpu_get_caps_ioctl, DRM_AUTH|DRM_UNLOCKED),
+	DRM_IOCTL_DEF_DRV(VIRTGPU_GET_CAPS, virtgpu_get_caps_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 };
 

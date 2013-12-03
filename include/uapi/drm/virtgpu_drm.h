@@ -127,7 +127,9 @@ struct drm_virtgpu_3d_wait {
 };
 
 struct drm_virtgpu_get_caps {
-	uint32_t handle; /* 0 is an invalid handle */
+	uint64_t addr;
+	uint32_t size;
+	uint32_t pad;
 };
 
 #define DRM_IOCTL_VIRTGPU_ALLOC \

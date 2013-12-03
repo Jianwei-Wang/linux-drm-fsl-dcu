@@ -87,7 +87,7 @@ int virtgpu_mode_dumb_create(struct drm_file *file_priv,
 
 	/* attach the object to the resource */
 	obj = gem_to_virtgpu_obj(gobj);
-	ret = virtgpu_object_attach(vgdev, obj, resid);
+	ret = virtgpu_object_attach(vgdev, obj, resid, NULL);
 	if (ret)
 		goto fail;
 

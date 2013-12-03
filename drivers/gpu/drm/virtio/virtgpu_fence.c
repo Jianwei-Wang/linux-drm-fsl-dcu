@@ -81,7 +81,6 @@ static int virtgpu_fence_wait_seq(struct virtgpu_device *vgdev, u64 target_seq,
 		/* Save current last activity valuee, used to check for GPU lockups */
 		last_activity = vgdev->fence_drv.last_activity;
 
-		//		radeon_irq_kms_sw_irq_get(rdev, ring);
 		if (intr) {
 			r = wait_event_interruptible_timeout(vgdev->fence_queue,
 							     (signaled = virtgpu_fence_seq_signaled(vgdev, target_seq, true)),
@@ -91,7 +90,6 @@ static int virtgpu_fence_wait_seq(struct virtgpu_device *vgdev, u64 target_seq,
 					       (signaled = virtgpu_fence_seq_signaled(vgdev, target_seq, true)),
 				timeout);
 		}
-		//		radeon_irq_kms_sw_irq_put(rdev, ring);
 		if (unlikely(r < 0)) {
 			return r;
 		}

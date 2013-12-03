@@ -19,7 +19,7 @@
 #include "virtgpu_hw.h"
 #define DRIVER_NAME "virtio-gpu"
 #define DRIVER_DESC "virtio GPU"
-#define DRIVER_DATE ""
+#define DRIVER_DATE "0"
 
 #define DRIVER_MAJOR 0
 #define DRIVER_MINOR 0
@@ -77,7 +77,6 @@ struct virtgpu_vbuffer {
 	virtgpu_resp_cb resp_cb;
 
 	void *vaddr;
-	dma_addr_t busaddr;
 	uint32_t vaddr_len;
 	struct list_head destroy_list;
 };
@@ -157,12 +156,14 @@ struct virtgpu_device {
 	struct idr	ctx_id_idr;
 	spinlock_t ctx_id_idr_lock;
 
-
+	union virtgpu_caps caps;
 };
 
 struct virtgpu_fpriv {
 	uint32_t ctx_id;
 };
+
+extern struct drm_ioctl_desc virtgpu_ioctls[];
 
 int virtgpu_driver_load(struct drm_device *dev, unsigned long flags);
 int virtgpu_driver_unload(struct drm_device *dev);
@@ -221,11 +222,12 @@ int virtgpu_cmd_set_scanout(struct virtgpu_device *vgdev,
 			    uint32_t scanout_id, uint32_t resource_id,
 			    uint32_t width, uint32_t height,
 			    uint32_t x, uint32_t y);
-int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id);
+int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *obj, uint32_t resource_id, struct virtgpu_fence **fence);
 int virtgpu_attach_status_page(struct virtgpu_device *vgdev);
 int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
 void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev);
+int virtgpu_cmd_get_3d_caps(struct virtgpu_device *vgdev);
 int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries);
 int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
 			       uint32_t nlen, const char *name);
@@ -234,7 +236,7 @@ int virtgpu_cmd_context_attach_resource(struct virtgpu_device *vgdev, uint32_t c
 					uint32_t resource_id);
 int virtgpu_cmd_context_detach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
 					uint32_t resource_id);
-int virtgpu_cmd_submit(struct virtgpu_device *vgdev, uint64_t offset,
+int virtgpu_cmd_submit(struct virtgpu_device *vgdev, void *vaddr,
 		       uint32_t size, uint32_t ctx_id,
 		       struct virtgpu_fence **fence);
 int virtgpu_cmd_transfer_from_host_3d(struct virtgpu_device *vgdev, uint32_t resource_id,

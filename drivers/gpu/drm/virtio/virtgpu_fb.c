@@ -42,6 +42,7 @@ static int virtgpu_dirty_update(struct virtgpu_framebuffer *fb, bool store,
 	if (in_atomic() || store)
 		store_for_later = true;
 
+
 	x2 = x + width - 1;
 	y2 = y + height - 1;
 
@@ -239,7 +240,7 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	virtgpu_vmap_fb(vgdev, obj);
 	  
 	/* attach the object to the resource */
-	ret = virtgpu_object_attach(vgdev, obj, resid);
+	ret = virtgpu_object_attach(vgdev, obj, resid, NULL);
 	if (ret)
 		goto fail;
 
