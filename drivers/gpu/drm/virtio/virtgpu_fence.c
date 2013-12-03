@@ -16,9 +16,10 @@ struct virtgpu_fence_event {
 
 u32 virtgpu_fence_read(struct virtgpu_device *vgdev)
 {
-  //TODO
-  return 0;
+	u32 fence_val = *(uint32_t *)(vgdev->fence_page);
+	return fence_val;
 }
+
 static void virtgpu_fence_destroy(struct kref *kref)
 {
 	struct virtgpu_fence *fence;

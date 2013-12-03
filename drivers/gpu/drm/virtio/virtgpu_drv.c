@@ -160,6 +160,11 @@ static struct drm_driver driver = {
 	.dumb_map_offset = virtgpu_mode_dumb_mmap,
 	.dumb_destroy = virtgpu_mode_dumb_destroy,
 
+#if defined(CONFIG_DEBUG_FS)
+	.debugfs_init = virtgpu_debugfs_init,
+	.debugfs_cleanup = virtgpu_debugfs_takedown,
+#endif
+
 	.gem_init_object = virtgpu_gem_init_object,
 	.gem_free_object = virtgpu_gem_free_object,
 	.gem_open_object = virtgpu_gem_object_open,

@@ -60,11 +60,12 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 {
 	struct virtgpu_device *vgdev;
 	/* this will expand later */
-	struct virtqueue *vqs[3];
-	vq_callback_t *callbacks[] = { virtgpu_ctrl_ack, virtgpu_cursor_ack, virtgpu_event_ack };
-	const char *names[] = { "control", "cursor", "event" };
+	struct virtqueue *vqs[4];
+	vq_callback_t *callbacks[] = { virtgpu_ctrl_ack, virtgpu_cursor_ack, virtgpu_event_ack, virtgpu_fence_ack };
+	const char *names[] = { "control", "cursor", "event", "fence" };
 	int nvqs;
 	int ret;
+
 	vgdev = kzalloc(sizeof(struct virtgpu_device), GFP_KERNEL);
 	if (!vgdev)
 		return -ENOMEM;
@@ -83,6 +84,7 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	virtgpu_init_vq(&vgdev->ctrlq, virtgpu_dequeue_ctrl_func);
 	virtgpu_init_vq(&vgdev->cursorq, virtgpu_dequeue_cursor_func);
 	virtgpu_init_vq(&vgdev->eventq, virtgpu_dequeue_event_func);
+	virtgpu_init_vq(&vgdev->fenceq, virtgpu_dequeue_fence_func);
 
 	spin_lock_init(&vgdev->fence_drv.event_lock);
 	INIT_LIST_HEAD(&vgdev->fence_drv.event_list);
@@ -94,7 +96,13 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 		return -ENOMEM;
 	}
 
-	nvqs = 3;
+	vgdev->fence_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!vgdev->fence_page) {
+		kfree(vgdev);
+		return -ENOMEM;
+	}
+
+	nvqs = 4;
 
 	ret = vgdev->vdev->config->find_vqs(vgdev->vdev, nvqs, vqs, callbacks, names);
 	if (ret) {
@@ -106,8 +114,10 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	vgdev->ctrlq.vq = vqs[0];
 	vgdev->cursorq.vq = vqs[1];
 	vgdev->eventq.vq = vqs[2];
+	vgdev->fenceq.vq = vqs[3];
 
 	virtgpu_fill_event_vq(vgdev, 64);
+	virtgpu_fill_fence_vq(vgdev, 64);
 
 	ret = virtgpu_ttm_init(vgdev);
 	if (ret) {
@@ -152,6 +162,7 @@ int virtgpu_driver_unload(struct drm_device *dev)
 
 	virtgpu_ttm_fini(vgdev);
 	kfree(vgdev->cursor_page);
+	kfree(vgdev->fence_page);
 	kfree(vgdev);
 	return 0;
 }

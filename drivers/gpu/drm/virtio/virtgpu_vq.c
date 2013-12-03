@@ -46,6 +46,13 @@ void virtgpu_event_ack(struct virtqueue *vq)
 	schedule_work(&vgdev->eventq.dequeue_work);
 }
 
+void virtgpu_fence_ack(struct virtqueue *vq)
+{
+	struct drm_device *dev = vq->vdev->priv;
+	struct virtgpu_device *vgdev = dev->dev_private;
+	schedule_work(&vgdev->fenceq.dequeue_work);
+}
+
 static struct virtgpu_vbuffer *virtgpu_allocate_vbuf(struct virtgpu_device *vgdev,
 						     int size, int resp_size,
 						     virtgpu_resp_cb resp_cb)
@@ -213,6 +220,44 @@ void virtgpu_dequeue_event_func(struct work_struct *work)
 		}
 		spin_unlock(&vgdev->eventq.qlock);
 	}
+}
+
+static int add_fence_inbuf(struct virtgpu_device *vgdev,
+			   struct virtqueue *vq)
+{
+	struct scatterlist sg[1];
+	int ret;
+
+	sg_init_one(sg, vgdev->fence_page, PAGE_SIZE);
+
+	ret = virtqueue_add_inbuf(vq, sg, 1, vgdev, GFP_ATOMIC);
+	virtqueue_kick(vq);
+	if (!ret)
+		ret = vq->num_free;
+	return ret;
+}
+
+void virtgpu_dequeue_fence_func(struct work_struct *work)
+{
+	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
+						    fenceq.dequeue_work);
+	struct virtqueue *vq = vgdev->fenceq.vq;
+	struct virtgpu_vbuffer *vbuf;
+	unsigned int len;
+	struct virtgpu_vbuffer *entry, *tmp;
+
+	spin_lock(&vgdev->fenceq.qlock);
+	do {
+		virtqueue_disable_cb(vgdev->fenceq.vq);
+		while ((vbuf = virtqueue_get_buf(vq, &len))) {
+
+			add_fence_inbuf(vgdev, vgdev->fenceq.vq);
+		}
+
+	} while (!virtqueue_enable_cb(vgdev->fenceq.vq));
+	spin_unlock(&vgdev->fenceq.qlock);
+
+	virtgpu_fence_process(vgdev);
 }
 
 int virtgpu_queue_ctrl_buffer(struct virtgpu_device *vgdev,
@@ -723,6 +768,25 @@ int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries)
 			break;
 		}
 		spin_unlock_irq(&vgdev->eventq.qlock);
+	}
+	return i;
+		
+}
+
+int virtgpu_fill_fence_vq(struct virtgpu_device *vgdev, int entries)
+{
+	struct virtgpu_vbuffer *vbuf;
+	int i;
+	int ret;
+	for (i = 0; i < entries; i++) {
+		spin_lock_irq(&vgdev->fenceq.qlock);
+		
+		ret = add_fence_inbuf(vgdev, vgdev->fenceq.vq);
+		if (ret < 0) {
+			spin_unlock_irq(&vgdev->fenceq.qlock);
+			break;
+		}
+		spin_unlock_irq(&vgdev->fenceq.qlock);
 	}
 	return i;
 		

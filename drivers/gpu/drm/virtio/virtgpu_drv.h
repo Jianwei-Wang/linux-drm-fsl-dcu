@@ -136,8 +136,9 @@ struct virtgpu_device {
 	struct virtgpu_queue eventq;
 	struct virtgpu_queue ctrlq;
 	struct virtgpu_queue cursorq;
-
+	struct virtgpu_queue fenceq;
 	void *cursor_page;
+	void *fence_page;
 	struct idr	resource_idr;
 	spinlock_t resource_idr_lock;
 
@@ -229,6 +230,7 @@ void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_3d_caps(struct virtgpu_device *vgdev);
 int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries);
+int virtgpu_fill_fence_vq(struct virtgpu_device *vgdev, int entries);
 int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
 			       uint32_t nlen, const char *name);
 int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id);
@@ -253,9 +255,11 @@ int virtgpu_cmd_resource_create_3d(struct virtgpu_device *vgdev,
 void virtgpu_ctrl_ack(struct virtqueue *vq);
 void virtgpu_cursor_ack(struct virtqueue *vq);
 void virtgpu_event_ack(struct virtqueue *vq);
+void virtgpu_fence_ack(struct virtqueue *vq);
 void virtgpu_dequeue_ctrl_func(struct work_struct *work);
 void virtgpu_dequeue_cursor_func(struct work_struct *work);
 void virtgpu_dequeue_event_func(struct work_struct *work);
+void virtgpu_dequeue_fence_func(struct work_struct *work);
 
 /* virtgpu_display.c */
 int virtgpu_framebuffer_init(struct drm_device *dev,
@@ -280,6 +284,7 @@ void virtgpu_fence_process(struct virtgpu_device *vgdev);
 void virtgpu_fence_unref(struct virtgpu_fence **fence);
 struct virtgpu_fence *virtgpu_fence_ref(struct virtgpu_fence *fence);
 bool virtgpu_fence_signaled(struct virtgpu_fence *fence, bool process);
+u32 virtgpu_fence_read(struct virtgpu_device *vgdev);
 
 /* virtgpu_object */
 int virtgpu_object_create(struct virtgpu_device *vgdev,
@@ -333,4 +338,7 @@ static inline void virtgpu_object_unreserve(struct virtgpu_object *bo)
 	ttm_bo_unreserve(&bo->tbo);
 }
 
+/* virgl debufs */
+int virtgpu_debugfs_init(struct drm_minor *minor);
+void virtgpu_debugfs_takedown(struct drm_minor *minor);
 #endif
