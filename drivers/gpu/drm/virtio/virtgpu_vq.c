@@ -498,8 +498,9 @@ static int virtgpu_cmd_resource_attach_backing(struct virtgpu_device *vgdev, uin
 static void virtgpu_cmd_get_display_info_cb(struct virtgpu_device *vgdev,
 					    struct virtgpu_vbuffer *vbuf)
 {
+	struct virtgpu_response *resp = (struct virtgpu_response *)vbuf->resp_buf;
 	spin_lock(&vgdev->display_info_lock);
-	memcpy(&vgdev->display_info, vbuf->resp_buf, vbuf->resp_size);
+	memcpy(&vgdev->display_info, &resp->u.display_info, sizeof(struct virtgpu_display_info));
 	spin_unlock(&vgdev->display_info_lock);
 	wake_up(&vgdev->resp_wq);
 }
@@ -507,8 +508,9 @@ static void virtgpu_cmd_get_display_info_cb(struct virtgpu_device *vgdev,
 static void virtgpu_cmd_get_caps_info_cb(struct virtgpu_device *vgdev,
 					 struct virtgpu_vbuffer *vbuf)
 {
+	struct virtgpu_response *resp = (struct virtgpu_response *)vbuf->resp_buf;
 	spin_lock(&vgdev->display_info_lock);
-	memcpy(&vgdev->caps, vbuf->resp_buf, vbuf->resp_size);
+	memcpy(&vgdev->caps, &resp->u.caps, sizeof(vgdev->caps));
 	spin_unlock(&vgdev->display_info_lock);
 	wake_up(&vgdev->resp_wq);
 }

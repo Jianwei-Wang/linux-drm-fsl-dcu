@@ -213,6 +213,11 @@ union virtgpu_caps {
         struct virtgpu_caps_v1 v1;
 };
 
+struct virtgpu_cmd_get_cap {
+        uint32_t cap_set;
+        uint32_t cap_set_version;
+};
+
 #define VIRTGPU_COMMAND_EMIT_FENCE (1 << 0)
 
 struct virtgpu_command {
@@ -235,6 +240,8 @@ struct virtgpu_command {
 		struct virtgpu_resource_create_3d resource_create_3d;
 		struct virtgpu_transfer_to_host_3d transfer_to_host_3d;
 		struct virtgpu_transfer_from_host_3d transfer_from_host_3d;
+		
+		struct virtgpu_cmd_get_cap get_cap;
 	} u;
 };
 
