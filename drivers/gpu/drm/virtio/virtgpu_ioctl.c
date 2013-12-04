@@ -35,30 +35,6 @@ static void convert_to_hw_box(struct virtgpu_box *dst,
 	memcpy(dst, src, sizeof(struct virtgpu_box));
 }
 
-static int virtgpu_alloc_ioctl(struct drm_device *dev, void *data,
-			       struct drm_file *file_priv)
-{
-	struct drm_virtgpu_alloc *virtgpu_alloc = data;
-	int ret;
-	struct drm_gem_object *obj;
-	uint32_t handle;
-
-	if (virtgpu_alloc->size == 0) {
-		DRM_ERROR("invalid size %d\n", virtgpu_alloc->size);
-		return -EINVAL;
-	}
-	ret = virtgpu_gem_create(file_priv, dev,
-				 virtgpu_alloc->size,
-				 &obj, &handle);
-	if (ret) {
-		DRM_ERROR("%s: failed to create gem ret=%d\n",
-			  __func__, ret);
-		return -ENOMEM;
-	}
-	virtgpu_alloc->handle = handle;
-	return 0;
-}
-
 int virtgpu_map_ioctl(struct drm_device *dev, void *data,
 		  struct drm_file *file_priv)
 {
@@ -123,6 +99,9 @@ int virtgpu_execbuffer(struct drm_device *dev,
 	struct ww_acquire_ctx ticket;
 	void *cmdbuf;
 	//printk("user cmd size %d\n", user_cmd.command_size);
+
+	if (vgdev->has_virgl_3d == false)
+		return -ENOSYS;
 
 	memset(&cmdbuffer, 0, sizeof(struct ttm_validate_buffer));
 	INIT_LIST_HEAD(&validate_list);
@@ -211,7 +190,21 @@ int virtgpu_execbuffer_ioctl(struct drm_device *dev, void *data,
 static int virtgpu_getparam_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv)
 {
-	return -EINVAL;
+	struct virtgpu_device *vgdev = dev->dev_private;
+	struct drm_virtgpu_getparam *param = data;
+	int value;
+
+	switch (param->param) {
+ 	case VIRTGPU_PARAM_3D_FEATURES:
+		value = vgdev->has_virgl_3d == true ? 1 :0;
+		break;
+	default:
+		return -EINVAL;
+	}
+	if (DRM_COPY_TO_USER((void *)(unsigned long)param->value, &value, sizeof(int))) {
+		return -EFAULT;
+	}
+	return 0;
 }
 
 static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
@@ -232,9 +225,22 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	struct scatterlist *sg;
 	struct list_head validate_list;
 	struct ttm_validate_buffer mainbuf;
-	struct virtgpu_fence *fence;
+	struct virtgpu_fence *fence = NULL;
 	struct ww_acquire_ctx ticket;
 	struct virtgpu_resource_create_3d rc_3d;
+
+	if (vgdev->has_virgl_3d == false) {
+		if (rc->depth > 1)
+			return -EINVAL;
+		if (rc->nr_samples > 1)
+			return -EINVAL;
+		if (rc->last_level > 1)
+			return -EINVAL;
+		if (rc->target != 2)
+			return -EINVAL;
+		if (rc->array_size > 1)
+			return -EINVAL;
+	}
 
 	INIT_LIST_HEAD(&validate_list);
 	memset(&mainbuf, 0, sizeof(struct ttm_validate_buffer));
@@ -256,46 +262,55 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 		goto fail_id;
 
 	qobj = gem_to_virtgpu_obj(obj);
-	/* use a gem reference since unref list undoes them */
-	drm_gem_object_reference(&qobj->gem_base);
-	mainbuf.bo = &qobj->tbo;
-	list_add(&mainbuf.head, &validate_list);
 
-	ret = virtgpu_object_list_validate(&ticket, &validate_list);
-	if (ret) {
-		printk("failed to validate\n");
-		goto fail_unref;
+	if (!vgdev->has_virgl_3d) {
+		ret = virtgpu_cmd_create_resource(vgdev, res_id,
+						  rc->format, rc->width, rc->height);
+
+		ret = virtgpu_object_attach(vgdev, qobj, res_id, NULL);
+	} else {
+		/* use a gem reference since unref list undoes them */
+		drm_gem_object_reference(&qobj->gem_base);
+		mainbuf.bo = &qobj->tbo;
+		list_add(&mainbuf.head, &validate_list);
+
+		ret = virtgpu_object_list_validate(&ticket, &validate_list);
+		if (ret) {
+			printk("failed to validate\n");
+			goto fail_unref;
+		}
+
+		rc_3d.resource_id = res_id;
+		rc_3d.target = rc->target;
+		rc_3d.format = rc->format;
+		rc_3d.bind = rc->bind;
+		rc_3d.width = rc->width;
+		rc_3d.height = rc->height;
+		rc_3d.depth = rc->depth;
+		rc_3d.array_size = rc->array_size;
+		rc_3d.last_level = rc->last_level;
+		rc_3d.nr_samples = rc->nr_samples;
+		rc_3d.flags = rc->flags;
+
+		ret = virtgpu_cmd_resource_create_3d(vgdev, &rc_3d, NULL);
+
+		ret = virtgpu_object_attach(vgdev, qobj, res_id, &fence);
+		ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 	}
-
-	rc_3d.resource_id = res_id;
-	rc_3d.target = rc->target;
-	rc_3d.format = rc->format;
-	rc_3d.bind = rc->bind;
-	rc_3d.width = rc->width;
-	rc_3d.height = rc->height;
-	rc_3d.depth = rc->depth;
-	rc_3d.array_size = rc->array_size;
-	rc_3d.last_level = rc->last_level;
-	rc_3d.nr_samples = rc->nr_samples;
-	rc_3d.flags = rc->flags;
-
-	ret = virtgpu_cmd_resource_create_3d(vgdev, &rc_3d, NULL);
-
-	ret = virtgpu_object_attach(vgdev, qobj, res_id, &fence);
-
-	ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 
 	qobj->hw_res_handle = res_id;
 //	qobj->stride = rc->stride;
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
 
-	virtgpu_unref_list(&validate_list);
+	if (vgdev->has_virgl_3d)
+		virtgpu_unref_list(&validate_list);
 
 
 	return 0;
 fail_unref:
-	virtgpu_unref_list(&validate_list);
+	if (vgdev->has_virgl_3d)
+		virtgpu_unref_list(&validate_list);
 fail_obj:
 //	drm_gem_object_handle_unreference_unlocked(obj);
 fail_id:
@@ -337,6 +352,9 @@ static int virtgpu_transfer_from_host_ioctl(struct drm_device *dev, void *data,
 	u32 offset = args->offset;
 	struct virtgpu_box box;
 
+	if (vgdev->has_virgl_3d == false)
+		return -ENOSYS;
+		
 	gobj = drm_gem_object_lookup(dev, file, args->bo_handle);
 	if (gobj == NULL)
 		return -ENOENT;
@@ -355,9 +373,9 @@ static int virtgpu_transfer_from_host_ioctl(struct drm_device *dev, void *data,
 	convert_to_hw_box(&box, &args->box);
 	ret = virtgpu_cmd_transfer_from_host_3d(vgdev, qobj->hw_res_handle,
 						vfpriv->ctx_id, offset,
-						args->level, &box, &fence);
+						args->level, &box, vgdev->has_fence ? &fence : NULL);
 
-	if (!ret)
+	if (!ret && vgdev->has_fence)
 		qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
 	
 out_unres:
@@ -396,27 +414,38 @@ static int virtgpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 		goto out_unres;
 
 	convert_to_hw_box(&box, &args->box);
-	ret = virtgpu_cmd_transfer_to_host_3d(vgdev, qobj->hw_res_handle,
-					      vfpriv->ctx_id, offset,
-					      args->level, &box, &fence);
-	if (!ret)
-		qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
+	if (!vgdev->has_virgl_3d) {
+		ret = virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
+						      offset,
+						      box.w, box.h,
+						      box.x, box.y);
+	} else {
+		ret = virtgpu_cmd_transfer_to_host_3d(vgdev, qobj->hw_res_handle,
+						      vfpriv ? vfpriv->ctx_id : 0, offset,
+						      args->level, &box, &fence);
+		if (!ret)
+			qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
+	}
 
 out_unres:
 	virtgpu_object_unreserve(qobj);
  out:
 	drm_gem_object_unreference_unlocked(gobj);
-	return 0;
+	return ret;
 }
 
 static int virtgpu_wait_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *file)
 {
+	struct virtgpu_device *vgdev = dev->dev_private;
 	struct drm_virtgpu_3d_wait *args = data;
 	struct drm_gem_object *gobj = NULL;
 	struct virtgpu_object *qobj = NULL;
 	int ret;
 	bool nowait = false;
+
+	if (!vgdev->has_fence)
+		return 0;
 
 	gobj = drm_gem_object_lookup(dev, file, args->handle);
 	if (gobj == NULL)
@@ -439,6 +468,9 @@ static int virtgpu_get_caps_ioctl(struct drm_device *dev,
 	struct drm_virtgpu_get_caps *args = data;	
 	int size;
 
+	if (!vgdev->has_virgl_3d)
+		return -ENOSYS;
+
 	size = sizeof(union virtgpu_caps);
 	if (args->size < sizeof(union virtgpu_caps))
 		size = args->size;
@@ -451,8 +483,6 @@ static int virtgpu_get_caps_ioctl(struct drm_device *dev,
 
 
 struct drm_ioctl_desc virtgpu_ioctls[] = {
-	DRM_IOCTL_DEF_DRV(VIRTGPU_ALLOC, virtgpu_alloc_ioctl, DRM_AUTH|DRM_UNLOCKED),
-
 	DRM_IOCTL_DEF_DRV(VIRTGPU_MAP, virtgpu_map_ioctl, DRM_AUTH|DRM_UNLOCKED),
 
 	DRM_IOCTL_DEF_DRV(VIRTGPU_EXECBUFFER, virtgpu_execbuffer_ioctl,

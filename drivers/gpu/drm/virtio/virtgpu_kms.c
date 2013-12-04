@@ -90,19 +90,27 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	INIT_LIST_HEAD(&vgdev->fence_drv.event_list);
 	init_waitqueue_head(&vgdev->fence_queue);
 
+	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_FENCE)) {
+		vgdev->has_fence = true;
+		if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_VIRGL)) {
+			vgdev->has_virgl_3d = true;
+		}
+	}
 	vgdev->cursor_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!vgdev->cursor_page) {
 		kfree(vgdev);
 		return -ENOMEM;
 	}
 
-	vgdev->fence_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!vgdev->fence_page) {
-		kfree(vgdev);
-		return -ENOMEM;
+	if (vgdev->has_fence) {
+		vgdev->fence_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
+		if (!vgdev->fence_page) {
+			kfree(vgdev);
+			return -ENOMEM;
+		}
 	}
 
-	nvqs = 4;
+	nvqs = 3 + (vgdev->has_fence ? 1 : 0);
 
 	ret = vgdev->vdev->config->find_vqs(vgdev->vdev, nvqs, vqs, callbacks, names);
 	if (ret) {
@@ -114,10 +122,12 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	vgdev->ctrlq.vq = vqs[0];
 	vgdev->cursorq.vq = vqs[1];
 	vgdev->eventq.vq = vqs[2];
-	vgdev->fenceq.vq = vqs[3];
-
 	virtgpu_fill_event_vq(vgdev, 64);
-	virtgpu_fill_fence_vq(vgdev, 64);
+
+	if (vgdev->has_fence) {
+		vgdev->fenceq.vq = vqs[3];
+		virtgpu_fill_fence_vq(vgdev, 64);
+	}
 
 	ret = virtgpu_ttm_init(vgdev);
 	if (ret) {
@@ -134,16 +144,18 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 		kfree(vgdev);
 		return -EINVAL;
 	}
-
-	virtgpu_cmd_get_3d_caps(vgdev);
-	ret = wait_event_timeout(vgdev->resp_wq, vgdev->caps.max_version > 0, 5 * HZ);
-	if (ret == 0) {
-		DRM_ERROR("failed to get 3d caps resp from hw in 5s\n");
-		kfree(vgdev);
-		return -EINVAL;
-	}
 	vgdev->num_hw_scanouts = vgdev->display_info.num_scanouts;
 	DRM_INFO("got %d outputs\n", vgdev->display_info.num_scanouts);
+
+	if (vgdev->has_virgl_3d) {
+		virtgpu_cmd_get_3d_caps(vgdev);
+		ret = wait_event_timeout(vgdev->resp_wq, vgdev->caps.max_version > 0, 5 * HZ);
+		if (ret == 0) {
+			DRM_ERROR("failed to get 3d caps resp from hw in 5s\n");
+			kfree(vgdev);
+			return -EINVAL;
+		}
+	}
 
 	ret = virtgpu_modeset_init(vgdev);
 	if (ret) {
@@ -175,6 +187,10 @@ int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file)
 	int ret;
 	char dbgname[64], tmpname[TASK_COMM_LEN];
 	
+	/* can't create contexts without 3d renderer */
+	if (!vgdev->has_virgl_3d)
+		return;
+
 	get_task_comm(tmpname, current);
 	snprintf(dbgname, sizeof(dbgname), "%s", tmpname);
 	dbgname[63] = 0;
@@ -198,6 +214,9 @@ void virtgpu_driver_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct virtgpu_device *vgdev = dev->dev_private;
 	struct virtgpu_fpriv *vfpriv;
+
+	if (!vgdev->has_virgl_3d)
+		return;
 
 	vfpriv = file->driver_priv;
 

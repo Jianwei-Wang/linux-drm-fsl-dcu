@@ -158,6 +158,8 @@ struct virtgpu_device {
 	spinlock_t ctx_id_idr_lock;
 
 	union virtgpu_caps caps;
+	bool has_fence;
+	bool has_virgl_3d;
 };
 
 struct virtgpu_fpriv {
@@ -341,4 +343,7 @@ static inline void virtgpu_object_unreserve(struct virtgpu_object *bo)
 /* virgl debufs */
 int virtgpu_debugfs_init(struct drm_minor *minor);
 void virtgpu_debugfs_takedown(struct drm_minor *minor);
+
+#define VIRTIO_GPU_F_FENCE 0 /* the host has fencing available for accelerators */
+#define VIRTIO_GPU_F_VIRGL 1 /* the host has the virgl 3d accelerator available */
 #endif

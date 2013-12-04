@@ -34,10 +34,13 @@ virtgpu_debugfs_irq_info(struct seq_file *m, void *data)
 	struct drm_info_node *node = (struct drm_info_node *) m->private;
 	struct virtgpu_device *vgdev = node->minor->dev->dev_private;
 
-	seq_printf(m, "fence %d %ld %lld\n", virtgpu_fence_read(vgdev),
-		   atomic64_read(&vgdev->fence_drv.last_seq),
-		   vgdev->fence_drv.sync_seq);
-
+	if (vgdev->has_fence) {
+		seq_printf(m, "fence %d %ld %lld\n", virtgpu_fence_read(vgdev),
+			   atomic64_read(&vgdev->fence_drv.last_seq),
+			   vgdev->fence_drv.sync_seq);
+	} else
+		seq_printf(m, "no fence support in hardware\n");
+	
 	return 0;
 }
 

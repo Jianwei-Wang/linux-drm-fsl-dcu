@@ -23,7 +23,7 @@ struct virtgpu_object *virtgpu_alloc_object(struct drm_device *dev,
 	struct virtgpu_object *obj;
 	int ret;
 
-	ret = virtgpu_object_create(vgdev, size, kernel, pinned, &obj);
+	ret = virtgpu_object_create(vgdev, size, kernel, vgdev->has_fence ? pinned : true, &obj);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -125,16 +125,19 @@ int virtgpu_mode_dumb_mmap(struct drm_file *file_priv,
 int virtgpu_gem_object_open(struct drm_gem_object *obj,
 			  struct drm_file *file)
 {
-	struct virtgpu_device *qdev = (struct virtgpu_device *)obj->dev->dev_private;
+	struct virtgpu_device *vgdev = (struct virtgpu_device *)obj->dev->dev_private;
 	struct virtgpu_fpriv *vfpriv = file->driver_priv;
 	struct virtgpu_object *qobj = gem_to_virtgpu_obj(obj);
 	int r;
 
+	if (!vgdev->has_virgl_3d)
+		return 0;
+	
 	r = virtgpu_object_reserve(qobj, false);
 	if (r)
 		return r;
 
-	r = virtgpu_cmd_context_attach_resource(qdev, vfpriv->ctx_id, qobj->hw_res_handle);
+	r = virtgpu_cmd_context_attach_resource(vgdev, vfpriv->ctx_id, qobj->hw_res_handle);
 	virtgpu_object_unreserve(qobj);
 	return r;
 }
@@ -142,16 +145,19 @@ int virtgpu_gem_object_open(struct drm_gem_object *obj,
 void virtgpu_gem_object_close(struct drm_gem_object *obj,
 			      struct drm_file *file)
 {
-	struct virtgpu_device *qdev = (struct virtgpu_device *)obj->dev->dev_private;
+	struct virtgpu_device *vgdev = (struct virtgpu_device *)obj->dev->dev_private;
 	struct virtgpu_fpriv *vfpriv = file->driver_priv;
 	struct virtgpu_object *qobj = gem_to_virtgpu_obj(obj);
 	int r;
+
+	if (!vgdev->has_virgl_3d)
+		return;
 
 	r = virtgpu_object_reserve(qobj, false);
 	if (r)
 		return;
 
-	r = virtgpu_cmd_context_detach_resource(qdev, vfpriv->ctx_id, qobj->hw_res_handle);
+	r = virtgpu_cmd_context_detach_resource(vgdev, vfpriv->ctx_id, qobj->hw_res_handle);
 	virtgpu_object_unreserve(qobj);
 	return;
 }

@@ -34,7 +34,6 @@
  * compatibility Keep fields aligned to their size
  */
 
-#define DRM_VIRTGPU_ALLOC       0x00
 #define DRM_VIRTGPU_MAP         0x01
 #define DRM_VIRTGPU_EXECBUFFER  0x02
 #define DRM_VIRTGPU_GETPARAM    0x03
@@ -44,11 +43,6 @@
 #define DRM_VIRTGPU_TRANSFER_TO_HOST 0x07
 #define DRM_VIRTGPU_WAIT     0x08
 #define DRM_VIRTGPU_GET_CAPS  0x09
-
-struct drm_virtgpu_alloc {
-	uint32_t size;
-	uint32_t handle; /* 0 is an invalid handle */
-};
 
 struct drm_virtgpu_map {
 	uint64_t offset; /* use for mmap system call */
@@ -65,7 +59,8 @@ struct drm_virtgpu_execbuffer {
 	uint32_t pad;
 };
 
-/* no params yet */
+#define VIRTGPU_PARAM_3D_FEATURES 1 /* do we have 3D features in the hw */
+
 struct drm_virtgpu_getparam {
 	uint64_t param;
 	uint64_t value;
@@ -107,8 +102,6 @@ struct drm_virtgpu_3d_transfer_to_host {
 	struct drm_virtgpu_3d_box box;
 	uint32_t level;
 	uint32_t offset;
-  //	uint32_t stride;
-  //	uint32_t layer_stride;
 };
 
 struct drm_virtgpu_3d_transfer_from_host {
@@ -116,8 +109,6 @@ struct drm_virtgpu_3d_transfer_from_host {
 	struct drm_virtgpu_3d_box box;
 	uint32_t level;
 	uint32_t offset;
-  //	uint32_t stride;
-  //	uint32_t layer_stride;
 };
 
 #define VIRTGPU_WAIT_NOWAIT 1 /* like it */
@@ -131,9 +122,6 @@ struct drm_virtgpu_get_caps {
 	uint32_t size;
 	uint32_t pad;
 };
-
-#define DRM_IOCTL_VIRTGPU_ALLOC \
-	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_ALLOC, struct drm_virtgpu_alloc)
 
 #define DRM_IOCTL_VIRTGPU_MAP \
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_MAP, struct drm_virtgpu_map)

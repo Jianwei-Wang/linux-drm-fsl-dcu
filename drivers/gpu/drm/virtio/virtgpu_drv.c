@@ -120,7 +120,10 @@ static struct virtio_device_id id_table[] = {
 	{ 0 },
 };
 
+static unsigned int features[] = { VIRTIO_GPU_F_FENCE, VIRTIO_GPU_F_VIRGL };
 static struct virtio_driver virtgpu_driver = {
+	.feature_table = features,
+	.feature_table_size = ARRAY_SIZE(features),
 	.driver.name = KBUILD_MODNAME,
 	.driver.owner = THIS_MODULE,
 	.id_table = id_table,
