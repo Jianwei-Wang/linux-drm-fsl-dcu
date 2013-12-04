@@ -277,7 +277,7 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	rc_3d.array_size = rc->array_size;
 	rc_3d.last_level = rc->last_level;
 	rc_3d.nr_samples = rc->nr_samples;
-	rc_3d.flags = 0;
+	rc_3d.flags = rc->flags;
 
 	ret = virtgpu_cmd_resource_create_3d(vgdev, &rc_3d, NULL);
 
