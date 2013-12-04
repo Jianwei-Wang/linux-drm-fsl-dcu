@@ -82,7 +82,7 @@ static int virtgpu_dirty_update(struct virtgpu_framebuffer *fb, bool store,
 					     offset, w, h, x, y);
 
 	}
-	virtgpu_cmd_resource_flush(vgdev, obj->hw_res_handle, x2 - x + 1, y2 - y + 1, x, y);
+	virtgpu_cmd_resource_flush(vgdev, obj->hw_res_handle, x, y, x2 - x + 1, y2 - y + 1);
 	
 	return 0;
 }
