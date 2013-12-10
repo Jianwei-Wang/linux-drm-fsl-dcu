@@ -86,8 +86,9 @@ static void
 virtgpu_hide_cursor(struct virtgpu_device *vgdev)
 {
 	{
-		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
+		struct virtgpu_hw_cursor_page *cursor_page = &vgdev->cursor_info;
 		cursor_page->cursor_id = 0;
+		cursor_page->generation_count++;
 	}
 	virtgpu_cursor_ping(vgdev);
 }
@@ -122,10 +123,11 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 	virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
 				     0, 64, 64, 0, 0);
 	{
-		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
+		struct virtgpu_hw_cursor_page *cursor_page = &vgdev->cursor_info;
 		cursor_page->cursor_id = qobj->hw_res_handle;
 		cursor_page->cursor_hot_x = hot_x;
 		cursor_page->cursor_hot_y = hot_y;
+		cursor_page->generation_count++;
 	}
 	virtgpu_cursor_ping(vgdev);
 out:
@@ -139,7 +141,7 @@ static int virtgpu_crtc_cursor_move(struct drm_crtc *crtc,
 	struct virtgpu_device *vgdev = crtc->dev->dev_private;
 
 	{
-		struct virtgpu_hw_cursor_page *cursor_page = vgdev->cursor_page;
+		struct virtgpu_hw_cursor_page *cursor_page = &vgdev->cursor_info;
 		cursor_page->cursor_x = x;
 		cursor_page->cursor_y = y;
 	}

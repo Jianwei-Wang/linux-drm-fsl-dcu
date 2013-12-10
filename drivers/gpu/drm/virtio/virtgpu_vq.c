@@ -94,6 +94,20 @@ struct virtgpu_command *virtgpu_alloc_cmd(struct virtgpu_device *vgdev,
 	return (struct virtgpu_command *)vbuf->buf;
 }
 
+struct virtgpu_hw_cursor_page *virtgpu_alloc_cursor(struct virtgpu_device *vgdev,
+					     struct virtgpu_vbuffer **vbuffer_p)
+{
+	struct virtgpu_vbuffer *vbuf;
+
+	vbuf = virtgpu_allocate_vbuf(vgdev, sizeof(struct virtgpu_hw_cursor_page), 0, NULL);
+	if (IS_ERR(vbuf)) {
+		*vbuffer_p = NULL;
+		return ERR_CAST(vbuf);
+	}
+	*vbuffer_p = vbuf;
+	return (struct virtgpu_hw_cursor_page *)vbuf->buf;
+}
+
 struct virtgpu_command *virtgpu_alloc_cmd_resp(struct virtgpu_device *vgdev,
 					       virtgpu_resp_cb cb,
 					       struct virtgpu_vbuffer **vbuffer_p)
@@ -177,14 +191,27 @@ void virtgpu_dequeue_cursor_func(struct work_struct *work)
 	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
 						    cursorq.dequeue_work);
 	struct virtqueue *vq = vgdev->cursorq.vq;
+	struct list_head reclaim_list;
+	struct virtgpu_vbuffer *entry, *tmp;
 	unsigned int len;
+	int ret;
+
+	INIT_LIST_HEAD(&reclaim_list);
 	spin_lock(&vgdev->cursorq.qlock);
 	do {
 		virtqueue_disable_cb(vgdev->cursorq.vq);
+		ret = reclaim_vbufs(vgdev->cursorq.vq, &reclaim_list);
+		if (ret == 0)
+			printk("cleaned 0 buffers wierd\n");
 		while (virtqueue_get_buf(vq, &len)) {
 		}
 	} while (!virtqueue_enable_cb(vgdev->cursorq.vq));
 	spin_unlock(&vgdev->cursorq.qlock);
+
+	list_for_each_entry_safe(entry, tmp, &reclaim_list, destroy_list) {
+		list_del(&entry->destroy_list);
+		free_vbuf(vgdev, entry);
+	}
 	wake_up(&vgdev->cursorq.ack_queue);
 }
 
@@ -244,7 +271,6 @@ void virtgpu_dequeue_fence_func(struct work_struct *work)
 	struct virtqueue *vq = vgdev->fenceq.vq;
 	struct virtgpu_vbuffer *vbuf;
 	unsigned int len;
-	struct virtgpu_vbuffer *entry, *tmp;
 
 	spin_lock(&vgdev->fenceq.qlock);
 	do {
@@ -313,20 +339,21 @@ retry:
 	return ret;
 }
 
-int virtgpu_queue_cursor(struct virtgpu_device *vgdev)
+int virtgpu_queue_cursor(struct virtgpu_device *vgdev,
+			 struct virtgpu_vbuffer *vbuf)
 {
 	struct virtqueue *vq = vgdev->cursorq.vq;
 	struct scatterlist *sgs[1], ccmd;
 	int ret;
 	int outcnt;
 
-	sg_init_one(&ccmd, vgdev->cursor_page, sizeof(struct virtgpu_hw_cursor_page));
+	sg_init_one(&ccmd, vbuf->buf, vbuf->size);
 	sgs[0] = &ccmd;
 	outcnt = 1;
 
 	spin_lock(&vgdev->cursorq.qlock);
 retry:
-	ret = virtqueue_add_sgs(vq, sgs, outcnt, 0, vgdev->cursor_page, GFP_ATOMIC);
+	ret = virtqueue_add_sgs(vq, sgs, outcnt, 0, vbuf, GFP_ATOMIC);
 	if (ret == -ENOSPC) {
 		spin_unlock(&vgdev->cursorq.qlock);
 		wait_event(vgdev->cursorq.ack_queue, vq->num_free);
@@ -731,7 +758,13 @@ int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *o
 
 void virtgpu_cursor_ping(struct virtgpu_device *vgdev)
 {
-	virtgpu_queue_cursor(vgdev);
+	struct virtgpu_vbuffer *vbuf;
+	struct virtgpu_hw_cursor_page *cur_p;
+
+	cur_p = virtgpu_alloc_cursor(vgdev, &vbuf);
+
+	memcpy(cur_p, &vgdev->cursor_info, sizeof(struct virtgpu_hw_cursor_page));
+	virtgpu_queue_cursor(vgdev, vbuf);
 }
 
 void virtgpu_event_cb(struct virtgpu_device *vgdev,
@@ -777,7 +810,6 @@ int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries)
 
 int virtgpu_fill_fence_vq(struct virtgpu_device *vgdev, int entries)
 {
-	struct virtgpu_vbuffer *vbuf;
 	int i;
 	int ret;
 	for (i = 0; i < entries; i++) {

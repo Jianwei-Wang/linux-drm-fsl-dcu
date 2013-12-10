@@ -96,11 +96,6 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 			vgdev->has_virgl_3d = true;
 		}
 	}
-	vgdev->cursor_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!vgdev->cursor_page) {
-		kfree(vgdev);
-		return -ENOMEM;
-	}
 
 	if (vgdev->has_fence) {
 		vgdev->fence_page = kzalloc(PAGE_SIZE, GFP_KERNEL);
@@ -173,7 +168,6 @@ int virtgpu_driver_unload(struct drm_device *dev)
 	virtgpu_modeset_fini(vgdev);
 
 	virtgpu_ttm_fini(vgdev);
-	kfree(vgdev->cursor_page);
 	kfree(vgdev->fence_page);
 	kfree(vgdev);
 	return 0;

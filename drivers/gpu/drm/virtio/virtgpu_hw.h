@@ -39,6 +39,8 @@ struct virtgpu_hw_cursor_page {
 	uint32_t cursor_x, cursor_y;
 	uint32_t cursor_hot_x, cursor_hot_y;
 	uint32_t cursor_id;
+	/* increase by one if we need to redefine cursor */
+	uint32_t generation_count;
 };
 
 struct virtgpu_resource_unref {

@@ -137,7 +137,7 @@ struct virtgpu_device {
 	struct virtgpu_queue ctrlq;
 	struct virtgpu_queue cursorq;
 	struct virtgpu_queue fenceq;
-	void *cursor_page;
+
 	void *fence_page;
 	struct idr	resource_idr;
 	spinlock_t resource_idr_lock;
@@ -160,6 +160,8 @@ struct virtgpu_device {
 	union virtgpu_caps caps;
 	bool has_fence;
 	bool has_virgl_3d;
+
+	struct virtgpu_hw_cursor_page cursor_info;
 };
 
 struct virtgpu_fpriv {
