@@ -422,7 +422,7 @@ static int virtgpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 		ret = virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
 						      offset,
 						      box.w, box.h,
-						      box.x, box.y);
+						      box.x, box.y, NULL);
 	} else {
 		ret = virtgpu_cmd_transfer_to_host_3d(vgdev, qobj->hw_res_handle,
 						      vfpriv ? vfpriv->ctx_id : 0, offset,

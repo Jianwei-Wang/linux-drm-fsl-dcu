@@ -79,7 +79,7 @@ static int virtgpu_dirty_update(struct virtgpu_framebuffer *fb, bool store,
 		offset = (y * fb->base.pitches[0]) + x * bpp;
 
 		virtgpu_cmd_transfer_to_host_2d(vgdev, obj->hw_res_handle,
-					     offset, w, h, x, y);
+						offset, w, h, x, y, NULL);
 
 	}
 	virtgpu_cmd_resource_flush(vgdev, obj->hw_res_handle, x, y, x2 - x + 1, y2 - y + 1);

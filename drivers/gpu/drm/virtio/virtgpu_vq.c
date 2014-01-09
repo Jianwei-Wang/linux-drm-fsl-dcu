@@ -477,9 +477,10 @@ int virtgpu_cmd_resource_flush(struct virtgpu_device *vgdev,
 }
 
 int virtgpu_cmd_transfer_to_host_2d(struct virtgpu_device *vgdev,
-				 uint32_t resource_id, uint32_t offset,
-				 uint32_t width, uint32_t height,
-				 uint32_t x, uint32_t y)
+				    uint32_t resource_id, uint32_t offset,
+				    uint32_t width, uint32_t height,
+				    uint32_t x, uint32_t y,
+				    struct virtgpu_fence **fence)
 {
 	struct virtgpu_command *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
@@ -494,6 +495,9 @@ int virtgpu_cmd_transfer_to_host_2d(struct virtgpu_device *vgdev,
 	cmd_p->u.transfer_to_host_2d.height = height;
 	cmd_p->u.transfer_to_host_2d.x = x;
 	cmd_p->u.transfer_to_host_2d.y = y;
+
+	if (fence)
+		virtgpu_fence_emit(vgdev, cmd_p, fence);
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       

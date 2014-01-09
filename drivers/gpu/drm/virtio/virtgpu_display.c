@@ -102,6 +102,7 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 	struct virtgpu_device *vgdev = crtc->dev->dev_private;
 	struct drm_gem_object *gobj = NULL;
 	struct virtgpu_object *qobj = NULL;
+	struct virtgpu_fence *fence = NULL;
 	int ret = 0;
 	if (handle == 0) {
 		virtgpu_hide_cursor(vgdev);
@@ -120,8 +121,12 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 		goto out;
 	}
 
-	virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
-				     0, 64, 64, 0, 0);
+	ret = virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
+					      0, 64, 64, 0, 0, vgdev->has_fence ? &fence : NULL);
+	if (!ret && vgdev->has_fence) {
+		qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
+		virtgpu_object_wait(qobj, false);
+	}
 	{
 		struct virtgpu_hw_cursor_page *cursor_page = &vgdev->cursor_info;
 		cursor_page->cursor_id = qobj->hw_res_handle;
