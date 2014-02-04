@@ -183,7 +183,7 @@ int virtgpu_driver_open(struct drm_device *dev, struct drm_file *file)
 	
 	/* can't create contexts without 3d renderer */
 	if (!vgdev->has_virgl_3d)
-		return;
+		return 0;
 
 	get_task_comm(tmpname, current);
 	snprintf(dbgname, sizeof(dbgname), "%s", tmpname);
