@@ -677,25 +677,6 @@ static void virtio_pci_release_dev(struct device *_d)
 	 */
 }
 
-static void virtio_pci_kick_out_firmware_fb(struct pci_dev *pci_dev)
-{
-	struct apertures_struct *ap;
-	bool primary;
-	ap = alloc_apertures(1);
-	if (!ap)
-		return;
-
-	ap->ranges[0].base = pci_resource_start(pci_dev, 1);
-	ap->ranges[0].size = pci_resource_len(pci_dev, 1);
-
-	primary =
-		pci_dev->resource[PCI_ROM_RESOURCE].flags & IORESOURCE_ROM_SHADOW;
-
-	remove_conflicting_framebuffers(ap, "virtiodrmfb", primary);
-
-	kfree(ap);	
-}
-
 /* the PCI probing function */
 static int virtio_pci_probe(struct pci_dev *pci_dev,
 			    const struct pci_device_id *id)
@@ -732,8 +713,6 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 	err = pci_enable_device(pci_dev);
 	if (err)
 		goto out;
-	if ((pci_dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
-		virtio_pci_kick_out_firmware_fb(pci_dev);
 
 	err = pci_request_regions(pci_dev, "virtio-pci");
 	if (err && ((pci_dev->class >> 8) != PCI_CLASS_DISPLAY_VGA))
