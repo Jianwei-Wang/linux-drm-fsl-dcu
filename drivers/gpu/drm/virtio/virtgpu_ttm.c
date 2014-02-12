@@ -358,9 +358,19 @@ static void virtgpu_bo_move_notify(struct ttm_buffer_object *bo,
 	return;
 }
 
-static void virtgpu_bo_swap_notify(struct ttm_buffer_object *bo)
+static void virtgpu_bo_swap_notify(struct ttm_buffer_object *tbo)
 {
+	struct virtgpu_object *bo;
+	struct virtgpu_device *vgdev;
+	bo = container_of(tbo, struct virtgpu_object, tbo);
+	vgdev = (struct virtgpu_device *)bo->gem_base.dev->dev_private;
+
+	virtgpu_cmd_resource_inval_backing(vgdev, bo->hw_res_handle);
+	if (bo->pages) {
+		virtgpu_object_free_sg_table(bo);
+	}
 	printk(KERN_ERR "swapping bo %p\n", bo);
+	/* should we invalidate the mapping? */
 }
 
 static struct ttm_bo_driver virtgpu_bo_driver = {

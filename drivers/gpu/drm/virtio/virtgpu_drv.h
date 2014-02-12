@@ -257,7 +257,8 @@ int virtgpu_cmd_transfer_to_host_3d(struct virtgpu_device *vgdev, uint32_t resou
 int virtgpu_cmd_resource_create_3d(struct virtgpu_device *vgdev,
 				   struct virtgpu_resource_create_3d *rc_3d,
 				   struct virtgpu_fence **fence);
-
+int virtgpu_cmd_resource_inval_backing(struct virtgpu_device *vgdev,
+				       uint32_t resource_id);
 void virtgpu_ctrl_ack(struct virtqueue *vq);
 void virtgpu_cursor_ack(struct virtqueue *vq);
 void virtgpu_event_ack(struct virtqueue *vq);

@@ -293,8 +293,12 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 		rc_3d.flags = rc->flags;
 
 		ret = virtgpu_cmd_resource_create_3d(vgdev, &rc_3d, NULL);
+		if (ret)
+			goto fail_unref;
 
 		ret = virtgpu_object_attach(vgdev, qobj, res_id, &fence);
+		if (ret)
+			goto fail_unref;
 		ttm_eu_fence_buffer_objects(&ticket, &validate_list, fence);
 	}
 
