@@ -8,8 +8,8 @@ static void virtgpu_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 	bo = container_of(tbo, struct virtgpu_object, tbo);
 	vgdev = (struct virtgpu_device *)bo->gem_base.dev->dev_private;
 
-	//	if (bo->res_handle)
-	//		virtgpu_resource_unref(vgdev, bo->res_handle);
+	if (bo->hw_res_handle)
+		virtgpu_cmd_unref_resource(vgdev, bo->hw_res_handle);
 	if (bo->pages)
 		virtgpu_object_free_sg_table(bo);
 	drm_gem_object_release(&bo->gem_base);

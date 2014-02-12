@@ -52,6 +52,9 @@ int virtgpu_gem_create(struct drm_file *file,
 
 	*obj_p = &obj->gem_base;
 
+	/* drop reference from allocate - handle holds it now */
+	drm_gem_object_unreference_unlocked(&obj->gem_base);
+
 	*handle_p = handle;
 	return 0;
 }
