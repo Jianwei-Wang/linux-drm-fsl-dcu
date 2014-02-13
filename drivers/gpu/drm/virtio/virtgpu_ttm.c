@@ -156,6 +156,46 @@ static int virtgpu_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
 	return 0;
 }
 
+static int ttm_bo_man_get_node(struct ttm_mem_type_manager *man,
+			       struct ttm_buffer_object *bo,
+			       struct ttm_placement *placement,
+			       struct ttm_mem_reg *mem)
+{
+	mem->mm_node = (void *)1;
+	return 0;
+}
+
+static void ttm_bo_man_put_node(struct ttm_mem_type_manager *man,
+				struct ttm_mem_reg *mem)
+{
+	mem->mm_node = (void *)NULL;
+	return;
+}
+
+static int ttm_bo_man_init(struct ttm_mem_type_manager *man,
+			   unsigned long p_size)
+{
+	return 0;
+}
+
+static int ttm_bo_man_takedown(struct ttm_mem_type_manager *man)
+{
+	return 0;
+}
+
+static void ttm_bo_man_debug(struct ttm_mem_type_manager *man,
+			     const char *prefix)
+{
+}
+
+const struct ttm_mem_type_manager_func virtgpu_bo_manager_func = {
+	ttm_bo_man_init,
+	ttm_bo_man_takedown,
+	ttm_bo_man_get_node,
+	ttm_bo_man_put_node,
+	ttm_bo_man_debug
+};
+
 static int virtgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 			     struct ttm_mem_type_manager *man)
 {
@@ -166,6 +206,12 @@ static int virtgpu_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	switch (type) {
 	case TTM_PL_SYSTEM:
 		/* System memory */
+		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE;
+		man->available_caching = TTM_PL_MASK_CACHING;
+		man->default_caching = TTM_PL_FLAG_CACHED;
+		break;
+	case TTM_PL_TT:
+		man->func = &virtgpu_bo_manager_func;
 		man->flags = TTM_MEMTYPE_FLAG_MAPPABLE;
 		man->available_caching = TTM_PL_MASK_CACHING;
 		man->default_caching = TTM_PL_FLAG_CACHED;
@@ -210,6 +256,7 @@ static int virtgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev,
 		return -EINVAL;
 	switch (mem->mem_type) {
 	case TTM_PL_SYSTEM:
+	case TTM_PL_TT:
 		/* system memory */
 		return 0;
 	default:
@@ -243,13 +290,13 @@ static int virtgpu_ttm_backend_bind(struct ttm_tt *ttm,
 		     ttm->num_pages, bo_mem, ttm);
 	}
 	/* Not implemented */
-	return -1;
+	return 0;
 }
 
 static int virtgpu_ttm_backend_unbind(struct ttm_tt *ttm)
 {
 	/* Not implemented */
-	return -1;
+	return 0;
 }
 
 static void virtgpu_ttm_backend_destroy(struct ttm_tt *ttm)
@@ -352,9 +399,25 @@ static bool virtgpu_sync_obj_signaled(void *sync_obj)
 	return virtgpu_fence_signaled((struct virtgpu_fence *)sync_obj, true);
 }
 
-static void virtgpu_bo_move_notify(struct ttm_buffer_object *bo,
-			       struct ttm_mem_reg *new_mem)
+static void virtgpu_bo_move_notify(struct ttm_buffer_object *tbo,
+				   struct ttm_mem_reg *new_mem)
 {
+	struct virtgpu_object *bo;
+	struct virtgpu_device *vgdev;
+	bo = container_of(tbo, struct virtgpu_object, tbo);
+	vgdev = (struct virtgpu_device *)bo->gem_base.dev->dev_private;
+
+	printk(KERN_ERR "moving bo %p 0x%x\n", bo, new_mem ? new_mem->placement : 0);
+	if (!new_mem || (new_mem->placement & TTM_PL_FLAG_SYSTEM)) {
+		if (bo->hw_res_handle)
+			virtgpu_cmd_resource_inval_backing(vgdev, bo->hw_res_handle);
+
+	} else if (new_mem->placement & TTM_PL_FLAG_TT) {
+		if (bo->hw_res_handle) {
+			virtgpu_object_attach(vgdev, bo, bo->hw_res_handle, NULL);
+		}
+	}
+
 	return;
 }
 
@@ -365,10 +428,10 @@ static void virtgpu_bo_swap_notify(struct ttm_buffer_object *tbo)
 	bo = container_of(tbo, struct virtgpu_object, tbo);
 	vgdev = (struct virtgpu_device *)bo->gem_base.dev->dev_private;
 
-	virtgpu_cmd_resource_inval_backing(vgdev, bo->hw_res_handle);
 	if (bo->pages) {
 		virtgpu_object_free_sg_table(bo);
 	}
+
 	printk(KERN_ERR "swapping bo %p\n", bo);
 	/* should we invalidate the mapping? */
 }
@@ -409,6 +472,11 @@ int virtgpu_ttm_init(struct virtgpu_device *vgdev)
 		return r;
 	}
 
+	r = ttm_bo_init_mm(&vgdev->mman.bdev, TTM_PL_TT, 0);
+	if (r) {
+		DRM_ERROR("Failed initializing GTT heap.\n");
+		return r;
+	}
 	return 0;
 }
 

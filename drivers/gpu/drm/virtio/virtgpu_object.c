@@ -32,7 +32,7 @@ static void virtgpu_init_ttm_placement(struct virtgpu_object *vgbo, bool pinned)
 	vgbo->placement.lpfn = 0;
 	vgbo->placement.placement = &vgbo->placement_code;
 	vgbo->placement.busy_placement = &vgbo->placement_code;
-	vgbo->placement_code = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM | pflag;
+	vgbo->placement_code = TTM_PL_MASK_CACHING | TTM_PL_FLAG_TT | pflag;
 	vgbo->placement.num_placement = c;
 	vgbo->placement.num_busy_placement = c;
 

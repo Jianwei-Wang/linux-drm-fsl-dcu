@@ -740,6 +740,7 @@ int virtgpu_object_attach(struct virtgpu_device *vgdev, struct virtgpu_object *o
 
 	sz = obj->pages->nents * sizeof(struct virtgpu_mem_entry);
 	
+	/* gets freed when the ring has consumed it */
 	vaddr = drm_calloc_large(obj->pages->nents, sizeof(struct virtgpu_mem_entry));
 	if (!vaddr) {
 		printk("failed to allocate dma %d\n", sz);
