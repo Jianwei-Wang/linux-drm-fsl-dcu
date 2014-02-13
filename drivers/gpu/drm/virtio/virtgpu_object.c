@@ -77,7 +77,7 @@ int virtgpu_object_create(struct virtgpu_device *vgdev,
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS)
 			dev_err(vgdev->dev,
-				"object_init failed for (%lu)\n",
+				"object_init %d failed for (%lu)\n", r,
 				size);
 		return r;
 	}

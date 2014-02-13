@@ -41,8 +41,8 @@ int virtgpu_gem_create(struct drm_file *file,
 	u32 handle;
 
 	obj = virtgpu_alloc_object(dev, size, false, false);
-	if (obj == NULL)
-		return -ENOMEM;
+	if (IS_ERR(obj))
+		return PTR_ERR(obj);
 
 	ret = drm_gem_handle_create(file, &obj->gem_base, &handle);
 	if (ret) {

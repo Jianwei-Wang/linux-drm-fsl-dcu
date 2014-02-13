@@ -237,7 +237,11 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 	if (ret)
 		goto fail;
 
-	virtgpu_vmap_fb(vgdev, obj);
+	ret = virtgpu_vmap_fb(vgdev, obj);
+	if (ret) {
+		printk(KERN_ERR "failed to vmap fb %d\n", ret);
+		goto fail;
+	}
 	  
 	/* attach the object to the resource */
 	ret = virtgpu_object_attach(vgdev, obj, resid, NULL);
