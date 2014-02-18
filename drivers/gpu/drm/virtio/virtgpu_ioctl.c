@@ -62,8 +62,10 @@ int virtgpu_object_list_validate(struct ww_acquire_ctx *ticket,
 		qobj = container_of(bo, struct virtgpu_object, tbo);
 //		virtgpu_ttm_placement_from_domain(qobj, qobj->type);
 		ret = ttm_bo_validate(bo, &qobj->placement, false, false);
-		if (ret)
+		if (ret) {
+			ttm_eu_backoff_reservation(ticket, head);
 			return ret;
+		}
 	}
 	return 0;
 }
