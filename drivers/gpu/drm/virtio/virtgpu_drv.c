@@ -29,6 +29,7 @@
 #include <linux/console.h>
 #include <linux/virtio.h>
 #include <linux/virtio_ids.h>
+#include <linux/pci.h>
 #include "drmP.h"
 #include "drm/drm.h"
 
@@ -41,6 +42,25 @@ MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, virtgpu_modeset, int, 0400);
 
 extern int virtgpu_max_ioctls;
+
+static void virtio_pci_kick_out_firmware_fb(struct pci_dev *pci_dev)
+{
+	struct apertures_struct *ap;
+	bool primary;
+	ap = alloc_apertures(1);
+	if (!ap)
+		return;
+
+	ap->ranges[0].base = pci_resource_start(pci_dev, 2);
+	ap->ranges[0].size = pci_resource_len(pci_dev, 2);
+
+	primary = pci_dev->resource[PCI_ROM_RESOURCE].flags
+		& IORESOURCE_ROM_SHADOW;
+
+	remove_conflicting_framebuffers(ap, "virtiodrmfb", primary);
+
+	kfree(ap);
+}
 
 static int virtgpu_probe(struct virtio_device *vdev)
 {
@@ -65,6 +85,16 @@ static int virtgpu_probe(struct virtio_device *vdev)
 	dev->virtdev = vdev;
 	vdev->priv = dev;
 	mutex_lock(&drm_global_mutex);
+
+	if (strcmp(vdev->dev.parent->bus->name, "pci") == 0) {
+		struct pci_dev *pdev = to_pci_dev(vdev->dev.parent);
+		bool vga = (pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA;
+		DRM_INFO("pci: %s detected\n",
+			 vga ? "virtio-vga" : "virtio-gpu-pci");
+		dev->pdev = pdev;
+		if (vga)
+			virtio_pci_kick_out_firmware_fb(pdev);
+	}
 
 	ret = drm_fill_in_dev(dev, NULL, &driver);
 
