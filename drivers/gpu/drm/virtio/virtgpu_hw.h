@@ -256,12 +256,11 @@ struct virtgpu_response {
 	} u;
 };
 
-struct virtgpu_event {
-	uint32_t type;
-	uint32_t err_code;
-	union virtgpu_events {
-		struct virtgpu_display_info display_info;
-	} u;
+#define VIRTGPU_EVENT_DISPLAY (1 << 0)
+
+struct virtgpu_config {
+        uint32_t events_read;
+	uint32_t events_clear;
 };
 
 /* simple formats for fbcon/X use */

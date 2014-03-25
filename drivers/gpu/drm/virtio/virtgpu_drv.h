@@ -161,6 +161,8 @@ struct virtgpu_device {
 	bool has_virgl_3d;
 
 	struct virtgpu_hw_cursor_page cursor_info;
+
+	struct work_struct config_changed_work;
 };
 
 struct virtgpu_fpriv {

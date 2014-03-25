@@ -148,7 +148,9 @@ static void virtgpu_remove(struct virtio_device *vdev)
 static void virtgpu_config_changed(struct virtio_device *vdev)
 {
 	struct drm_device *dev = vdev->priv;
-	DRM_ERROR("virtgpu config changed\n");
+	struct virtgpu_device *vgdev = dev->dev_private;
+
+	schedule_work(&vgdev->config_changed_work);
 }
 
 static struct virtio_device_id id_table[] = {

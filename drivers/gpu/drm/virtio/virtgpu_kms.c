@@ -3,6 +3,26 @@
 #include <drm/drmP.h>
 #include "virtgpu_drv.h"
 
+static void virtgpu_config_changed_work_func(struct work_struct *work)
+{
+	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
+						    config_changed_work);
+	__le32 event_read, event_clear = 0;
+
+	/* read the config space */
+	vgdev->vdev->config->get(vgdev->vdev,
+				 offsetof(struct virtgpu_config, events_read),
+				 &event_read, sizeof(event_read));
+	if (event_read & VIRTGPU_EVENT_DISPLAY) {
+		virtgpu_cmd_get_display_info(vgdev);
+		drm_helper_hpd_irq_event(vgdev->ddev);
+		event_clear |= VIRTGPU_EVENT_DISPLAY;
+	}
+	vgdev->vdev->config->set(vgdev->vdev,
+				 offsetof(struct virtgpu_config, events_clear),
+				 &event_clear, sizeof(event_clear));
+}
+
 static int virtgpu_ctx_id_get(struct virtgpu_device *vgdev, uint32_t *resid)
 {
 	int handle;
@@ -88,6 +108,7 @@ int virtgpu_driver_load(struct drm_device *dev, unsigned long flags)
 	spin_lock_init(&vgdev->fence_drv.event_lock);
 	INIT_LIST_HEAD(&vgdev->fence_drv.event_list);
 	init_waitqueue_head(&vgdev->fence_queue);
+	INIT_WORK(&vgdev->config_changed_work, virtgpu_config_changed_work_func);
 
 	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_FENCE)) {
 		vgdev->has_fence = true;
