@@ -115,6 +115,12 @@ static void virtgpu_remove(struct virtio_device *vdev)
 	drm_put_dev(dev);
 }
 
+static void virtgpu_config_changed(struct virtio_device *vdev)
+{
+	struct drm_device *dev = vdev->priv;
+	DRM_ERROR("virtgpu config changed\n");
+}
+
 static struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_GPU, VIRTIO_DEV_ANY_ID },
 	{ 0 },
@@ -129,6 +135,7 @@ static struct virtio_driver virtgpu_driver = {
 	.id_table = id_table,
 	.probe = virtgpu_probe,
 	.remove = virtgpu_remove,
+	.config_changed = virtgpu_config_changed
 };
 
 module_virtio_driver(virtgpu_driver);
