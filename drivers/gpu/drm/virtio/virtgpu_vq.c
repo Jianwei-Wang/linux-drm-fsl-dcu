@@ -39,13 +39,6 @@ void virtgpu_cursor_ack(struct virtqueue *vq)
 	schedule_work(&vgdev->cursorq.dequeue_work);
 }
 
-void virtgpu_event_ack(struct virtqueue *vq)
-{
-	struct drm_device *dev = vq->vdev->priv;
-	struct virtgpu_device *vgdev = dev->dev_private;
-	schedule_work(&vgdev->eventq.dequeue_work);
-}
-
 void virtgpu_fence_ack(struct virtqueue *vq)
 {
 	struct drm_device *dev = vq->vdev->priv;
@@ -121,20 +114,6 @@ struct virtgpu_command *virtgpu_alloc_cmd_resp(struct virtgpu_device *vgdev,
 	}
 	*vbuffer_p = vbuf;
 	return (struct virtgpu_command *)vbuf->buf;
-}
-
-static int add_inbuf(struct virtqueue *vq, struct virtgpu_vbuffer *vbuf)
-{
-	struct scatterlist sg[1];
-	int ret;
-
-	sg_init_one(sg, vbuf->resp_buf, vbuf->resp_size);
-
-	ret = virtqueue_add_inbuf(vq, sg, 1, vbuf, GFP_ATOMIC);
-	virtqueue_kick(vq);
-	if (!ret)
-		ret = vq->num_free;
-	return ret;
 }
 
 static void free_vbuf(struct virtgpu_device *vgdev, struct virtgpu_vbuffer *vbuf)
@@ -213,40 +192,6 @@ void virtgpu_dequeue_cursor_func(struct work_struct *work)
 		free_vbuf(vgdev, entry);
 	}
 	wake_up(&vgdev->cursorq.ack_queue);
-}
-
-void virtgpu_dequeue_event_func(struct work_struct *work)
-{
-	struct virtgpu_device *vgdev = container_of(work, struct virtgpu_device,
-						    eventq.dequeue_work);
-	struct virtqueue *vq = vgdev->eventq.vq;
-	struct virtgpu_vbuffer *vbuf;
-	struct list_head reclaim_list;
-	unsigned int len;
-	struct virtgpu_vbuffer *entry, *tmp;
-
-	INIT_LIST_HEAD(&reclaim_list);
-	spin_lock(&vgdev->eventq.qlock);
-	do {
-		virtqueue_disable_cb(vgdev->eventq.vq);
-		while ((vbuf = virtqueue_get_buf(vq, &len))) {
-			list_add(&vbuf->destroy_list, &reclaim_list);
-		}
-	} while (!virtqueue_enable_cb(vgdev->eventq.vq));
-	spin_unlock(&vgdev->eventq.qlock);
-
-
-	list_for_each_entry_safe(entry, tmp, &reclaim_list, destroy_list) {
-		if (entry->resp_cb)
-			entry->resp_cb(vgdev, entry);
-
-		spin_lock(&vgdev->eventq.qlock);
-		if (add_inbuf(vgdev->eventq.vq, entry) < 0) {
-			DRM_ERROR("Error adding buffer to queue\n");
-			free_vbuf(vgdev, entry);
-		}
-		spin_unlock(&vgdev->eventq.qlock);
-	}
 }
 
 static int add_fence_inbuf(struct virtgpu_device *vgdev,
@@ -770,47 +715,6 @@ void virtgpu_cursor_ping(struct virtgpu_device *vgdev)
 
 	memcpy(cur_p, &vgdev->cursor_info, sizeof(struct virtgpu_hw_cursor_page));
 	virtgpu_queue_cursor(vgdev, vbuf);
-}
-
-void virtgpu_event_cb(struct virtgpu_device *vgdev,
-		      struct virtgpu_vbuffer *vbuf)
-{
-	struct virtgpu_event *event;
-
-	event = (struct virtgpu_event *)vbuf->resp_buf;
-
-	DRM_INFO("drm got event cb %d\n", event->type);
-	if (event->type == VIRTGPU_EVENT_DISPLAY_CHANGE) {
-		spin_lock(&vgdev->display_info_lock);
-		memcpy(&vgdev->display_info, &event->u.display_info, sizeof(struct virtgpu_display_info));
-		DRM_INFO("enabled displays %d %d\n", vgdev->display_info.pmodes[0].enabled, vgdev->display_info.pmodes[1].enabled);
-		spin_unlock(&vgdev->display_info_lock);
-		drm_helper_hpd_irq_event(vgdev->ddev);
-	}
-}
-
-int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries)
-{
-	struct virtgpu_vbuffer *vbuf;
-	int i;
-	int ret;
-	for (i = 0; i < entries; i++) {
-		vbuf = virtgpu_allocate_vbuf(vgdev, 0, sizeof(struct virtgpu_event), virtgpu_event_cb);
-		if (!vbuf)
-			break;
-
-		spin_lock_irq(&vgdev->eventq.qlock);
-		
-		ret = add_inbuf(vgdev->eventq.vq, vbuf);
-		if (ret < 0) {
-			free_vbuf(vgdev, vbuf);
-			spin_unlock_irq(&vgdev->eventq.qlock);
-			break;
-		}
-		spin_unlock_irq(&vgdev->eventq.qlock);
-	}
-	return i;
-		
 }
 
 int virtgpu_fill_fence_vq(struct virtgpu_device *vgdev, int entries)

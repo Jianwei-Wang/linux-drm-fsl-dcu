@@ -133,7 +133,6 @@ struct virtgpu_device {
 	/* pointer to fbdev info structure */
 	struct virtgpu_fbdev *vgfbdev;
 
-	struct virtgpu_queue eventq;
 	struct virtgpu_queue ctrlq;
 	struct virtgpu_queue cursorq;
 	struct virtgpu_queue fenceq;
@@ -235,7 +234,6 @@ int virtgpu_detach_status_page(struct virtgpu_device *vgdev);
 void virtgpu_cursor_ping(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev);
 int virtgpu_cmd_get_3d_caps(struct virtgpu_device *vgdev);
-int virtgpu_fill_event_vq(struct virtgpu_device *vgdev, int entries);
 int virtgpu_fill_fence_vq(struct virtgpu_device *vgdev, int entries);
 int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
 			       uint32_t nlen, const char *name);
@@ -261,11 +259,9 @@ int virtgpu_cmd_resource_inval_backing(struct virtgpu_device *vgdev,
 				       uint32_t resource_id);
 void virtgpu_ctrl_ack(struct virtqueue *vq);
 void virtgpu_cursor_ack(struct virtqueue *vq);
-void virtgpu_event_ack(struct virtqueue *vq);
 void virtgpu_fence_ack(struct virtqueue *vq);
 void virtgpu_dequeue_ctrl_func(struct work_struct *work);
 void virtgpu_dequeue_cursor_func(struct work_struct *work);
-void virtgpu_dequeue_event_func(struct work_struct *work);
 void virtgpu_dequeue_fence_func(struct work_struct *work);
 
 /* virtgpu_display.c */
