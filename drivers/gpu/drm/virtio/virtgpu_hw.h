@@ -43,12 +43,27 @@ struct virtgpu_hw_cursor_page {
 	uint32_t generation_count;
 };
 
+#define VIRTGPU_COMMAND_EMIT_FENCE (1 << 0)
+
+struct virtgpu_cmd_hdr {
+	uint32_t type;
+	uint32_t flags;
+	uint64_t fence_id;
+};
+
+struct virtgpu_resp_hdr {
+	uint32_t type; /* virtgpu ctrl response */
+	uint32_t flags;
+};
+
 struct virtgpu_resource_unref {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 };
 
 /* create a simple 2d resource with a format */
 struct virtgpu_resource_create_2d {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 	uint32_t format;
 	uint32_t width;
@@ -56,6 +71,7 @@ struct virtgpu_resource_create_2d {
 };
 
 struct virtgpu_set_scanout {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t scanout_id;
 	uint32_t resource_id;
 	uint32_t width;
@@ -65,6 +81,7 @@ struct virtgpu_set_scanout {
 };
 
 struct virtgpu_resource_flush {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 	uint32_t width;
 	uint32_t height;
@@ -74,6 +91,7 @@ struct virtgpu_resource_flush {
 
 /* simple transfer to_host */
 struct virtgpu_transfer_to_host_2d {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 	uint32_t offset;
 	uint32_t width;
@@ -89,16 +107,19 @@ struct virtgpu_mem_entry {
 };
 
 struct virtgpu_resource_attach_backing {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 	uint32_t nr_entries;
 };
 
 struct virtgpu_resource_inval_backing {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 };
 
 #define VIRTGPU_MAX_SCANOUTS 16
 struct virtgpu_display_info {
+	struct virtgpu_resp_hdr hdr;
 	uint32_t num_scanouts;
 	struct {
 		uint32_t enabled;
@@ -118,6 +139,7 @@ struct virtgpu_box {
 };
 
 struct virtgpu_transfer_to_host_3d {
+	struct virtgpu_cmd_hdr hdr;
 	uint64_t data;
 	uint32_t resource_id;
 	uint32_t level;
@@ -128,6 +150,7 @@ struct virtgpu_transfer_to_host_3d {
 };
 
 struct virtgpu_transfer_from_host_3d {
+	struct virtgpu_cmd_hdr hdr;
 	uint64_t data;
 	uint32_t resource_id;
 	uint32_t level;
@@ -139,6 +162,7 @@ struct virtgpu_transfer_from_host_3d {
 
 #define VIRTGPU_RESOURCE_FLAG_Y_0_TOP (1 << 0)
 struct virtgpu_resource_create_3d {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 	uint32_t target;
 	uint32_t format;
@@ -153,21 +177,25 @@ struct virtgpu_resource_create_3d {
 };
 
 struct virtgpu_ctx_create {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t ctx_id;
 	uint32_t nlen;
 	char debug_name[64];
 };
 
 struct virtgpu_ctx_destroy {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t ctx_id;
 };
 
 struct virtgpu_ctx_resource {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t resource_id;
 	uint32_t ctx_id;
 };
 
 struct virtgpu_cmd_submit {
+	struct virtgpu_cmd_hdr hdr;
 	uint64_t phy_addr;
 	uint32_t size;
 	uint32_t ctx_id;
@@ -216,45 +244,17 @@ union virtgpu_caps {
 };
 
 struct virtgpu_cmd_get_cap {
+	struct virtgpu_cmd_hdr hdr;
 	uint32_t cap_set;
 	uint32_t cap_set_version;
 };
 
-#define VIRTGPU_COMMAND_EMIT_FENCE (1 << 0)
-
-struct virtgpu_command {
-	uint32_t type;
-	uint32_t flags;
-	uint64_t fence_id;
-	union virtgpu_cmds {
-		struct virtgpu_resource_create_2d resource_create_2d;
-		struct virtgpu_resource_unref resource_unref;
-		struct virtgpu_resource_flush resource_flush;
-		struct virtgpu_set_scanout set_scanout;
-		struct virtgpu_transfer_to_host_2d transfer_to_host_2d;
-		struct virtgpu_resource_attach_backing resource_attach_backing;
-		struct virtgpu_resource_inval_backing resource_inval_backing;
-
-		struct virtgpu_cmd_submit cmd_submit;
-		struct virtgpu_ctx_create ctx_create;
-		struct virtgpu_ctx_destroy ctx_destroy;
-		struct virtgpu_ctx_resource ctx_resource;
-		struct virtgpu_resource_create_3d resource_create_3d;
-		struct virtgpu_transfer_to_host_3d transfer_to_host_3d;
-		struct virtgpu_transfer_from_host_3d transfer_from_host_3d;
-		
-		struct virtgpu_cmd_get_cap get_cap;
-	} u;
+struct virtgpu_resp_caps {
+	struct virtgpu_resp_hdr hdr;
+	union virtgpu_caps caps;
 };
 
-struct virtgpu_response {
-	uint32_t type;
-	uint32_t flags;
-	union virtgpu_resps {
-		struct virtgpu_display_info display_info;
-		union virtgpu_caps caps;
-	} u;
-};
+
 
 #define VIRTGPU_EVENT_DISPLAY (1 << 0)
 

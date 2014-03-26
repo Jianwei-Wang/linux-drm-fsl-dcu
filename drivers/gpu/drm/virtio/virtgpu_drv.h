@@ -283,7 +283,7 @@ int virtgpu_mmap(struct file *filp, struct vm_area_struct *vma);
 /* virtgpu_fence.c */
 int virtgpu_fence_wait(struct virtgpu_fence *fence, bool intr);
 int virtgpu_fence_emit(struct virtgpu_device *vgdev,
-		      struct virtgpu_command *cmd,
+		      struct virtgpu_cmd_hdr *cmd_hdr,
 		       struct virtgpu_fence **fence);
 void virtgpu_fence_process(struct virtgpu_device *vgdev);
 void virtgpu_fence_unref(struct virtgpu_fence **fence);

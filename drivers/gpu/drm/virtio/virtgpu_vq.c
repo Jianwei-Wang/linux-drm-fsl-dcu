@@ -73,18 +73,19 @@ fail:
 	return ERR_PTR(-ENOMEM);
 }
 
-struct virtgpu_command *virtgpu_alloc_cmd(struct virtgpu_device *vgdev,
-					  struct virtgpu_vbuffer **vbuffer_p)
+void *virtgpu_alloc_cmd(struct virtgpu_device *vgdev,
+			struct virtgpu_vbuffer **vbuffer_p,
+			int size)
 {
 	struct virtgpu_vbuffer *vbuf;
 
-	vbuf = virtgpu_allocate_vbuf(vgdev, sizeof(struct virtgpu_command), 0, NULL);
+	vbuf = virtgpu_allocate_vbuf(vgdev, size, 0, NULL);
 	if (IS_ERR(vbuf)) {
 		*vbuffer_p = NULL;
 		return ERR_CAST(vbuf);
 	}
 	*vbuffer_p = vbuf;
-	return (struct virtgpu_command *)vbuf->buf;
+	return vbuf->buf;
 }
 
 struct virtgpu_hw_cursor_page *virtgpu_alloc_cursor(struct virtgpu_device *vgdev,
@@ -101,13 +102,14 @@ struct virtgpu_hw_cursor_page *virtgpu_alloc_cursor(struct virtgpu_device *vgdev
 	return (struct virtgpu_hw_cursor_page *)vbuf->buf;
 }
 
-struct virtgpu_command *virtgpu_alloc_cmd_resp(struct virtgpu_device *vgdev,
-					       virtgpu_resp_cb cb,
-					       struct virtgpu_vbuffer **vbuffer_p)
+void *virtgpu_alloc_cmd_resp(struct virtgpu_device *vgdev,
+			     virtgpu_resp_cb cb,
+			     struct virtgpu_vbuffer **vbuffer_p,
+			     int cmd_size, int resp_size)
 {
 	struct virtgpu_vbuffer *vbuf;
 
-	vbuf = virtgpu_allocate_vbuf(vgdev, sizeof(struct virtgpu_command), sizeof(struct virtgpu_response), cb);
+	vbuf = virtgpu_allocate_vbuf(vgdev, cmd_size, resp_size, cb);
 	if (IS_ERR(vbuf)) {
 		*vbuffer_p = NULL;
 		return ERR_CAST(vbuf);
@@ -325,17 +327,17 @@ int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
 				uint32_t width,
 				uint32_t height)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_resource_create_2d *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_RESOURCE_CREATE_2D;
-	cmd_p->u.resource_create_2d.resource_id = resource_id;
-	cmd_p->u.resource_create_2d.format = format;
-	cmd_p->u.resource_create_2d.width = width;
-	cmd_p->u.resource_create_2d.height = height;
+	cmd_p->hdr.type = VIRTGPU_CMD_RESOURCE_CREATE_2D;
+	cmd_p->resource_id = resource_id;
+	cmd_p->format = format;
+	cmd_p->width = width;
+	cmd_p->height = height;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       
@@ -345,14 +347,14 @@ int virtgpu_cmd_create_resource(struct virtgpu_device *vgdev,
 int virtgpu_cmd_unref_resource(struct virtgpu_device *vgdev,
 			       uint32_t resource_id)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_resource_unref *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_RESOURCE_UNREF;
-	cmd_p->u.resource_unref.resource_id = resource_id;
+	cmd_p->hdr.type = VIRTGPU_CMD_RESOURCE_UNREF;
+	cmd_p->resource_id = resource_id;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
@@ -361,14 +363,14 @@ int virtgpu_cmd_unref_resource(struct virtgpu_device *vgdev,
 int virtgpu_cmd_resource_inval_backing(struct virtgpu_device *vgdev,
 				       uint32_t resource_id)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_resource_inval_backing *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_RESOURCE_INVAL_BACKING;
-	cmd_p->u.resource_inval_backing.resource_id = resource_id;
+	cmd_p->hdr.type = VIRTGPU_CMD_RESOURCE_INVAL_BACKING;
+	cmd_p->resource_id = resource_id;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       
@@ -380,19 +382,19 @@ int virtgpu_cmd_set_scanout(struct virtgpu_device *vgdev,
 			    uint32_t width, uint32_t height,
 			    uint32_t x, uint32_t y)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_set_scanout *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_SET_SCANOUT;
-	cmd_p->u.set_scanout.resource_id = resource_id;
-	cmd_p->u.set_scanout.scanout_id = scanout_id;
-	cmd_p->u.set_scanout.width = width;
-	cmd_p->u.set_scanout.height = height;
-	cmd_p->u.set_scanout.x = x;
-	cmd_p->u.set_scanout.y = y;
+	cmd_p->hdr.type = VIRTGPU_CMD_SET_SCANOUT;
+	cmd_p->resource_id = resource_id;
+	cmd_p->scanout_id = scanout_id;
+	cmd_p->width = width;
+	cmd_p->height = height;
+	cmd_p->x = x;
+	cmd_p->y = y;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
@@ -403,18 +405,18 @@ int virtgpu_cmd_resource_flush(struct virtgpu_device *vgdev,
 			       uint32_t x, uint32_t y,
 			       uint32_t width, uint32_t height)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_resource_flush *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_RESOURCE_FLUSH;
-	cmd_p->u.resource_flush.resource_id = resource_id;
-	cmd_p->u.resource_flush.width = width;
-	cmd_p->u.resource_flush.height = height;
-	cmd_p->u.resource_flush.x = x;
-	cmd_p->u.resource_flush.y = y;
+	cmd_p->hdr.type = VIRTGPU_CMD_RESOURCE_FLUSH;
+	cmd_p->resource_id = resource_id;
+	cmd_p->width = width;
+	cmd_p->height = height;
+	cmd_p->x = x;
+	cmd_p->y = y;
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 
@@ -427,22 +429,22 @@ int virtgpu_cmd_transfer_to_host_2d(struct virtgpu_device *vgdev,
 				    uint32_t x, uint32_t y,
 				    struct virtgpu_fence **fence)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_transfer_to_host_2d *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_TRANSFER_TO_HOST_2D;
-	cmd_p->u.transfer_to_host_2d.resource_id = resource_id;
-	cmd_p->u.transfer_to_host_2d.offset = offset;
-	cmd_p->u.transfer_to_host_2d.width = width;
-	cmd_p->u.transfer_to_host_2d.height = height;
-	cmd_p->u.transfer_to_host_2d.x = x;
-	cmd_p->u.transfer_to_host_2d.y = y;
+	cmd_p->hdr.type = VIRTGPU_CMD_TRANSFER_TO_HOST_2D;
+	cmd_p->resource_id = resource_id;
+	cmd_p->offset = offset;
+	cmd_p->width = width;
+	cmd_p->height = height;
+	cmd_p->x = x;
+	cmd_p->y = y;
 
 	if (fence)
-		virtgpu_fence_emit(vgdev, cmd_p, fence);
+		virtgpu_fence_emit(vgdev, (struct virtgpu_cmd_hdr *)cmd_p, fence);
 
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       
@@ -452,20 +454,20 @@ int virtgpu_cmd_transfer_to_host_2d(struct virtgpu_device *vgdev,
 static int virtgpu_cmd_resource_attach_backing(struct virtgpu_device *vgdev, uint32_t resource_id, uint32_t nents,
 					       void *vaddr, uint32_t vsize, struct virtgpu_fence **fence)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_resource_attach_backing *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
 	vbuf->vaddr = vaddr;
 	vbuf->vaddr_len = vsize;
 	
-	cmd_p->type = VIRTGPU_CMD_RESOURCE_ATTACH_BACKING;
-	cmd_p->u.resource_attach_backing.resource_id = resource_id;
-	cmd_p->u.resource_attach_backing.nr_entries = nents;
+	cmd_p->hdr.type = VIRTGPU_CMD_RESOURCE_ATTACH_BACKING;
+	cmd_p->resource_id = resource_id;
+	cmd_p->nr_entries = nents;
 	if (fence)
-		virtgpu_fence_emit(vgdev, cmd_p, fence);
+		virtgpu_fence_emit(vgdev, (struct virtgpu_cmd_hdr *)cmd_p, fence);
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	       
 	return 0;
@@ -474,9 +476,9 @@ static int virtgpu_cmd_resource_attach_backing(struct virtgpu_device *vgdev, uin
 static void virtgpu_cmd_get_display_info_cb(struct virtgpu_device *vgdev,
 					    struct virtgpu_vbuffer *vbuf)
 {
-	struct virtgpu_response *resp = (struct virtgpu_response *)vbuf->resp_buf;
+	struct virtgpu_display_info *resp = (struct virtgpu_display_info *)vbuf->resp_buf;
 	spin_lock(&vgdev->display_info_lock);
-	memcpy(&vgdev->display_info, &resp->u.display_info, sizeof(struct virtgpu_display_info));
+	memcpy(&vgdev->display_info, resp, sizeof(struct virtgpu_display_info));
 	spin_unlock(&vgdev->display_info_lock);
 	wake_up(&vgdev->resp_wq);
 }
@@ -484,19 +486,19 @@ static void virtgpu_cmd_get_display_info_cb(struct virtgpu_device *vgdev,
 static void virtgpu_cmd_get_caps_info_cb(struct virtgpu_device *vgdev,
 					 struct virtgpu_vbuffer *vbuf)
 {
-	struct virtgpu_response *resp = (struct virtgpu_response *)vbuf->resp_buf;
+	struct virtgpu_resp_caps *resp = (struct virtgpu_resp_caps *)vbuf->resp_buf;
 	spin_lock(&vgdev->display_info_lock);
-	memcpy(&vgdev->caps, &resp->u.caps, sizeof(vgdev->caps));
+	memcpy(&vgdev->caps, &resp->caps, sizeof(vgdev->caps));
 	spin_unlock(&vgdev->display_info_lock);
 	wake_up(&vgdev->resp_wq);
 }
 
 int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_cmd_hdr *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_display_info_cb, &vbuf);
+	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_display_info_cb, &vbuf, sizeof(*cmd_p), sizeof(struct virtgpu_display_info));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
 	cmd_p->type = VIRTGPU_CMD_GET_DISPLAY_INFO;
@@ -506,10 +508,10 @@ int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev)
 
 int virtgpu_cmd_get_3d_caps(struct virtgpu_device *vgdev)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_cmd_hdr *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_caps_info_cb, &vbuf);
+	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_caps_info_cb, &vbuf, sizeof(cmd_p), sizeof(struct virtgpu_resp_caps));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
 	cmd_p->type = VIRTGPU_CMD_GET_CAPS;
@@ -521,31 +523,31 @@ int virtgpu_cmd_get_3d_caps(struct virtgpu_device *vgdev)
 int virtgpu_cmd_context_create(struct virtgpu_device *vgdev, uint32_t id,
 			       uint32_t nlen, const char *name)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_ctx_create *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_CTX_CREATE;
-	cmd_p->u.ctx_create.ctx_id = id;
-	cmd_p->u.ctx_create.nlen = nlen;
-	strncpy(cmd_p->u.ctx_create.debug_name, name, 63);
-	cmd_p->u.ctx_create.debug_name[63] = 0;
+	cmd_p->hdr.type = VIRTGPU_CMD_CTX_CREATE;
+	cmd_p->ctx_id = id;
+	cmd_p->nlen = nlen;
+	strncpy(cmd_p->debug_name, name, 63);
+	cmd_p->debug_name[63] = 0;
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
 
 int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_ctx_destroy *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_CTX_DESTROY;
-	cmd_p->u.ctx_destroy.ctx_id = id;
+	cmd_p->hdr.type = VIRTGPU_CMD_CTX_DESTROY;
+	cmd_p->ctx_id = id;
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
@@ -553,15 +555,15 @@ int virtgpu_cmd_context_destroy(struct virtgpu_device *vgdev, uint32_t id)
 int virtgpu_cmd_context_attach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
 					uint32_t resource_id)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_ctx_resource *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_CTX_ATTACH_RESOURCE;
-	cmd_p->u.ctx_resource.ctx_id = ctx_id;
-	cmd_p->u.ctx_resource.resource_id = resource_id;
+	cmd_p->hdr.type = VIRTGPU_CMD_CTX_ATTACH_RESOURCE;
+	cmd_p->ctx_id = ctx_id;
+	cmd_p->resource_id = resource_id;
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 
@@ -570,15 +572,15 @@ int virtgpu_cmd_context_attach_resource(struct virtgpu_device *vgdev, uint32_t c
 int virtgpu_cmd_context_detach_resource(struct virtgpu_device *vgdev, uint32_t ctx_id,
 					uint32_t resource_id)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_ctx_resource *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_CTX_DETACH_RESOURCE;
-	cmd_p->u.ctx_resource.ctx_id = ctx_id;
-	cmd_p->u.ctx_resource.resource_id = resource_id;
+	cmd_p->hdr.type = VIRTGPU_CMD_CTX_DETACH_RESOURCE;
+	cmd_p->ctx_id = ctx_id;
+	cmd_p->resource_id = resource_id;
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
@@ -587,16 +589,18 @@ int virtgpu_cmd_resource_create_3d(struct virtgpu_device *vgdev,
 				   struct virtgpu_resource_create_3d *rc_3d,
 				   struct virtgpu_fence **fence)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_resource_create_3d *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_RESOURCE_CREATE_3D;
-	cmd_p->u.resource_create_3d = *rc_3d;
+	*cmd_p = *rc_3d;
+	cmd_p->hdr.type = VIRTGPU_CMD_RESOURCE_CREATE_3D;
+	cmd_p->hdr.flags = 0;
+
 	if (fence)
-		virtgpu_fence_emit(vgdev, cmd_p, fence);
+		virtgpu_fence_emit(vgdev, (struct virtgpu_cmd_hdr *)cmd_p, fence);
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
@@ -606,20 +610,20 @@ int virtgpu_cmd_transfer_to_host_3d(struct virtgpu_device *vgdev, uint32_t resou
 				    uint64_t offset, uint32_t level, struct virtgpu_box *box,
 				    struct virtgpu_fence **fence)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_transfer_to_host_3d *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_TRANSFER_TO_HOST_3D;
-	cmd_p->u.transfer_to_host_3d.ctx_id = ctx_id;
-	cmd_p->u.transfer_to_host_3d.resource_id = resource_id;
-	cmd_p->u.transfer_to_host_3d.box = *box;
-	cmd_p->u.transfer_to_host_3d.data = offset;
-	cmd_p->u.transfer_to_host_3d.level = level;
+	cmd_p->hdr.type = VIRTGPU_CMD_TRANSFER_TO_HOST_3D;
+	cmd_p->ctx_id = ctx_id;
+	cmd_p->resource_id = resource_id;
+	cmd_p->box = *box;
+	cmd_p->data = offset;
+	cmd_p->level = level;
 	if (fence)
-		virtgpu_fence_emit(vgdev, cmd_p, fence);
+		virtgpu_fence_emit(vgdev, (struct virtgpu_cmd_hdr *)cmd_p, fence);
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
@@ -628,20 +632,20 @@ int virtgpu_cmd_transfer_from_host_3d(struct virtgpu_device *vgdev, uint32_t res
 				      uint32_t ctx_id, uint64_t offset, uint32_t level, struct virtgpu_box *box,
 				      struct virtgpu_fence **fence)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_transfer_from_host_3d *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
-	cmd_p->type = VIRTGPU_CMD_TRANSFER_FROM_HOST_3D;
-	cmd_p->u.transfer_from_host_3d.ctx_id = ctx_id;
-	cmd_p->u.transfer_from_host_3d.resource_id = resource_id;
-	cmd_p->u.transfer_from_host_3d.box = *box;
-	cmd_p->u.transfer_from_host_3d.data = offset;
-	cmd_p->u.transfer_from_host_3d.level = level;
+	cmd_p->hdr.type = VIRTGPU_CMD_TRANSFER_FROM_HOST_3D;
+	cmd_p->ctx_id = ctx_id;
+	cmd_p->resource_id = resource_id;
+	cmd_p->box = *box;
+	cmd_p->data = offset;
+	cmd_p->level = level;
 	if (fence)
-		virtgpu_fence_emit(vgdev, cmd_p, fence);
+		virtgpu_fence_emit(vgdev, (struct virtgpu_cmd_hdr *)cmd_p, fence);
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }
@@ -650,21 +654,21 @@ int virtgpu_cmd_submit(struct virtgpu_device *vgdev, void *vaddr,
 		       uint32_t size, uint32_t ctx_id,
 		       struct virtgpu_fence **fence)
 {
-	struct virtgpu_command *cmd_p;
+	struct virtgpu_cmd_submit *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf);
+	cmd_p = virtgpu_alloc_cmd(vgdev, &vbuf, sizeof(*cmd_p));
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
 	vbuf->vaddr = vaddr;
 	vbuf->vaddr_len = size;
 
-	cmd_p->type = VIRTGPU_CMD_SUBMIT_3D;
-	cmd_p->u.cmd_submit.phy_addr = 0;
-	cmd_p->u.cmd_submit.size = size;
-	cmd_p->u.cmd_submit.ctx_id = ctx_id;
+	cmd_p->hdr.type = VIRTGPU_CMD_SUBMIT_3D;
+	cmd_p->phy_addr = 0;
+	cmd_p->size = size;
+	cmd_p->ctx_id = ctx_id;
 	if (fence)
-		virtgpu_fence_emit(vgdev, cmd_p, fence);
+		virtgpu_fence_emit(vgdev, (struct virtgpu_cmd_hdr *)cmd_p, fence);
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 }

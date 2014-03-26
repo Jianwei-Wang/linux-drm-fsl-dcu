@@ -151,7 +151,7 @@ int virtgpu_fence_wait(struct virtgpu_fence *fence, bool intr)
 }
 
 int virtgpu_fence_emit(struct virtgpu_device *vgdev,
-		      struct virtgpu_command *cmd,
+		      struct virtgpu_cmd_hdr *cmd_hdr,
 		      struct virtgpu_fence **fence)
 {
 	*fence = kmalloc(sizeof(struct virtgpu_fence), GFP_KERNEL);
@@ -162,8 +162,8 @@ int virtgpu_fence_emit(struct virtgpu_device *vgdev,
 	(*fence)->vgdev = vgdev;
 	(*fence)->seq = ++vgdev->fence_drv.sync_seq;
 
-	cmd->flags |= VIRTGPU_COMMAND_EMIT_FENCE;
-	cmd->fence_id = (*fence)->seq;
+	cmd_hdr->flags |= VIRTGPU_COMMAND_EMIT_FENCE;
+	cmd_hdr->fence_id = (*fence)->seq;
 
 	return 0;
 }
