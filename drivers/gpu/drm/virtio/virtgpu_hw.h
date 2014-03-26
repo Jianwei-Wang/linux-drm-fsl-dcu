@@ -271,6 +271,7 @@ enum virtgpu_formats {
    VIRGL_FORMAT_X8R8G8B8_UNORM          = 4,
 
    VIRGL_FORMAT_B5G5R5A1_UNORM          = 5,
+   VIRGL_FORMAT_B5G6R5_UNORM            = 7,
 
    VIRGL_FORMAT_R8_UNORM                = 64,
 };

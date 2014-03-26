@@ -216,8 +216,11 @@ static int virtgpufb_create(struct drm_fb_helper *helper,
 		format = VIRGL_FORMAT_B8G8R8A8_UNORM;
 	else if (mode_cmd.pixel_format == DRM_FORMAT_XRGB1555)
 		format = VIRGL_FORMAT_B5G5R5A1_UNORM;
+	else if (mode_cmd.pixel_format == DRM_FORMAT_RGB565)
+		format = VIRGL_FORMAT_B5G6R5_UNORM;
 	else {
 		ret = -EINVAL;
+		DRM_ERROR("failed to find virgl format for %d\n", mode_cmd.pixel_format);
 		goto fail;
 	}
 
