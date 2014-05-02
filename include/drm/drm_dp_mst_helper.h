@@ -315,6 +315,7 @@ struct drm_dp_sideband_msg_tx {
 	struct list_head next;
 	int seqno;
 	int state;
+	bool path_msg;
 	struct drm_dp_sideband_msg_reply_body reply;
 };
 

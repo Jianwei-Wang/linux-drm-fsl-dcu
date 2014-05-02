@@ -41,7 +41,7 @@ static void drm_dp_queue_down_tx(struct drm_dp_mst_topology_mgr *mgr,
 				 struct drm_dp_sideband_msg_tx *txmsg);
 static int drm_dp_send_enum_path_resources(struct drm_dp_mst_topology_mgr *mgr,
 					   struct drm_dp_mst_branch *mstb,
-					   int port_num);
+					   struct drm_dp_mst_port *port);
 
 static int drm_dp_dpcd_write_payload(struct drm_dp_mst_topology_mgr *mgr,
 				     int id,
@@ -418,7 +418,7 @@ static void drm_dp_add_port(struct drm_dp_mst_branch *mstb,
 
 	if (!port->input && port->ddps)
 		drm_dp_send_enum_path_resources(mstb->mgr, mstb,
-						port->port_num);
+						port);
 
 	if (!port->input)
 		port->connector = (*mstb->mgr->cbs->add_connector)(mstb->mgr, port);
@@ -446,23 +446,8 @@ static void drm_dp_update_port(struct drm_dp_mst_branch *mstb,
 	}
 
 	if (!port->input && port->ddps)
-		drm_dp_send_enum_path_resources(mstb->mgr, mstb,
-						port->port_num);
+		drm_dp_send_enum_path_resources(mstb->mgr, mstb, port);
 
-	drm_dp_put_port(port);
-}
-
-static void drm_dp_update_port_pbn(struct drm_dp_mst_branch *mstb,
-				   uint8_t port_number,
-				   uint16_t available_pbn)
-{
-	struct drm_dp_mst_port *port;
-
-	port = drm_dp_get_port(mstb, port_number);
-	if (!port)
-		return;
-
-	port->available_pbn = available_pbn;
 	drm_dp_put_port(port);
 }
 
@@ -1160,6 +1145,7 @@ static int build_enum_path_resources(struct drm_dp_sideband_msg_tx *msg, int por
 	req.req_type = DP_ENUM_PATH_RESOURCES;
 	req.u.port_num.port_number = port_num;
 	drm_dp_encode_sideband_req(&req, msg);
+	msg->path_msg = true;
 	return 0;
 }
 
@@ -1173,6 +1159,7 @@ static int build_allocate_payload(struct drm_dp_sideband_msg_tx *msg, int port_n
 	req.u.allocate_payload.vcpi = vcpi;
 	req.u.allocate_payload.pbn = pbn;
 	drm_dp_encode_sideband_req(&req, msg);
+	msg->path_msg = true;
 	return 0;
 }
 
@@ -1218,7 +1205,7 @@ static int set_hdr_from_dst(struct drm_dp_sideband_msg_hdr *hdr,
 		spin_unlock(&mstb->slots_lock);
 	}
 	hdr->broadcast = 0;
-	hdr->path_msg = 0;
+	hdr->path_msg = txmsg->path_msg;
 	hdr->lct = mstb->lct;
 	hdr->lcr = mstb->lct - 1;
 	if (mstb->lct > 1)
@@ -1370,22 +1357,35 @@ static int drm_dp_send_link_address(struct drm_dp_mst_topology_mgr *mgr,
 
 static int drm_dp_send_enum_path_resources(struct drm_dp_mst_topology_mgr *mgr,
 					   struct drm_dp_mst_branch *mstb,
-					   int port_num)
+					   struct drm_dp_mst_port *port)
 {
 	int len;
 	struct drm_dp_sideband_msg_tx *txmsg;
+	int ret;
 
-	/* TODO redo this properly */
-	return 0;
 	txmsg = kzalloc(sizeof(*txmsg), GFP_KERNEL);
 	if (!txmsg)
 		return -ENOMEM;
 
 	txmsg->dst = mstb;
-	len = build_enum_path_resources(txmsg, port_num);
+	len = build_enum_path_resources(txmsg, port->port_num);
 
 	drm_dp_queue_down_tx(mgr, txmsg);
 
+	ret = drm_dp_mst_wait_tx_reply(mstb, txmsg);
+	if (ret > 0) {
+		if (txmsg->reply.reply_type == 1)
+			DRM_DEBUG_KMS("enum path resources nak received\n");
+		else {
+			if (port->port_num != txmsg->reply.u.path_resources.port_number)
+				DRM_ERROR("got incorrect port in response\n");
+			printk(KERN_DEBUG "enum path resources %d: %d %d\n", txmsg->reply.u.path_resources.port_number, txmsg->reply.u.path_resources.full_payload_bw_number,
+			       txmsg->reply.u.path_resources.avail_payload_bw_number);
+			port->available_pbn = txmsg->reply.u.path_resources.avail_payload_bw_number;
+		}
+	}
+
+	kfree(txmsg);
 	return 0;
 }
 
@@ -1789,8 +1789,6 @@ static int drm_dp_mst_handle_down_rep(struct drm_dp_mst_topology_mgr *mgr)
 		drm_dp_sideband_parse_reply(&mgr->down_rep_recv, &txmsg->reply);
 		if (txmsg->reply.reply_type == 1) {
 			DRM_DEBUG_KMS("Got NAK reply: req 0x%02x, reason 0x%02x, nak data 0x%02x\n", txmsg->reply.req_type, txmsg->reply.u.nak.reason, txmsg->reply.u.nak.nak_data);
-		} else if (txmsg->reply.req_type == DP_ENUM_PATH_RESOURCES) {
-			drm_dp_update_port_pbn(mstb, txmsg->reply.u.path_resources.port_number, txmsg->reply.u.path_resources.avail_payload_bw_number);
 		}
 
 		drm_dp_put_mst_branch_device(mstb);
