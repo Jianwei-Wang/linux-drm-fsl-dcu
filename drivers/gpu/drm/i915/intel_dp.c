@@ -701,8 +701,9 @@ intel_dp_connector_unregister(struct intel_connector *intel_connector)
 {
 	struct intel_dp *intel_dp = intel_attached_dp(&intel_connector->base);
 
-	sysfs_remove_link(&intel_connector->base.kdev->kobj,
-			  intel_dp->aux.ddc.dev.kobj.name);
+	if (!intel_connector->mst_port)
+		sysfs_remove_link(&intel_connector->base.kdev->kobj,
+				  intel_dp->aux.ddc.dev.kobj.name);
 	intel_connector_unregister(intel_connector);
 }
 
@@ -2892,6 +2893,33 @@ intel_dp_probe_oui(struct intel_dp *intel_dp)
 	edp_panel_vdd_off(intel_dp, false);
 }
 
+static bool
+intel_dp_probe_mst(struct intel_dp *intel_dp)
+{
+	u8 buf[1];
+
+	if (!intel_dp->can_mst)
+		return false;
+
+	if (intel_dp->dpcd[DP_DPCD_REV] < 0x12)
+		return false;
+
+	_edp_panel_vdd_on(intel_dp);
+	if (intel_dp_dpcd_read_wake(&intel_dp->aux, DP_MSTM_CAP, buf, 1)) {
+		if (buf[0] & DP_MST_CAP) {
+			DRM_DEBUG_KMS("Sink is MST capable\n");
+			intel_dp->is_mst = true;
+		} else {
+			DRM_DEBUG_KMS("Sink is not MST capable\n");
+			intel_dp->is_mst = false;
+		}
+	}
+	edp_panel_vdd_off(intel_dp, false);
+
+	drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr, intel_dp->is_mst);
+	return intel_dp->is_mst;
+}
+
 int intel_dp_sink_crc(struct intel_dp *intel_dp, u8 *crc)
 {
 	struct intel_digital_port *intel_dig_port = dp_to_dig_port(intel_dp);
@@ -2929,6 +2957,20 @@ intel_dp_get_sink_irq(struct intel_dp *intel_dp, u8 *sink_irq_vector)
 				       sink_irq_vector, 1) == 1;
 }
 
+static bool
+intel_dp_get_sink_irq_esi(struct intel_dp *intel_dp, u8 *sink_irq_vector)
+{
+	int ret;
+
+	ret = intel_dp_dpcd_read_wake(&intel_dp->aux,
+					     DP_SINK_COUNT_ESI,
+					     sink_irq_vector, 4);
+	if (ret != 4)
+		return false;
+
+	return true;
+}
+
 static void
 intel_dp_handle_test_request(struct intel_dp *intel_dp)
 {
@@ -2944,6 +2986,28 @@ intel_dp_handle_test_request(struct intel_dp *intel_dp)
  *  3. Use Link Training from 2.5.3.3 and 3.5.1.3
  *  4. Check link status on receipt of hot-plug interrupt
  */
+static int
+intel_dp_check_mst_status(struct intel_dp *intel_dp)
+{
+	if (intel_dp->is_mst) {
+		u8 esi[4] = { 0 };
+		int ret;
+		ret = intel_dp_get_sink_irq_esi(intel_dp, esi);
+		if (ret == true) {
+			DRM_DEBUG_KMS("got esi %02x\n", esi[1]);
+			if (esi[1] & (DP_UP_REQ_MSG_RDY | DP_DOWN_REP_MSG_RDY))  {
+				ret = drm_dp_mst_hpd_irq(&intel_dp->mst_mgr, esi[1]);
+				return ret;
+			}
+			return 0;
+		} else {
+			DRM_DEBUG_KMS("failed to get ESI - device may have failed\n");
+			intel_dp->is_mst = false;
+			drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr, intel_dp->is_mst);
+		}
+	}
+	return -EINVAL;
+}
 
 void
 intel_dp_check_link_status(struct intel_dp *intel_dp)
@@ -3163,6 +3227,7 @@ intel_dp_detect(struct drm_connector *connector, bool force)
 	enum drm_connector_status status;
 	enum intel_display_power_domain power_domain;
 	struct edid *edid = NULL;
+	bool ret;
 
 	intel_runtime_pm_get(dev_priv);
 
@@ -3171,6 +3236,12 @@ intel_dp_detect(struct drm_connector *connector, bool force)
 
 	DRM_DEBUG_KMS("[CONNECTOR:%d:%s]\n",
 		      connector->base.id, drm_get_connector_name(connector));
+
+	if (intel_dp->is_mst) {
+		/* MST devices are disconnected from a monitor POV */
+		status = connector_status_disconnected;
+		goto out;
+	}
 
 	intel_dp->has_audio = false;
 
@@ -3183,6 +3254,16 @@ intel_dp_detect(struct drm_connector *connector, bool force)
 		goto out;
 
 	intel_dp_probe_oui(intel_dp);
+
+	ret = intel_dp_probe_mst(intel_dp);
+	if (ret) {
+		/* if we are in MST mode then this connector
+		   won't appear connected or have anything with EDID on it */
+		if (intel_encoder->type != INTEL_OUTPUT_EDP)
+			intel_encoder->type = INTEL_OUTPUT_DISPLAYPORT;
+		status = connector_status_disconnected;
+		goto out;
+	}
 
 	if (intel_dp->force_audio != HDMI_AUDIO_AUTO) {
 		intel_dp->has_audio = (intel_dp->force_audio == HDMI_AUDIO_ON);
@@ -3463,7 +3544,7 @@ bool intel_dp_is_edp(struct drm_device *dev, enum port port)
 	return false;
 }
 
-static void
+void
 intel_dp_add_properties(struct intel_dp *intel_dp, struct drm_connector *connector)
 {
 	struct intel_connector *intel_connector = to_intel_connector(connector);
@@ -3959,6 +4040,13 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 
 	intel_dp->psr_setup_done = false;
 
+	/* init MST on ports that can support it */
+	if (IS_HASWELL(dev) || IS_BROADWELL(dev)) {
+		if (port == PORT_B || port == PORT_C || port == PORT_D) {
+			intel_dp_mst_init_encoder(intel_dig_port);
+		}
+	}
+
 	if (!intel_edp_init_connector(intel_dp, intel_connector, &power_seq)) {
 		drm_dp_aux_unregister_i2c_bus(&intel_dp->aux);
 		if (is_edp(intel_dp)) {
@@ -3989,6 +4077,7 @@ intel_dp_init_connector(struct intel_digital_port *intel_dig_port,
 void
 intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 {
+	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_digital_port *intel_dig_port;
 	struct intel_encoder *intel_encoder;
 	struct drm_encoder *encoder;
@@ -4029,6 +4118,10 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 	intel_dig_port->port = port;
 	intel_dig_port->dp.output_reg = output_reg;
 
+	/* for now only use new IRQ handling for MST capable ports */
+	if (intel_dig_port->dp.can_mst)
+		dev_priv->hpd_irq_port[port] = intel_dig_port;
+
 	intel_encoder->type = INTEL_OUTPUT_DISPLAYPORT;
 	intel_encoder->crtc_mask = (1 << 0) | (1 << 1) | (1 << 2);
 	intel_encoder->cloneable = 0;
@@ -4039,4 +4132,79 @@ intel_dp_init(struct drm_device *dev, int output_reg, enum port port)
 		kfree(intel_dig_port);
 		kfree(intel_connector);
 	}
+}
+
+/*
+ * Handle DP IRQ close to spec recommendations
+ * Use hw to detect long vs short pulses
+ *
+ * If we get a long pulse - we need to read DPCD first
+ * If we get a short pulse - we need to check link irq/status
+ * returning 1 causes the old detect to happen for HDMI
+ */
+int intel_dp_handle_hpd_irq(struct intel_digital_port *intel_dig_port,
+			    bool hpd_long)
+{
+	struct intel_dp *intel_dp = &intel_dig_port->dp;
+	struct drm_device *dev = intel_dig_port->base.base.dev;
+	struct drm_mode_config *mode_config = &dev->mode_config;
+	struct drm_connector *connector;
+	struct intel_connector *intel_connector;
+	bool changed = false;
+	int ret;
+
+	if (!intel_dp->output_reg)
+		return 1;
+
+	DRM_DEBUG_KMS("got hpd irq on port %d - %s\n", intel_dig_port->port,
+		      hpd_long ? "long" : "short");
+	/* we have to re-read DPCD only on a long irq */
+	if (hpd_long) {
+		if (!intel_dp_get_dpcd(intel_dp))
+			goto mst_fail;
+
+		intel_dp_probe_oui(intel_dp);
+
+		if (!intel_dp_probe_mst(intel_dp))
+			goto mst_fail;
+	}
+
+	if (intel_dp->is_mst) {
+		ret = intel_dp_check_mst_status(intel_dp);
+		if (ret == -EINVAL)
+			return 1;
+	} else {
+		intel_dp_check_link_status(intel_dp);
+		return 1;
+	}
+
+	if (ret == 1) {
+		mutex_lock(&mode_config->mutex);
+
+		/* send the something changed event for the correct port */
+		list_for_each_entry(connector, &mode_config->connector_list, head) {
+			intel_connector = to_intel_connector(connector);
+			if (!intel_connector->mst_port)
+				continue;
+
+			if (intel_connector->mst_port != intel_dp)
+				continue;
+
+			if (intel_hpd_irq_event(dev, connector))
+				changed = true;
+		}
+		mutex_unlock(&mode_config->mutex);
+		if (changed)
+			drm_kms_helper_hotplug_event(dev);
+	}
+	return 0;
+
+mst_fail:
+	/* if we were in MST mode, and device is not there get out of MST mode */
+	if (intel_dp->is_mst) {
+		DRM_DEBUG_KMS("failed to get ESI - device may have failed\n");
+		intel_dp->is_mst = false;
+		drm_dp_mst_topology_mgr_set_mst(&intel_dp->mst_mgr, intel_dp->is_mst);
+	}
+	return 1;
 }

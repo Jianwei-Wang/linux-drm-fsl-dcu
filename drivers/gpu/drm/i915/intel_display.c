@@ -56,6 +56,14 @@ static int intel_framebuffer_init(struct drm_device *dev,
 				  struct drm_mode_fb_cmd2 *mode_cmd,
 				  struct drm_i915_gem_object *obj);
 
+static struct intel_encoder *intel_find_encoder(struct intel_connector *connector, int pipe)
+{
+	if (!connector->mst_port)
+		return connector->encoder;
+	else
+		return &connector->mst_port->mst_encoders[pipe]->base;
+}
+
 typedef struct {
 	int	min, max;
 } intel_range_t;
@@ -3821,6 +3829,9 @@ static void haswell_crtc_enable(struct drm_crtc *crtc)
 	if (intel_crtc->config.has_pch_encoder)
 		lpt_pch_enable(crtc);
 
+	if (intel_crtc->config.dp_encoder_is_mst)
+		intel_ddi_set_vc_payload_alloc(crtc, true);
+
 	for_each_encoder_on_crtc(dev, crtc, encoder) {
 		encoder->enable(encoder);
 		intel_opregion_notify_encoder(encoder, true);
@@ -4038,6 +4049,23 @@ static void i9xx_pfit_enable(struct intel_crtc *crtc)
 	for ((domain) = 0; (domain) < POWER_DOMAIN_NUM; (domain)++)	\
 		if ((1 << (domain)) & (mask))
 
+enum intel_display_power_domain port_to_power_domain(enum port port)
+{
+	switch (port) {
+	case PORT_A:
+		return POWER_DOMAIN_PORT_DDI_A_4_LANES;
+	case PORT_B:
+		return POWER_DOMAIN_PORT_DDI_B_4_LANES;
+	case PORT_C:
+		return POWER_DOMAIN_PORT_DDI_C_4_LANES;
+	case PORT_D:
+		return POWER_DOMAIN_PORT_DDI_D_4_LANES;
+	default:
+		WARN_ON_ONCE(1);
+		return POWER_DOMAIN_PORT_OTHER;
+	}
+}
+
 enum intel_display_power_domain
 intel_display_port_power_domain(struct intel_encoder *intel_encoder)
 {
@@ -4052,19 +4080,10 @@ intel_display_port_power_domain(struct intel_encoder *intel_encoder)
 	case INTEL_OUTPUT_HDMI:
 	case INTEL_OUTPUT_EDP:
 		intel_dig_port = enc_to_dig_port(&intel_encoder->base);
-		switch (intel_dig_port->port) {
-		case PORT_A:
-			return POWER_DOMAIN_PORT_DDI_A_4_LANES;
-		case PORT_B:
-			return POWER_DOMAIN_PORT_DDI_B_4_LANES;
-		case PORT_C:
-			return POWER_DOMAIN_PORT_DDI_C_4_LANES;
-		case PORT_D:
-			return POWER_DOMAIN_PORT_DDI_D_4_LANES;
-		default:
-			WARN_ON_ONCE(1);
-			return POWER_DOMAIN_PORT_OTHER;
-		}
+		return port_to_power_domain(intel_dig_port->port);
+	case INTEL_OUTPUT_DP_MST:
+		intel_dig_port = enc_to_mst(&intel_encoder->base)->primary;
+		return port_to_power_domain(intel_dig_port->port);
 	case INTEL_OUTPUT_ANALOG:
 		return POWER_DOMAIN_PORT_CRT;
 	case INTEL_OUTPUT_DSI:
@@ -10203,7 +10222,7 @@ intel_modeset_stage_output_state(struct drm_device *dev,
 		 * for them. */
 		for (ro = 0; ro < set->num_connectors; ro++) {
 			if (set->connectors[ro] == &connector->base) {
-				connector->new_encoder = connector->encoder;
+				connector->new_encoder = intel_find_encoder(connector, to_intel_crtc(set->crtc)->pipe);
 				break;
 			}
 		}
@@ -10249,7 +10268,7 @@ intel_modeset_stage_output_state(struct drm_device *dev,
 					 new_crtc)) {
 			return -EINVAL;
 		}
-		connector->encoder->new_crtc = to_intel_crtc(new_crtc);
+		connector->new_encoder->new_crtc = to_intel_crtc(new_crtc);
 
 		DRM_DEBUG_KMS("[CONNECTOR:%d:%s] to [CRTC:%d]\n",
 			connector->base.base.id,
@@ -10283,7 +10302,12 @@ intel_modeset_stage_output_state(struct drm_device *dev,
 		}
 	}
 	/* Now we've also updated encoder->new_crtc for all encoders. */
-
+	list_for_each_entry(connector, &dev->mode_config.connector_list,
+			    base.head) {
+		if (connector->new_encoder)
+			if (connector->new_encoder != connector->encoder)
+				connector->encoder = connector->new_encoder;
+	}
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list,
 			    base.head) {
 		crtc->new_enabled = false;

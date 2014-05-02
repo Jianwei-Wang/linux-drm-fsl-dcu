@@ -1468,6 +1468,9 @@ struct drm_i915_private {
 
 	struct i915_runtime_pm pm;
 
+	struct intel_digital_port *hpd_irq_port[I915_MAX_PORTS];
+	u32 hpd_port;
+	struct work_struct dig_port_work;
 	/* Old dri1 support infrastructure, beware the dragons ya fools entering
 	 * here! */
 	struct i915_dri1_state dri1;
@@ -1999,6 +2002,8 @@ i915_disable_pipestat(struct drm_i915_private *dev_priv, enum pipe pipe,
 
 void valleyview_enable_display_irqs(struct drm_i915_private *dev_priv);
 void valleyview_disable_display_irqs(struct drm_i915_private *dev_priv);
+bool intel_hpd_irq_event(struct drm_device *dev,
+			 struct drm_connector *connector);
 
 /* i915_gem.c */
 int i915_gem_init_ioctl(struct drm_device *dev, void *data,
