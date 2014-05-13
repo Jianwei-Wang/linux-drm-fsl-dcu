@@ -964,6 +964,9 @@ extern void drm_reinit_primary_mode_group(struct drm_device *dev);
 extern bool drm_probe_ddc(struct i2c_adapter *adapter);
 extern struct edid *drm_get_edid(struct drm_connector *connector,
 				 struct i2c_adapter *adapter);
+extern void drm_get_displayid(struct drm_connector *connector,
+			      struct i2c_adapter *adapter, struct edid *edid,
+			      bool secondary);
 extern struct edid *drm_edid_duplicate(const struct edid *edid);
 extern int drm_add_edid_modes(struct drm_connector *connector, struct edid *edid);
 extern void drm_mode_config_init(struct drm_device *dev);
@@ -1106,6 +1109,8 @@ extern void drm_set_preferred_mode(struct drm_connector *connector,
 extern int drm_edid_header_is_valid(const u8 *raw_edid);
 extern bool drm_edid_block_valid(u8 *raw_edid, int block, bool print_bad_edid);
 extern bool drm_edid_is_valid(struct edid *edid);
+extern int drm_parse_display_id(struct drm_connector *connector,
+				u8 *displayid, int length, bool is_edid_extension);
 struct drm_display_mode *drm_mode_find_dmt(struct drm_device *dev,
 					   int hsize, int vsize, int fresh,
 					   bool rb);
