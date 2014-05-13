@@ -2162,6 +2162,9 @@ struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_
 		return NULL;
 
 	edid = drm_get_edid(connector, &port->aux.ddc);
+	if (edid) {
+	  drm_get_displayid(connector, &port->aux.ddc, edid, true);
+	}
 	drm_dp_put_port(port);
 	return edid;
 }
