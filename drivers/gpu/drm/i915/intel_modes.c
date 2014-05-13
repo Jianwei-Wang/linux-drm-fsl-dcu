@@ -65,6 +65,9 @@ int intel_ddc_get_modes(struct drm_connector *connector,
 	if (!edid)
 		return 0;
 
+	if (edid) {
+		drm_get_displayid(connector, adapter, edid, true);
+	}
 	ret = intel_connector_update_modes(connector, edid);
 	kfree(edid);
 

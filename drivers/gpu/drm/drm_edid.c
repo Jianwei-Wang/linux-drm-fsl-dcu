@@ -2386,7 +2386,7 @@ add_detailed_modes(struct drm_connector *connector, struct edid *edid,
 /*
  * Search EDID for CEA extension block.
  */
-static u8 *drm_find_cea_extension(struct edid *edid)
+static u8 *drm_find_edid_extension(struct edid *edid, int ext_id)
 {
 	u8 *edid_ext = NULL;
 	int i;
@@ -2398,7 +2398,7 @@ static u8 *drm_find_cea_extension(struct edid *edid)
 	/* Find CEA extension */
 	for (i = 0; i < edid->extensions; i++) {
 		edid_ext = (u8 *)edid + EDID_LENGTH * (i + 1);
-		if (edid_ext[0] == CEA_EXT)
+		if (edid_ext[0] == ext_id)
 			break;
 	}
 
@@ -2406,6 +2406,16 @@ static u8 *drm_find_cea_extension(struct edid *edid)
 		return NULL;
 
 	return edid_ext;
+}
+
+static u8 *drm_find_cea_extension(struct edid *edid)
+{
+	return drm_find_edid_extension(edid, CEA_EXT);
+}
+
+static u8 *drm_find_displayid_extension(struct edid *edid)
+{
+	return drm_find_edid_extension(edid, DISPLAYID_EXT);
 }
 
 /*
@@ -3865,3 +3875,18 @@ drm_hdmi_vendor_infoframe_from_display_mode(struct hdmi_vendor_infoframe *frame,
 	return 0;
 }
 EXPORT_SYMBOL(drm_hdmi_vendor_infoframe_from_display_mode);
+
+void drm_get_displayid(struct drm_connector *connector,
+			struct i2c_adapter *adapter, struct edid *edid,
+			bool secondary)
+{
+	void *displayid = NULL;
+	displayid = drm_find_displayid_extension(edid);
+	if (!displayid) {
+		return;
+	}
+
+	drm_parse_display_id(displayid, EDID_LENGTH, true);
+	return;
+}
+EXPORT_SYMBOL(drm_get_displayid);
