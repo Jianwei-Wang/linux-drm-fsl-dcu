@@ -346,6 +346,16 @@ struct drm_encoder *intel_mst_best_encoder(struct drm_connector *connector)
 {
 	struct intel_connector *intel_connector = to_intel_connector(connector);
 	struct intel_dp *intel_dp = intel_connector->mst_port;
+	int i;
+
+	/* try and pick the enabled one if there is one -
+	   stops intel_fbdev getting confused */
+	for (i = 0; i < I915_MAX_PIPES; i++) {
+		struct intel_dp_mst_encoder *mst_enc = intel_dp->mst_encoders[i];
+		if (mst_enc->base.base.crtc) {
+			return &intel_dp->mst_encoders[i]->base.base;
+		}
+	}
 	return &intel_dp->mst_encoders[0]->base.base;
 }
 
