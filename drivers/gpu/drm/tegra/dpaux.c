@@ -331,6 +331,7 @@ static int tegra_dpaux_probe(struct platform_device *pdev)
 
 	dpaux->aux.transfer = tegra_dpaux_transfer;
 	dpaux->aux.dev = &pdev->dev;
+	drm_dp_aux_init(&dpaux->aux);
 
 	err = drm_dp_aux_register_i2c_bus(&dpaux->aux);
 	if (err < 0)

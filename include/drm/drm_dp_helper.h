@@ -546,7 +546,7 @@ struct drm_dp_aux {
 	const char *name;
 	struct i2c_adapter ddc;
 	struct device *dev;
-
+	struct mutex hw_mutex;
 	ssize_t (*transfer)(struct drm_dp_aux *aux,
 			    struct drm_dp_aux_msg *msg);
 };
@@ -607,5 +607,6 @@ int drm_dp_link_configure(struct drm_dp_aux *aux, struct drm_dp_link *link);
 
 int drm_dp_aux_register_i2c_bus(struct drm_dp_aux *aux);
 void drm_dp_aux_unregister_i2c_bus(struct drm_dp_aux *aux);
+void drm_dp_aux_init(struct drm_dp_aux *aux);
 
 #endif /* _DRM_DP_HELPER_H_ */

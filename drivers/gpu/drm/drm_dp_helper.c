@@ -382,7 +382,10 @@ static int drm_dp_dpcd_access(struct drm_dp_aux *aux, u8 request,
 	 * transactions.
 	 */
 	for (retry = 0; retry < 7; retry++) {
+
+		mutex_lock(&aux->hw_mutex);
 		err = aux->transfer(aux, &msg);
+		mutex_unlock(&aux->hw_mutex);
 		if (err < 0) {
 			if (err == -EBUSY)
 				continue;
@@ -596,7 +599,9 @@ static int drm_dp_i2c_do_msg(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
 	 * before giving up the AUX transaction.
 	 */
 	for (retry = 0; retry < 7; retry++) {
+		mutex_lock(&aux->hw_mutex);
 		err = aux->transfer(aux, msg);
+		mutex_unlock(&aux->hw_mutex);
 		if (err < 0) {
 			if (err == -EBUSY)
 				continue;
@@ -761,3 +766,13 @@ void drm_dp_aux_unregister_i2c_bus(struct drm_dp_aux *aux)
 	i2c_del_adapter(&aux->ddc);
 }
 EXPORT_SYMBOL(drm_dp_aux_unregister_i2c_bus);
+
+/**
+ * drm_dp_aux_init() - init a DP aux internal structure.
+ * @aux: DisplayPort AUX channel
+ */
+void drm_dp_aux_init(struct drm_dp_aux *aux)
+{
+	mutex_init(&aux->hw_mutex);
+}
+EXPORT_SYMBOL(drm_dp_aux_init);

@@ -698,6 +698,7 @@ intel_dp_aux_init(struct intel_dp *intel_dp, struct intel_connector *connector)
 	intel_dp->aux.name = name;
 	intel_dp->aux.dev = dev->dev;
 	intel_dp->aux.transfer = intel_dp_aux_transfer;
+	drm_dp_aux_init(&intel_dp->aux);
 
 	DRM_DEBUG_KMS("registering %s bus for %s\n", name,
 		      connector->base.kdev->kobj.name);
