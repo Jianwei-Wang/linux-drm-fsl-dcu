@@ -3211,6 +3211,16 @@ intel_dp_probe_oui(struct intel_dp *intel_dp)
 		DRM_DEBUG_KMS("Branch OUI: %02hx%02hx%02hx\n",
 			      buf[0], buf[1], buf[2]);
 
+	intel_dp->is_apple_vga = false;
+	if (drm_dp_branch_is_apple(buf)) {
+		u8 mybuf[8];
+		if (intel_dp_dpcd_read_wake(&intel_dp->aux, DP_BRANCH_OUI + 3, mybuf, 8)) {
+			if (drm_dp_apple_has_load_detect(mybuf)) {
+				DRM_DEBUG_KMS("detected Apple DP VGA dongle\n");
+				intel_dp->is_apple_vga = true;
+			}
+		}
+	}
 	edp_panel_vdd_off(intel_dp, false);
 }
 
@@ -3442,6 +3452,21 @@ intel_dp_detect_dpcd(struct intel_dp *intel_dp)
 	if (drm_probe_ddc(&intel_dp->aux.ddc))
 		return connector_status_connected;
 
+	if (intel_dp->is_apple_vga) {
+		u8 detect_buf;
+		int ret;
+		ret = drm_dp_dpcd_readb(&intel_dp->aux, DP_APPLE_LOAD_DETECT,
+					&detect_buf);
+
+		if (ret == 1) {
+			DRM_DEBUG_KMS("Apple VGA detect is 0x%x\n", detect_buf);
+			/* I suspect 4 == load, 8 == edid */
+			if (detect_buf)
+				return connector_status_connected;
+			else
+				return connector_status_disconnected;
+		}
+	}
 	/* Well we tried, say unknown for unreliable port types */
 	if (intel_dp->dpcd[DP_DPCD_REV] >= 0x11) {
 		type = intel_dp->downstream_ports[0] & DP_DS_PORT_TYPE_MASK;
@@ -3892,6 +3917,10 @@ intel_dp_hpd_pulse(struct intel_digital_port *intel_dig_port, bool long_hpd)
 			 * but for short hpds we should check it now
 			 */
 			intel_dp_check_link_status(intel_dp);
+
+			/* if we get a short hpd on apple vga - its a hotplug */
+			if (intel_dp->is_apple_vga)
+				return true;
 		}
 	}
 	return false;

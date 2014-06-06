@@ -550,6 +550,7 @@ struct intel_dp {
 	bool use_tps3;
 	bool can_mst; /* this port supports mst */
 	bool is_mst;
+	bool is_apple_vga;
 	int active_mst_links;
 	/* connector directly attached - won't be use for modeset in mst world */
 	struct intel_connector *attached_connector;
