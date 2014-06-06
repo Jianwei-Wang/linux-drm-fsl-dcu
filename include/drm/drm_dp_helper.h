@@ -103,6 +103,10 @@
 #define DP_EDP_CONFIGURATION_CAP            0x00d   /* XXX 1.2? */
 #define DP_TRAINING_AUX_RD_INTERVAL         0x00e   /* XXX 1.2? */
 
+#define DP_ADAPTER_CAP                      0x00f
+# define DP_FORCE_LOAD_SENSE_CAP            (1 << 0)
+# define DP_ALTERNATE_I2C_PATTERN_CAP       (1 << 1)
+
 /* Multiple stream transport */
 #define DP_FAUX_CAP			    0x020   /* 1.2 */
 # define DP_FAUX_CAP_1			    (1 << 0)
