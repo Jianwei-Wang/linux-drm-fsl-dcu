@@ -37,6 +37,7 @@ struct drm_fb_helper;
 struct drm_fb_helper_crtc {
 	struct drm_mode_set mode_set;
 	struct drm_display_mode *desired_mode;
+	int x, y;
 };
 
 struct drm_fb_helper_surface_size {

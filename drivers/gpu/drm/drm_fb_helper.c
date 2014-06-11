@@ -1018,19 +1018,21 @@ static int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper,
 	crtc_count = 0;
 	for (i = 0; i < fb_helper->crtc_count; i++) {
 		struct drm_display_mode *desired_mode;
+		int x, y;
 		desired_mode = fb_helper->crtc_info[i].desired_mode;
-
+		x = fb_helper->crtc_info[i].x;
+		y = fb_helper->crtc_info[i].y;
 		if (desired_mode) {
 			if (gamma_size == 0)
 				gamma_size = fb_helper->crtc_info[i].mode_set.crtc->gamma_size;
-			if (desired_mode->hdisplay < sizes.fb_width)
-				sizes.fb_width = desired_mode->hdisplay;
-			if (desired_mode->vdisplay < sizes.fb_height)
-				sizes.fb_height = desired_mode->vdisplay;
-			if (desired_mode->hdisplay > sizes.surface_width)
-				sizes.surface_width = desired_mode->hdisplay;
-			if (desired_mode->vdisplay > sizes.surface_height)
-				sizes.surface_height = desired_mode->vdisplay;
+			if (desired_mode->hdisplay + x < sizes.fb_width)
+				sizes.fb_width = desired_mode->hdisplay + x;
+			if (desired_mode->vdisplay + y < sizes.fb_height)
+				sizes.fb_height = desired_mode->vdisplay + y;
+			if (desired_mode->hdisplay + x > sizes.surface_width)
+				sizes.surface_width = desired_mode->hdisplay + x;
+			if (desired_mode->vdisplay + y > sizes.surface_height)
+				sizes.surface_height = desired_mode->vdisplay + y;
 			crtc_count++;
 		}
 	}
