@@ -53,6 +53,12 @@ int drm_parse_display_id(struct drm_connector *connector,
 		tile_v_loc = (tile->topo[1] & 0xf) | ((tile->topo[2] & 0x3) << 4);
 		tile_h_loc = (tile->topo[1] >> 4) | (((tile->topo[2] >> 2) & 0x3) << 4);
 
+		connector->has_tile = true;
+		connector->num_h_tile = num_h_tile;
+		connector->num_v_tile = num_v_tile;
+		connector->tile_h_loc = tile_h_loc;
+		connector->tile_v_loc = tile_v_loc;
+
 		printk("tile cap %d\n", tile->tile_cap);
 		printk("tile_size %d x %d\n", w, h);
 		printk("topo num tiles %dx%d, location %dx%d\n",

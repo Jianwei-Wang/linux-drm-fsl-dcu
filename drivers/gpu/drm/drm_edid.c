@@ -3874,6 +3874,8 @@ void drm_get_displayid(struct drm_connector *connector,
 			bool secondary)
 {
 	void *displayid = NULL;
+
+	connector->has_tile = false;
 	displayid = drm_find_displayid_extension(edid);
 	if (!displayid) {
 		return;
