@@ -139,7 +139,7 @@ static int drm_helper_probe_single_connector_modes_merge_bits(struct drm_connect
 			count = (*connector_funcs->get_modes)(connector);
 	}
 
-	if (count == 0 && connector->status == connector_status_connected)
+	if (count == 0 && connector->status == connector_status_connected && !connector->has_tile)
 		count = drm_add_modes_noedid(connector, 1024, 768);
 	if (count == 0)
 		goto prune;
