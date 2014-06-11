@@ -261,19 +261,24 @@ static void intel_dp_mst_enc_get_config(struct intel_encoder *encoder,
 	intel_ddi_clock_get(&intel_dig_port->base, pipe_config);
 }
 
+
 static int intel_dp_mst_get_ddc_modes(struct drm_connector *connector)
 {
 	struct intel_connector *intel_connector = to_intel_connector(connector);
 	struct intel_dp *intel_dp = intel_connector->mst_port;
 	struct edid *edid;
 	int ret;
-
+	int val;
 	edid = drm_dp_mst_get_edid(connector, &intel_dp->mst_mgr, intel_connector->port);
 	if (!edid)
 		return 0;
 
 	ret = intel_connector_update_modes(connector, edid);
 	kfree(edid);
+
+	val = drm_dp_mst_get_base_id(&intel_dp->mst_mgr,
+				     intel_connector->port);
+	ret = drm_mode_connector_set_tile_property(connector, val);
 
 	return ret;
 }
@@ -418,6 +423,8 @@ static struct drm_connector *intel_dp_add_mst_connector(struct drm_dp_mst_topolo
 	intel_dp_add_properties(intel_dp, connector);
 
 	drm_object_attach_property(&connector->base, dev->mode_config.path_property, 0);
+	drm_object_attach_property(&connector->base, dev->mode_config.tile_property, 0);
+
 	drm_mode_connector_set_path_property(connector, pathprop);
 	drm_reinit_primary_mode_group(dev);
 	mutex_lock(&dev->mode_config.mutex);
