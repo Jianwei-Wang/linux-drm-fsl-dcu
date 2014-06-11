@@ -131,6 +131,8 @@ struct drm_dp_mst_branch {
 	struct drm_dp_sideband_msg_tx *tx_slots[2];
 	int last_seqno;
 	bool link_address_sent;
+
+	int conn_base_id;
 };
 
 
@@ -480,6 +482,8 @@ enum drm_connector_status drm_dp_mst_detect_port(struct drm_connector *connector
 
 struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_mst_topology_mgr *mgr, struct drm_dp_mst_port *port);
 
+int drm_dp_mst_get_base_id(struct drm_dp_mst_topology_mgr *mgr,
+			   struct drm_dp_mst_port *port);
 
 int drm_dp_calc_pbn_mode(int clock, int bpp);
 
