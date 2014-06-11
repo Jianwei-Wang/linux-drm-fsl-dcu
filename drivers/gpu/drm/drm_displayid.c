@@ -6,7 +6,8 @@
 #include "drm_edid.h"
 #include "drm_displayid.h"
 
-int drm_parse_display_id(u8 *displayid, int length, bool is_edid_extension)
+int drm_parse_display_id(struct drm_connector *connector,
+			 u8 *displayid, int length, bool is_edid_extension)
 {
 	/* if this is an EDID extension the first byte will be 0x70 */
 	int idx = 0;

@@ -1109,7 +1109,8 @@ extern void drm_set_preferred_mode(struct drm_connector *connector,
 extern int drm_edid_header_is_valid(const u8 *raw_edid);
 extern bool drm_edid_block_valid(u8 *raw_edid, int block, bool print_bad_edid);
 extern bool drm_edid_is_valid(struct edid *edid);
-extern int drm_parse_display_id(u8 *displayid, int length, bool is_edid_extension);
+extern int drm_parse_display_id(struct drm_connector *connector,
+				u8 *displayid, int length, bool is_edid_extension);
 struct drm_display_mode *drm_mode_find_dmt(struct drm_device *dev,
 					   int hsize, int vsize, int fresh,
 					   bool rb);

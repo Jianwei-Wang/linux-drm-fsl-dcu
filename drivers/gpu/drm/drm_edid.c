@@ -3886,7 +3886,7 @@ void drm_get_displayid(struct drm_connector *connector,
 		return;
 	}
 
-	drm_parse_display_id(displayid, EDID_LENGTH, true);
+	drm_parse_display_id(connector, displayid, EDID_LENGTH, true);
 	return;
 }
 EXPORT_SYMBOL(drm_get_displayid);
