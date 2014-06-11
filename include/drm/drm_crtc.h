@@ -564,6 +564,12 @@ struct drm_connector {
 	unsigned bad_edid_counter;
 
 	struct dentry *debugfs_entry;
+
+	/* DisplayID bits */
+	bool has_tile;
+	uint32_t tile_group_id;
+	uint8_t num_h_tile, num_v_tile;
+	uint8_t tile_h_loc, tile_v_loc;
 };
 
 /**
