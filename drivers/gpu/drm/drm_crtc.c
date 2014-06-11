@@ -1235,6 +1235,11 @@ static int drm_mode_create_standard_connector_properties(struct drm_device *dev)
 				       "PATH", 0);
 	dev->mode_config.path_property = dev_path;
 
+	dev->mode_config.tile_property = drm_property_create(dev,
+							     DRM_MODE_PROP_BLOB |
+							     DRM_MODE_PROP_IMMUTABLE,
+							     "TILE", 0);
+
 	return 0;
 }
 
@@ -3737,6 +3742,38 @@ int drm_mode_connector_set_path_property(struct drm_connector *connector,
 	return ret;
 }
 EXPORT_SYMBOL(drm_mode_connector_set_path_property);
+
+int drm_mode_connector_set_tile_property(struct drm_connector *connector, int conn_base_id)
+{
+	struct drm_device *dev = connector->dev;
+	int ret, size;
+	char tile[256];
+
+	if (connector->tile_blob_ptr)
+		drm_property_destroy_blob(dev, connector->tile_blob_ptr);  
+
+	if (!connector->has_tile || conn_base_id == 0 ) {
+		connector->tile_blob_ptr = NULL;
+		ret = drm_object_property_set_value(&connector->base,
+						    dev->mode_config.tile_property, 0);
+		return ret;
+	}
+
+	snprintf(tile, 256, "%d:%d:%d:%d:%d:%d", 0, conn_base_id, connector->num_h_tile, connector->num_v_tile, connector->tile_h_loc, connector->tile_v_loc);
+	size = strlen(tile) + 1;
+
+	connector->tile_group_id = conn_base_id;
+	connector->tile_blob_ptr = drm_property_create_blob(connector->dev,
+							    size, tile);
+	if (!connector->tile_blob_ptr)
+		return -EINVAL;
+
+	ret = drm_object_property_set_value(&connector->base,
+					    dev->mode_config.tile_property,
+					    connector->tile_blob_ptr->base.id);
+	return ret;
+}
+EXPORT_SYMBOL(drm_mode_connector_set_tile_property);
 
 /**
  * drm_mode_connector_update_edid_property - update the edid property of a connector
