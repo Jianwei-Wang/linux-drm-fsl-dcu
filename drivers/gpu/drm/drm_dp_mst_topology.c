@@ -778,14 +778,14 @@ out:
 	return ret;
 }
 
-static struct drm_dp_mst_branch *drm_dp_add_mst_branch_device(u8 lct, u8 *rad)
+static struct drm_dp_mst_branch *drm_dp_add_mst_branch_device(u8 lct, u8 *rad, u8 conn_base_id)
 {
 	struct drm_dp_mst_branch *mstb;
 
 	mstb = kzalloc(sizeof(*mstb), GFP_KERNEL);
 	if (!mstb)
 		return NULL;
-
+	mstb->conn_base_id = conn_base_id;
 	mstb->lct = lct;
 	if (lct > 1)
 		memcpy(mstb->rad, rad, lct / 2);
@@ -983,7 +983,7 @@ static bool drm_dp_port_setup_pdt(struct drm_dp_mst_port *port)
 	case DP_PEER_DEVICE_MST_BRANCHING:
 		lct = drm_dp_calculate_rad(port, rad);
 
-		port->mstb = drm_dp_add_mst_branch_device(lct, rad);
+		port->mstb = drm_dp_add_mst_branch_device(lct, rad, 0);
 		port->mstb->mgr = port->mgr;
 		port->mstb->port_parent = port;
 
@@ -1097,6 +1097,9 @@ static void drm_dp_add_port(struct drm_dp_mst_branch *mstb,
 		build_mst_prop_path(port, mstb, proppath);
 		port->connector = (*mstb->mgr->cbs->add_connector)(mstb->mgr, port, proppath);
 
+		if (port->mstb) {
+			port->mstb->conn_base_id = port->connector->base.id;
+		}
 		if (port->port_num >= 8)
 			port->cached_edid = drm_get_edid(port->connector, &port->aux.ddc);
 	}
@@ -1849,7 +1852,7 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 		mgr->avail_slots = mgr->total_slots;
 
 		/* add initial branch device at LCT 1 */
-		mstb = drm_dp_add_mst_branch_device(1, NULL);
+		mstb = drm_dp_add_mst_branch_device(1, NULL, mgr->conn_base_id);
 		if (mstb == NULL) {
 			ret = -ENOMEM;
 			goto out_unlock;
@@ -2216,6 +2219,25 @@ struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_
 }
 EXPORT_SYMBOL(drm_dp_mst_get_edid);
 
+int drm_dp_mst_get_base_id(struct drm_dp_mst_topology_mgr *mgr,
+			   struct drm_dp_mst_port *port)
+{
+	int val;
+	/* we need to search for the port in the mgr in case its gone */
+	port = drm_dp_get_validated_port_ref(mgr, port);
+	if (!port)
+		return 0;
+
+	if (!port->parent) {
+		drm_dp_put_port(port);
+		return 0;
+	}
+
+	val = port->parent->conn_base_id;
+	drm_dp_put_port(port);
+	return val;
+}
+EXPORT_SYMBOL(drm_dp_mst_get_base_id);
 /**
  * drm_dp_find_vcpi_slots() - find slots for this PBN value
  * @mgr: manager to use
