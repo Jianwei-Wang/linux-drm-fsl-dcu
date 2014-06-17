@@ -381,7 +381,7 @@ static int drm_dp_dpcd_access(struct drm_dp_aux *aux, u8 request,
 	 * retry native transactions, so retry 7 times like for I2C-over-AUX
 	 * transactions.
 	 */
-	for (retry = 0; retry < 7; retry++) {
+	for (retry = 0; retry < 16; retry++) {
 
 		mutex_lock(&aux->hw_mutex);
 		err = aux->transfer(aux, &msg);
