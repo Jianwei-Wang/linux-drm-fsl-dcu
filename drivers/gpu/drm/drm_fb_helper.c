@@ -1407,6 +1407,38 @@ static bool drm_target_cloned(struct drm_fb_helper *fb_helper,
 	return false;
 }
 
+static int drm_get_tile_offsets(struct drm_fb_helper *fb_helper,
+				struct drm_display_mode **modes,
+				struct drm_fb_offset *offsets,
+				int idx,
+				int h_idx, int v_idx)
+{
+	struct drm_fb_helper_connector *fb_helper_conn;
+	int i, tile;
+	int hoffset = 0, voffset = 0;
+
+	for (i = 0; i < fb_helper->connector_count; i++) {
+		fb_helper_conn = fb_helper->connector_info[i];
+		if (!fb_helper_conn->connector->has_tile)
+			continue;
+
+		if (!modes[i] && (h_idx || v_idx)) {
+			DRM_DEBUG_KMS("no modes for connector tiled %d %d\n", i, 
+				      fb_helper_conn->connector->base.id);
+			continue;
+		}
+		if (fb_helper_conn->connector->tile_h_loc < h_idx)
+			hoffset += modes[i]->hdisplay;
+
+		if (fb_helper_conn->connector->tile_v_loc < v_idx)
+			voffset += modes[i]->vdisplay;
+	}
+	offsets[idx].x = hoffset;
+	offsets[idx].y = voffset;
+	DRM_DEBUG_KMS("returned %d %d for %d %d\n", hoffset, voffset, h_idx, v_idx);
+	return 0;
+}
+
 static bool drm_target_preferred(struct drm_fb_helper *fb_helper,
 				 struct drm_display_mode **modes,
 				 struct drm_fb_offset *offsets,
@@ -1433,14 +1465,21 @@ retry:
 		if (tile_pass == 0 && fb_helper_conn->connector->has_tile)
 			continue;
 
-		if (tile_pass) {
+		if (tile_pass == 1) {
+			if (fb_helper_conn->connector->tile_h_loc != 0 ||
+			    fb_helper_conn->connector->tile_v_loc != 0)
+				continue;
+
+		} else {
+			if (fb_helper_conn->connector->tile_h_loc != tile_pass -1 &&
+			    fb_helper_conn->connector->tile_v_loc != tile_pass - 1)
 			/* if this tile_pass doesn't cover any of the tiles - keep going */
-			if (fb_helper_conn->connector->tile_h_loc != (tile_pass - 1) &&
-			    fb_helper_conn->connector->tile_v_loc != (tile_pass - 1))
 				continue;
 
 			/* find the tile offsets for this pass - need
 			   to find all tiles left and above */
+			drm_get_tile_offsets(fb_helper, modes, offsets,
+					     i, fb_helper_conn->connector->tile_h_loc, fb_helper_conn->connector->tile_v_loc);
 		}
 		DRM_DEBUG_KMS("looking for cmdline mode on connector %d\n",
 			      fb_helper_conn->connector->base.id);
