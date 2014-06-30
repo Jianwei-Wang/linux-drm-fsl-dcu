@@ -102,6 +102,10 @@ static void intel_mst_disable_dp(struct intel_encoder *encoder)
 	}
 }
 
+static void intel_dp_mst_mode_set(struct intel_encoder *encoder)
+{
+}
+
 static void intel_mst_post_disable_dp(struct intel_encoder *encoder)
 {
 	struct intel_dp_mst_encoder *intel_mst = enc_to_mst(&encoder->base);
@@ -476,6 +480,7 @@ intel_dp_create_fake_mst_encoder(struct intel_digital_port *intel_dig_port, enum
 	intel_encoder->cloneable = 0;
 
 	intel_encoder->compute_config = intel_dp_mst_compute_config;
+	intel_encoder->mode_set = intel_dp_mst_mode_set;
 	intel_encoder->disable = intel_mst_disable_dp;
 	intel_encoder->post_disable = intel_mst_post_disable_dp;
 	intel_encoder->pre_enable = intel_mst_pre_enable_dp;
