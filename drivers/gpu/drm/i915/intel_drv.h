@@ -573,7 +573,6 @@ struct intel_dp {
 	} drrs_state;
 
 	/* mst connector list */
-	struct intel_connector *mst_connectors;
 	struct intel_dp_mst_encoder *mst_encoders[I915_MAX_PIPES];
 	struct drm_dp_mst_topology_mgr mst_mgr;
 
