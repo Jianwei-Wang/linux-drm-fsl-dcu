@@ -752,7 +752,11 @@ static int drm_dp_mst_wait_tx_reply(struct drm_dp_mst_branch *mstb,
 
 		if (txmsg->state == DRM_DP_SIDEBAND_TX_START_SEND ||
 		    txmsg->state == DRM_DP_SIDEBAND_TX_SENT) {
-			mstb->tx_slots[txmsg->seqno] = NULL;
+			if (txmsg->path_msg) {
+				mstb->mgr->path_slot = NULL;
+			} else {
+				mstb->tx_slots[txmsg->seqno] = NULL;
+			}
 		}
 	}
 out:
@@ -1259,6 +1263,15 @@ static int set_hdr_from_dst_qlock(struct drm_dp_sideband_msg_hdr *hdr,
 	struct drm_dp_mst_branch *mstb = txmsg->dst;
 
 	/* both msg slots are full */
+	if (txmsg->path_msg) {
+		txmsg->seqno = 0;
+		if (mstb->mgr->path_slot) {
+			DRM_DEBUG_KMS("%s: failed to find path slot\n", __func__);
+			return -EAGAIN;
+		}
+		mstb->mgr->path_slot = txmsg;
+	}
+
 	if (txmsg->seqno == -1) {
 		if (mstb->tx_slots[0] && mstb->tx_slots[1]) {
 			DRM_DEBUG_KMS("%s: failed to find slot\n", __func__);
@@ -1360,7 +1373,7 @@ static void process_single_down_tx_qlock(struct drm_dp_mst_topology_mgr *mgr)
 	} else if (ret) {
 		DRM_DEBUG_KMS("failed to send msg in q %d\n", ret);
 		list_del(&txmsg->next);
-		if (txmsg->seqno != -1)
+		if (txmsg->seqno != -1 && !txmsg->path_msg)
 			txmsg->dst->tx_slots[txmsg->seqno] = NULL;
 		txmsg->state = DRM_DP_SIDEBAND_TX_TIMEOUT;
 		wake_up(&mgr->tx_waitq);
@@ -1982,24 +1995,33 @@ static int drm_dp_mst_handle_down_rep(struct drm_dp_mst_topology_mgr *mgr)
 
 	if (mgr->down_rep_recv.have_eomt) {
 		struct drm_dp_sideband_msg_tx *txmsg;
-		struct drm_dp_mst_branch *mstb;
+		struct drm_dp_mst_branch *mstb = NULL;
 		int slot = -1;
-		mstb = drm_dp_get_mst_branch_device(mgr,
-						    mgr->down_rep_recv.initial_hdr.lct,
-						    mgr->down_rep_recv.initial_hdr.rad);
 
-		if (!mstb) {
-			DRM_DEBUG_KMS("Got MST reply from unknown device %d\n", mgr->down_rep_recv.initial_hdr.lct);
-			memset(&mgr->down_rep_recv, 0, sizeof(struct drm_dp_sideband_msg_rx));
-			return 0;
+		if (!mgr->down_rep_recv.initial_hdr.path_msg) {
+			mstb = drm_dp_get_mst_branch_device(mgr,
+							    mgr->down_rep_recv.initial_hdr.lct,
+							    mgr->down_rep_recv.initial_hdr.rad);
+
+			if (!mstb) {
+				DRM_DEBUG_KMS("Got MST reply from unknown device %d\n", mgr->down_rep_recv.initial_hdr.lct);
+				memset(&mgr->down_rep_recv, 0, sizeof(struct drm_dp_sideband_msg_rx));
+				return 0;
+			}
 		}
 
 		/* find the message */
-		slot = mgr->down_rep_recv.initial_hdr.seqno;
-		mutex_lock(&mgr->qlock);
-		txmsg = mstb->tx_slots[slot];
-		/* remove from slots */
-		mutex_unlock(&mgr->qlock);
+		if (mgr->down_rep_recv.initial_hdr.path_msg) {
+			mutex_lock(&mgr->qlock);
+			txmsg = mgr->path_slot;
+			mutex_unlock(&mgr->qlock);
+		} else {
+			slot = mgr->down_rep_recv.initial_hdr.seqno;
+			mutex_lock(&mgr->qlock);
+			txmsg = mstb->tx_slots[slot];
+			/* remove from slots */
+			mutex_unlock(&mgr->qlock);
+		}
 
 		if (!txmsg) {
 			DRM_DEBUG_KMS("Got MST reply with no msg %p %d %d %02x %02x\n",
@@ -2008,7 +2030,8 @@ static int drm_dp_mst_handle_down_rep(struct drm_dp_mst_topology_mgr *mgr)
 			       mgr->down_rep_recv.initial_hdr.lct,
 				      mgr->down_rep_recv.initial_hdr.rad[0],
 				      mgr->down_rep_recv.msg[0]);
-			drm_dp_put_mst_branch_device(mstb);
+			if (mstb)
+				drm_dp_put_mst_branch_device(mstb);
 			memset(&mgr->down_rep_recv, 0, sizeof(struct drm_dp_sideband_msg_rx));
 			return 0;
 		}
@@ -2019,11 +2042,15 @@ static int drm_dp_mst_handle_down_rep(struct drm_dp_mst_topology_mgr *mgr)
 		}
 
 		memset(&mgr->down_rep_recv, 0, sizeof(struct drm_dp_sideband_msg_rx));
-		drm_dp_put_mst_branch_device(mstb);
+		if (mstb)
+			drm_dp_put_mst_branch_device(mstb);
 
 		mutex_lock(&mgr->qlock);
 		txmsg->state = DRM_DP_SIDEBAND_TX_RX;
-		mstb->tx_slots[slot] = NULL;
+		if (txmsg->path_msg)
+			mgr->path_slot = NULL;
+		else
+			mstb->tx_slots[slot] = NULL;
 		mutex_unlock(&mgr->qlock);
 
 		wake_up(&mgr->tx_waitq);

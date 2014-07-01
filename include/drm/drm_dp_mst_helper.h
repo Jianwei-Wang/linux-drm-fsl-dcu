@@ -450,6 +450,7 @@ struct drm_dp_mst_topology_mgr {
 	struct list_head tx_msg_upq;
 	bool tx_down_in_progress;
 	bool tx_up_in_progress;
+	struct drm_dp_sideband_msg_tx *path_slot;
 
 	/* payload info + lock for it */
 	struct mutex payload_lock;
