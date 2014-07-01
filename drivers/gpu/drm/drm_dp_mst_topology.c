@@ -1629,7 +1629,12 @@ int drm_dp_update_payload_part1(struct drm_dp_mst_topology_mgr *mgr)
 			/* need to push an update for this payload */
 			if (req_payload.num_slots) {
 				drm_dp_create_payload_step1(mgr, i + 1, &req_payload);
-				mgr->payloads[i].num_slots = req_payload.num_slots;
+				/* if the remote has same slots then do nothing -
+				 * remotes don't have start slots */
+				if (req_payload.num_slots == mgr->payloads[i].num_slots)
+					req_payload.payload_state = DP_PAYLOAD_REMOTE;
+				else
+					mgr->payloads[i].num_slots = req_payload.num_slots;
 			} else if (mgr->payloads[i].num_slots) {
 				mgr->payloads[i].num_slots = 0;
 				drm_dp_destroy_payload_step1(mgr, port, i + 1, &mgr->payloads[i]);
