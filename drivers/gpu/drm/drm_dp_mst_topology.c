@@ -1055,7 +1055,7 @@ static void drm_dp_add_port(struct drm_dp_mst_branch *mstb,
 	if (created) {
 		mutex_lock(&mstb->mgr->lock);
 		kref_get(&port->kref);
-		list_add(&port->next, &mstb->ports);
+		list_add_tail(&port->next, &mstb->ports);
 		mutex_unlock(&mstb->mgr->lock);
 	}
 
