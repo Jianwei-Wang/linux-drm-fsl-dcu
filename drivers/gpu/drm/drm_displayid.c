@@ -20,8 +20,8 @@ int drm_parse_display_id(struct drm_connector *connector,
 
 	base = (struct displayid_hdr *)&displayid[idx];
 
-	printk("base revision 0x%x, length %d, %d %d\n",
-	       base->rev, base->bytes, base->prod_id, base->ext_count);
+//	printk("base revision 0x%x, length %d, %d %d\n",
+//	       base->rev, base->bytes, base->prod_id, base->ext_count);
 
 	if (base->bytes + 5 > length - idx)
 		return -EINVAL;
@@ -35,8 +35,8 @@ int drm_parse_display_id(struct drm_connector *connector,
 	}
 
 	block = (struct displayid_block *)&displayid[idx + 4];
-	printk("block id %d, rev %d, len %d\n", 
-	       block->tag, block->rev, block->num_bytes);
+//	printk("block id %d, rev %d, len %d\n", 
+//	       block->tag, block->rev, block->num_bytes);
 
 	switch (block->tag) {
 	case DATA_BLOCK_TILED_DISPLAY: {
@@ -58,12 +58,13 @@ int drm_parse_display_id(struct drm_connector *connector,
 		connector->num_v_tile = num_v_tile;
 		connector->tile_h_loc = tile_h_loc;
 		connector->tile_v_loc = tile_v_loc;
-
+#if 0
 		printk("tile cap %d\n", tile->tile_cap);
 		printk("tile_size %d x %d\n", w, h);
 		printk("topo num tiles %dx%d, location %dx%d\n",
 		       num_h_tile, num_v_tile, tile_h_loc, tile_v_loc);
 		printk("vend %c%c%c\n", tile->topology_id[0], tile->topology_id[1], tile->topology_id[2]);
+#endif
 	}
 		break;
 	default:
