@@ -1609,6 +1609,7 @@ int drm_dp_update_payload_part1(struct drm_dp_mst_topology_mgr *mgr)
 	int cur_slots = 1;
 	struct drm_dp_payload req_payload;
 	struct drm_dp_mst_port *port;
+	bool moved_up;
 
 	mutex_lock(&mgr->payload_lock);
 	for (i = 0; i < mgr->max_payloads; i++) {
@@ -1622,16 +1623,22 @@ int drm_dp_update_payload_part1(struct drm_dp_mst_topology_mgr *mgr)
 			port = NULL;
 			req_payload.num_slots = 0;
 		}
-		/* work out what is required to happen with this payload */
-		if (mgr->payloads[i].start_slot != req_payload.start_slot ||
-		    mgr->payloads[i].num_slots != req_payload.num_slots) {
 
+		moved_up = false;
+		if (mgr->payloads[i].start_slot != req_payload.start_slot) {
+			if (req_payload.start_slot > mgr->payloads[i].start_slot)
+				moved_up = true;
+			mgr->payloads[i].start_slot = req_payload.start_slot;
+		}
+
+		/* work out what is required to happen with this payload */
+		if (moved_up || mgr->payloads[i].num_slots != req_payload.num_slots) {
 			/* need to push an update for this payload */
 			if (req_payload.num_slots) {
 				drm_dp_create_payload_step1(mgr, i + 1, &req_payload);
-				/* if the remote has same slots then do nothing -
-				 * remotes don't have start slots */
-				if (req_payload.num_slots == mgr->payloads[i].num_slots)
+				/* if the remote has same slots then do nothing - 
+				 remotes don't have start slots */
+				if (mgr->payloads[i].num_slots == req_payload.num_slots)
 					req_payload.payload_state = DP_PAYLOAD_REMOTE;
 				else
 					mgr->payloads[i].num_slots = req_payload.num_slots;
@@ -1642,7 +1649,6 @@ int drm_dp_update_payload_part1(struct drm_dp_mst_topology_mgr *mgr)
 			} else
 				req_payload.payload_state = 0;
 
-			mgr->payloads[i].start_slot = req_payload.start_slot;
 			mgr->payloads[i].payload_state = req_payload.payload_state;
 		}
 		cur_slots += req_payload.num_slots;
