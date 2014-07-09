@@ -508,13 +508,13 @@ int virtgpu_cmd_get_display_info(struct virtgpu_device *vgdev)
 
 int virtgpu_cmd_get_3d_caps(struct virtgpu_device *vgdev)
 {
-	struct virtgpu_cmd_hdr *cmd_p;
+	struct virtgpu_cmd_get_cap *cmd_p;
 	struct virtgpu_vbuffer *vbuf;
 
-	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_caps_info_cb, &vbuf, sizeof(cmd_p), sizeof(struct virtgpu_resp_caps));
-	memset(cmd_p, 0, sizeof(*cmd_p));
+	cmd_p = virtgpu_alloc_cmd_resp(vgdev, &virtgpu_cmd_get_caps_info_cb, &vbuf, sizeof(*cmd_p), sizeof(struct virtgpu_resp_caps));
 
-	cmd_p->type = VIRTGPU_CMD_GET_CAPS;
+	memset(cmd_p, 0, sizeof(*cmd_p));
+	cmd_p->hdr.type = VIRTGPU_CMD_GET_CAPS;
 	virtgpu_queue_ctrl_buffer(vgdev, vbuf);
 	return 0;
 
