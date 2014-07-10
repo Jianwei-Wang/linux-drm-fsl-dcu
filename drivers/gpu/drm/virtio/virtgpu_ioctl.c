@@ -257,13 +257,19 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	if (size == 0)
 		size = PAGE_SIZE;
 
-	ret = virtgpu_gem_create(file_priv, dev,
-				 size,
-				 &obj, &handle);
-	if (ret)
+	qobj = virtgpu_alloc_object(dev, size, false, false);
+	if (IS_ERR(qobj)) {
+		ret = PTR_ERR(qobj);
 		goto fail_id;
-
-	qobj = gem_to_virtgpu_obj(obj);
+	}
+#if 0
+	//	ret = virtgpu_gem_create(file_priv, dev,
+	//				 size,
+	//		 &obj, &handle);
+//	if (ret)
+//		goto fail_id;
+#endif
+	obj = &qobj->gem_base;
 
 	if (!vgdev->has_virgl_3d) {
 		ret = virtgpu_cmd_create_resource(vgdev, res_id,
@@ -305,7 +311,14 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	}
 
 	qobj->hw_res_handle = res_id;
-//	qobj->stride = rc->stride;
+	
+	ret = drm_gem_handle_create(file_priv, obj, &handle);
+	if (ret) {
+		drm_gem_object_release(obj);
+		return ret;
+	}
+	drm_gem_object_unreference_unlocked(obj);
+
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
 
