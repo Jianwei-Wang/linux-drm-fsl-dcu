@@ -124,7 +124,12 @@ static int virtgpu_crtc_cursor_set(struct drm_crtc *crtc,
 	ret = virtgpu_cmd_transfer_to_host_2d(vgdev, qobj->hw_res_handle,
 					      0, 64, 64, 0, 0, vgdev->has_fence ? &fence : NULL);
 	if (!ret && vgdev->has_fence) {
+		struct virtgpu_fence *old_fence = qobj->tbo.sync_obj;
+
 		qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
+		virtgpu_fence_unref(&fence);
+		virtgpu_fence_unref(&old_fence);
+
 		virtgpu_object_wait(qobj, false);
 	}
 	{

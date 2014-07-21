@@ -164,6 +164,7 @@ int virtgpu_execbuffer(struct drm_device *dev,
 	/* fence the command bo */
 	virtgpu_unref_list(&validate_list);
 	drm_free_large(buflist);
+	virtgpu_fence_unref(&fence);
 	return 0;
 out_unresv:
 	ttm_eu_backoff_reservation(&ticket, &validate_list);
@@ -314,7 +315,12 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	
 	ret = drm_gem_handle_create(file_priv, obj, &handle);
 	if (ret) {
+
 		drm_gem_object_release(obj);
+		if (vgdev->has_virgl_3d) {
+			virtgpu_unref_list(&validate_list);
+			virtgpu_fence_unref(&fence);
+		}
 		return ret;
 	}
 	drm_gem_object_unreference_unlocked(obj);
@@ -322,14 +328,16 @@ static int virtgpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	rc->res_handle = res_id; /* similiar to a VM address */
 	rc->bo_handle = handle;
 
-	if (vgdev->has_virgl_3d)
+	if (vgdev->has_virgl_3d) {
 		virtgpu_unref_list(&validate_list);
-
-
+		virtgpu_fence_unref(&fence);
+	}
 	return 0;
 fail_unref:
-	if (vgdev->has_virgl_3d)
+	if (vgdev->has_virgl_3d) {
 		virtgpu_unref_list(&validate_list);
+		virtgpu_fence_unref(&fence);
+	}
 fail_obj:
 //	drm_gem_object_handle_unreference_unlocked(obj);
 fail_id:
@@ -394,8 +402,13 @@ static int virtgpu_transfer_from_host_ioctl(struct drm_device *dev, void *data,
 						vfpriv->ctx_id, offset,
 						args->level, &box, vgdev->has_fence ? &fence : NULL);
 
-	if (!ret && vgdev->has_fence)
+	if (!ret && vgdev->has_fence) {
+		struct virtgpu_fence *old_fence = qobj->tbo.sync_obj;
+
 		qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
+		virtgpu_fence_unref(&fence);
+		virtgpu_fence_unref(&old_fence);
+	}
 	
 out_unres:
 	virtgpu_object_unreserve(qobj);
@@ -442,8 +455,12 @@ static int virtgpu_transfer_to_host_ioctl(struct drm_device *dev, void *data,
 		ret = virtgpu_cmd_transfer_to_host_3d(vgdev, qobj->hw_res_handle,
 						      vfpriv ? vfpriv->ctx_id : 0, offset,
 						      args->level, &box, &fence);
-		if (!ret)
+		if (!ret) {
+			struct virtgpu_fence *old_fence = qobj->tbo.sync_obj;
 			qobj->tbo.sync_obj = vgdev->mman.bdev.driver->sync_obj_ref(fence);
+			virtgpu_fence_unref(&fence);
+			virtgpu_fence_unref(&old_fence);
+		}
 	}
 
 out_unres:
