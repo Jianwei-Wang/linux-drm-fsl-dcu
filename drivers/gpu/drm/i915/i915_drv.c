@@ -518,9 +518,6 @@ static int i915_drm_freeze(struct drm_device *dev)
 
 		flush_delayed_work(&dev_priv->rps.delayed_resume_work);
 
-
-		intel_suspend_gt_powersave(dev);
-
 		/*
 		 * Disable CRTCs directly since we want to preserve sw state
 		 * for _thaw.
@@ -533,6 +530,8 @@ static int i915_drm_freeze(struct drm_device *dev)
 
 		intel_dp_mst_suspend(dev);
 		intel_runtime_pm_disable_interrupts(dev);
+
+		intel_suspend_gt_powersave(dev);
 
 		intel_modeset_suspend_hw(dev);
 	}
