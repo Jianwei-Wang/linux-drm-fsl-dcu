@@ -1325,8 +1325,6 @@ static void intel_ddi_pre_enable(struct intel_encoder *intel_encoder)
 
 	if (type == INTEL_OUTPUT_DISPLAYPORT || type == INTEL_OUTPUT_EDP) {
 		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
-		struct intel_digital_port *intel_dig_port =
-			enc_to_dig_port(encoder);
 
 		intel_ddi_init_dp_buf_reg(intel_encoder);
 
