@@ -50,6 +50,7 @@ struct i915_params i915 __read_mostly = {
 	.disable_vtd_wa = 0,
 	.use_mmio_flip = 0,
 	.mmio_debug = 0,
+	.dp_mst = IS_ENABLED(CONFIG_DRM_I915_DP_MST),
 };
 
 module_param_named(modeset, i915.modeset, int, 0400);
@@ -167,3 +168,7 @@ module_param_named(mmio_debug, i915.mmio_debug, bool, 0600);
 MODULE_PARM_DESC(mmio_debug,
 	"Enable the MMIO debug code (default: false). This may negatively "
 	"affect performance.");
+
+module_param_named(dp_mst, i915.dp_mst, bool, 0600);
+MODULE_PARM_DESC(dp_mst,
+	"Enable DP MST support (1=enabled, 0=disabled, default depends on CONFIG_DRM_I915_DP_MST.");

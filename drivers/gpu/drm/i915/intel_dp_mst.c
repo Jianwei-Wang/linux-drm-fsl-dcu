@@ -522,6 +522,9 @@ intel_dp_mst_encoder_init(struct intel_digital_port *intel_dig_port, int conn_ba
 	struct drm_device *dev = intel_dig_port->base.base.dev;
 	int ret;
 
+	if (i915.dp_mst == false)
+		return 0;
+
 	intel_dp->can_mst = true;
 	intel_dp->mst_mgr.cbs = &mst_cbs;
 

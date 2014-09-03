@@ -69,3 +69,13 @@ config DRM_I915_PRELIMINARY_HW_SUPPORT
 	  option changes the default for that module option.
 
 	  If in doubt, say "N".
+
+config DRM_I915_DP_MST
+	bool "Enable DisplayPort 1.2 MST support by default"
+	depends on DRM_I915
+	default n
+	help
+	  Choose this option if you want to support DP 1.2 MST and have a new
+          enough userspace to use it. DP 1.2 MST is required for multi-head
+          support on many laptop docks when combined with Haswell or later
+          chipsets.

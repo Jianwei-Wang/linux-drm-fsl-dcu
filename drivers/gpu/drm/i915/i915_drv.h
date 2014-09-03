@@ -2149,6 +2149,7 @@ struct i915_params {
 	bool disable_vtd_wa;
 	int use_mmio_flip;
 	bool mmio_debug;
+	bool dp_mst;
 };
 extern struct i915_params i915 __read_mostly;
 
