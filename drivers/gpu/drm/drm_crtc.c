@@ -2506,6 +2506,93 @@ int drm_crtc_check_viewport(const struct drm_crtc *crtc,
 }
 EXPORT_SYMBOL(drm_crtc_check_viewport);
 
+/* tiled variants */
+static int drm_mode_setcrtc_tiled(struct drm_mode_set *orig_set)
+{
+	struct drm_device *dev = orig_set->crtc->dev;
+	struct drm_mode_set set[2];
+	struct drm_crtc *crtc2, *pick_crtc = NULL;
+	struct drm_connector *connector, *pick_conn[2];
+	struct drm_display_mode *cur_mode, *pick_modes[2];
+	int ret;
+
+	/* first up we need to find another crtc to use */
+	list_for_each_entry(crtc2, &dev->mode_config.crtc_list, head) {
+		if (crtc2 == orig_set->crtc)
+			continue;
+		if (crtc2->enabled)
+			continue;
+		pick_crtc = crtc2;
+		break;
+	}
+
+	if (pick_crtc == NULL) {
+		DRM_DEBUG_KMS("unable to located second CRTC for tiling\n");
+		return -EINVAL;
+	}
+
+	pick_conn[0] = orig_set->connectors[0];
+	pick_conn[1] = NULL;
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		if (!connector->has_tile)
+			continue;
+
+		if (connector == pick_conn[0])
+			continue;
+
+		if (connector->tile_group_id != pick_conn[0]->tile_group_id)
+			continue;
+
+		pick_conn[1] = connector;
+	}
+
+	DRM_DEBUG_KMS("picked connectors %x and %x from tgid %d\n", pick_conn[0]->base.id,
+		      pick_conn[1]->base.id, pick_conn[0]->tile_group_id);
+	if (pick_conn[1] == NULL) {
+		DRM_DEBUG_KMS("unable to located second connector for tiling %d\n", pick_conn[0]->tile_group_id);
+		return -EINVAL;
+	}
+
+	pick_modes[0] = pick_modes[1] = NULL;
+	list_for_each_entry(cur_mode, &pick_conn[0]->modes, head) {
+		DRM_DEBUG_KMS("trying %d %d\n", cur_mode->hdisplay, cur_mode->vdisplay);
+		if (cur_mode->hdisplay == pick_conn[1]->tile_h_size + 1 &&
+		    cur_mode->vdisplay == pick_conn[1]->tile_v_size + 1) {
+			pick_modes[0] = pick_modes[1] = cur_mode;
+			break;
+		}
+	}
+	if (pick_modes[0] == NULL) {
+		DRM_DEBUG_KMS("unable to locate second mode for tiling %d %d\n", pick_conn[1]->tile_h_size, pick_conn[1]->tile_v_size);
+		return -EINVAL;
+	}
+
+	set[0].fb = set[1].fb = orig_set->fb;
+
+	set[0].crtc = orig_set->crtc;
+	set[1].crtc = pick_crtc;
+
+	set[0].connectors = &pick_conn[0];
+	set[0].num_connectors = 1;
+
+	set[1].connectors = &pick_conn[1];
+	set[1].num_connectors = 1;
+
+	set[0].x = orig_set->x;
+	set[0].y = orig_set->y;
+	set[1].x = orig_set->x + ((pick_conn[1]->tile_h_loc == 1) ? pick_conn[0]->tile_h_size + 1 : 0);
+	set[1].y = orig_set->y + ((pick_conn[1]->tile_v_loc == 1) ? pick_conn[0]->tile_v_size + 1 : 0);
+
+	/* find a mode to use on each head */
+	set[0].mode = pick_modes[0];
+	set[1].mode = pick_modes[1];
+
+	ret = drm_mode_set_config_internal(&set[0]);
+
+	ret = drm_mode_set_config_internal(&set[1]);
+
+	return ret;
+}
 /**
  * drm_mode_setcrtc - set CRTC configuration
  * @dev: drm device for the ioctl
@@ -2532,6 +2619,7 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 	uint32_t __user *set_connectors_ptr;
 	int ret;
 	int i;
+	int num_tiles = 1;
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EINVAL;
@@ -2640,6 +2728,12 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 					connector->base.id,
 					connector->name);
 
+			if (crtc_req->count_connectors == 1) {
+				if (connector->has_tile && connector->tile_is_single_monitor) {
+					if (mode->hdisplay > connector->tile_h_size || mode->vdisplay > connector->tile_v_size)
+						num_tiles = 2;
+				}
+			}
 			connector_set[i] = connector;
 		}
 	}
@@ -2651,7 +2745,11 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 	set.connectors = connector_set;
 	set.num_connectors = crtc_req->count_connectors;
 	set.fb = fb;
-	ret = drm_mode_set_config_internal(&set);
+
+	if (num_tiles > 1) {
+		ret = drm_mode_setcrtc_tiled(&set);
+	} else
+		ret = drm_mode_set_config_internal(&set);
 
 out:
 	if (fb)

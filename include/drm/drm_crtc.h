@@ -567,9 +567,11 @@ struct drm_connector {
 
 	/* DisplayID bits */
 	bool has_tile;
+	bool tile_is_single_monitor;
 	uint32_t tile_group_id;
 	uint8_t num_h_tile, num_v_tile;
 	uint8_t tile_h_loc, tile_v_loc;
+	uint16_t tile_h_size, tile_v_size;
 };
 
 /**

@@ -42,7 +42,28 @@ int intel_connector_update_modes(struct drm_connector *connector,
 	int ret;
 
 	drm_mode_connector_update_edid_property(connector, edid);
+
 	ret = drm_add_edid_modes(connector, edid);
+	if (ret < 0)
+		return ret;
+
+	if (connector->has_tile && connector->tile_is_single_monitor) {
+		if (connector->tile_h_loc == 0 && connector->tile_v_loc == 0) {
+			struct drm_display_mode *mode, *cur_mode;
+
+			list_for_each_entry(cur_mode, &connector->probed_modes, head) {
+				cur_mode->type &= ~DRM_MODE_TYPE_PREFERRED;
+			}
+
+			mode = drm_cvt_mode(connector->dev, 3840, 2160, 60,
+					    true, false, false);
+			drm_mode_set_crtcinfo(mode, CRTC_INTERLACE_HALVE_V);
+			mode->type |= DRM_MODE_TYPE_PREFERRED;
+
+			drm_mode_probed_add(connector, mode);
+			ret += 1;
+		}
+	}
 	drm_edid_to_eld(connector, edid);
 
 	return ret;

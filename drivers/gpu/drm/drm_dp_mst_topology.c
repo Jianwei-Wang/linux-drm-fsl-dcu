@@ -858,6 +858,8 @@ static void drm_dp_destroy_port(struct kref *kref)
 	struct drm_dp_mst_topology_mgr *mgr = port->mgr;
 	if (!port->input) {
 		port->vcpi.num_slots = 0;
+
+		kfree(port->cached_edid);
 		if (port->connector)
 			(*port->mgr->cbs->destroy_connector)(mgr, port->connector);
 		drm_dp_port_teardown_pdt(port, port->pdt);
@@ -1100,8 +1102,16 @@ static void drm_dp_add_port(struct drm_dp_mst_branch *mstb,
 		if (port->mstb) {
 			port->mstb->conn_base_id = port->connector->base.id;
 		}
-		if (port->port_num >= 8)
+		if (port->port_num >= 8) {
 			port->cached_edid = drm_get_edid(port->connector, &port->aux.ddc);
+			if (port->cached_edid) {
+				drm_get_displayid(port->connector,
+						  &port->aux.ddc,
+						  port->cached_edid,
+						  false);
+			}
+
+		}
 	}
 
 	/* put reference to this port */
@@ -2210,10 +2220,19 @@ struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_
 	if (!port)
 		return NULL;
 
+	if (connector->has_tile && connector->tile_group_id == 0) {
+		connector->tile_group_id = port->parent->conn_base_id;
+	}
+	if (connector->has_tile && connector->tile_is_single_monitor) {
+		if (connector->tile_h_loc > 0 || connector->tile_v_loc > 0) {
+			goto out;
+		}
+	}
 	if (port->cached_edid)
 		edid = drm_edid_duplicate(port->cached_edid);
 	else
 		edid = drm_get_edid(connector, &port->aux.ddc);
+ out:
 	drm_dp_put_port(port);
 	return edid;
 }
