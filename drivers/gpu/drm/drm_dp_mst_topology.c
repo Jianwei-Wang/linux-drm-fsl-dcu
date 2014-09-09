@@ -2190,6 +2190,12 @@ enum drm_connector_status drm_dp_mst_detect_port(struct drm_connector *connector
 		if (port->port_num >= 8 && !port->cached_edid) {
 			port->cached_edid = drm_get_edid(connector, &port->aux.ddc);
 		}
+
+		if (connector->has_tile && connector->tile_group_id == 0)
+			connector->tile_group_id = port->parent->conn_base_id;
+		if (connector->has_tile && (connector->tile_h_loc || connector->tile_v_loc))
+			status = connector_status_disconnected;
+
 		break;
 	case DP_PEER_DEVICE_DP_LEGACY_CONV:
 		if (port->ldps)

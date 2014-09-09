@@ -375,6 +375,14 @@ struct drm_crtc {
 	void *helper_private;
 
 	struct drm_object_properties properties;
+
+	/* crtcs this one is using for tiling */
+	struct list_head tile_crtc_list;
+
+	/* tile list entry */
+	struct list_head tile;
+
+	struct drm_crtc *tile_master;
 };
 
 

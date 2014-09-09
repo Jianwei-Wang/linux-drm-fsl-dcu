@@ -764,6 +764,9 @@ int drm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *crtc,
 	crtc->funcs = funcs;
 	crtc->invert_dimensions = false;
 
+	INIT_LIST_HEAD(&crtc->tile_crtc_list);
+	crtc->tile_master = NULL;
+
 	drm_modeset_lock_all(dev);
 	drm_modeset_lock_init(&crtc->mutex);
 	/* dropped by _unlock_all(): */
@@ -2520,7 +2523,7 @@ static int drm_mode_setcrtc_tiled(struct drm_mode_set *orig_set)
 	list_for_each_entry(crtc2, &dev->mode_config.crtc_list, head) {
 		if (crtc2 == orig_set->crtc)
 			continue;
-		if (crtc2->enabled)
+		if (crtc2->enabled && !crtc2->tile_master)
 			continue;
 		pick_crtc = crtc2;
 		break;
@@ -2583,14 +2586,26 @@ static int drm_mode_setcrtc_tiled(struct drm_mode_set *orig_set)
 	set[1].x = orig_set->x + ((pick_conn[1]->tile_h_loc == 1) ? pick_conn[0]->tile_h_size + 1 : 0);
 	set[1].y = orig_set->y + ((pick_conn[1]->tile_v_loc == 1) ? pick_conn[0]->tile_v_size + 1 : 0);
 
+	if (set[1].crtc->tile_master) {
+		list_del(&set[1].crtc->tile);
+		set[1].crtc->tile_master = NULL;
+	}
+	list_add_tail(&set[1].crtc->tile, &set[0].crtc->tile_crtc_list);
+	set[1].crtc->tile_master = set[0].crtc;
 	/* find a mode to use on each head */
 	set[0].mode = pick_modes[0];
 	set[1].mode = pick_modes[1];
 
 	ret = drm_mode_set_config_internal(&set[0]);
 
-	ret = drm_mode_set_config_internal(&set[1]);
+	if (!ret) {
+		ret = drm_mode_set_config_internal(&set[1]);
+	}
 
+	if (ret) {
+		set[1].crtc->tile_master = NULL;
+		list_del(&set[1].crtc->tile);
+	}
 	return ret;
 }
 /**
@@ -2636,6 +2651,15 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 		goto out;
 	}
 	DRM_DEBUG_KMS("[CRTC:%d]\n", crtc->base.id);
+
+	if (crtc->tile_master) {
+		if (crtc_req->mode_valid)
+			ret = -EBUSY;
+		else
+			ret = 0;
+		DRM_DEBUG_KMS("[CRTC:%d] refused due to tile %d\n", crtc->base.id, ret);
+		goto out;
+	}
 
 	if (crtc_req->mode_valid) {
 		/* If we have a mode we need a framebuffer. */
@@ -2748,9 +2772,25 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 
 	if (num_tiles > 1) {
 		ret = drm_mode_setcrtc_tiled(&set);
-	} else
-		ret = drm_mode_set_config_internal(&set);
+	} else {
+		if (!list_empty(&crtc->tile_crtc_list)) {
+			struct drm_crtc *tile_crtc, *t;
 
+			list_for_each_entry_safe(tile_crtc, t, &crtc->tile_crtc_list, tile) {
+				struct drm_mode_set set2;
+
+				tile_crtc->tile_master = NULL;
+				list_del(&tile_crtc->tile);
+
+				DRM_DEBUG_KMS("disabling crtc %p due to no longer needing tiling %p\n", tile_crtc, tile_crtc->primary);
+				memset(&set2, 0, sizeof(struct drm_mode_set));
+				set2.crtc = tile_crtc;
+				set2.fb = NULL;
+				ret = drm_mode_set_config_internal(&set2);
+			}
+		}
+		ret = drm_mode_set_config_internal(&set);
+	}
 out:
 	if (fb)
 		drm_framebuffer_unreference(fb);
@@ -4226,6 +4266,9 @@ static int drm_mode_connector_set_obj_prop(struct drm_mode_object *obj,
 	int ret = -EINVAL;
 	struct drm_connector *connector = obj_to_connector(obj);
 
+	if (connector->has_tile && connector->tile_is_single_monitor &&
+	    (connector->tile_h_loc || connector->tile_v_loc))
+		return 0;
 	/* Do DPMS ourselves */
 	if (property == connector->dev->mode_config.dpms_property) {
 		if (connector->funcs->dpms)
