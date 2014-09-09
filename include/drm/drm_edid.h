@@ -280,5 +280,8 @@ drm_hdmi_avi_infoframe_from_display_mode(struct hdmi_avi_infoframe *frame,
 int
 drm_hdmi_vendor_infoframe_from_display_mode(struct hdmi_vendor_infoframe *frame,
 					    const struct drm_display_mode *mode);
-
+struct drm_device;
+struct edid *drm_patch_edid_detailed_mode(struct drm_device *dev,
+					      struct edid *orig_edid,
+					      int hdisplay, int vdisplay, int vrefresh);
 #endif /* __DRM_EDID_H__ */

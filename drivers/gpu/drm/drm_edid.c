@@ -3892,3 +3892,39 @@ void drm_get_displayid(struct drm_connector *connector,
 	return;
 }
 EXPORT_SYMBOL(drm_get_displayid);
+
+static void drm_patch_edid_reset_csum(struct edid *edid)
+{
+	unsigned i, sum = 0;
+	unsigned char *p = (unsigned char *)edid;
+
+	for (i = 0; i < EDID_LENGTH - 1; i++)
+		sum += p[i];
+	edid->checksum = (0x100 - (sum & 0xff)) & 0xff;
+}
+
+struct edid *drm_patch_edid_detailed_mode(struct drm_device *dev,
+					      struct edid *orig_edid,
+					      int hdisplay, int vdisplay, int vrefresh)
+{
+	struct edid *edid = drm_edid_duplicate(orig_edid);
+	struct drm_display_mode *mode = drm_cvt_mode(dev, hdisplay, vdisplay, vrefresh, true, false, false);
+
+	int hblank = mode->htotal - mode->hdisplay;
+	int vblank = mode->vtotal - mode->vdisplay;
+
+	DRM_DEBUG_KMS("mode->clock is %d, %d\n", mode->clock, cpu_to_le16(mode->clock / 10));
+	edid->detailed_timings[1] = edid->detailed_timings[0];
+	edid->detailed_timings[0].pixel_clock = cpu_to_le16(mode->clock / 10);
+	edid->detailed_timings[0].data.pixel_data.hactive_lo = mode->hdisplay & 0xff;
+	edid->detailed_timings[0].data.pixel_data.hblank_lo = hblank & 0xff;
+	edid->detailed_timings[0].data.pixel_data.hactive_hblank_hi = (mode->hdisplay >> 4 & 0xf0) | ((hblank >> 8) & 0xf);
+	edid->detailed_timings[0].data.pixel_data.vactive_lo = mode->vdisplay & 0xff;
+	edid->detailed_timings[0].data.pixel_data.vblank_lo = vblank & 0xff;
+	edid->detailed_timings[0].data.pixel_data.vactive_vblank_hi = (mode->vdisplay >> 4 & 0xf0) | ((vblank >> 8) & 0xf);
+
+	drm_patch_edid_reset_csum(edid);
+
+	return edid;
+}
+EXPORT_SYMBOL(drm_patch_edid_detailed_mode);

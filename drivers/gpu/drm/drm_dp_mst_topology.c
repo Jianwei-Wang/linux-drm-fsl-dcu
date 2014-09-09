@@ -31,6 +31,7 @@
 #include <drm/drmP.h>
 
 #include <drm/drm_fixed.h>
+#include <drm/drm_edid.h>
 
 /**
  * DOC: dp mst helper
@@ -2225,9 +2226,15 @@ struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_
 			goto out;
 		}
 	}
-	if (port->cached_edid)
-		edid = drm_edid_duplicate(port->cached_edid);
-	else
+	if (port->cached_edid) {
+		if (connector->has_tile && connector->tile_is_single_monitor) {
+			edid = drm_patch_edid_detailed_mode(connector->dev,
+							    port->cached_edid,
+							    3840, 2160, 60);
+		} else {
+			edid = drm_edid_duplicate(port->cached_edid);
+		}
+	} else
 		edid = drm_get_edid(connector, &port->aux.ddc);
  out:
 	drm_dp_put_port(port);
