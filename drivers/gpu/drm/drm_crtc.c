@@ -2509,6 +2509,91 @@ int drm_crtc_check_viewport(const struct drm_crtc *crtc,
 }
 EXPORT_SYMBOL(drm_crtc_check_viewport);
 
+static int drm_mode_get_crtc_set(struct drm_crtc *crtc, struct drm_mode_set *backup_set)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_display_mode *mode;
+	struct drm_connector *connector;
+	int num_connectors = 0;
+	int i;
+
+	backup_set->crtc = crtc;
+	backup_set->x = crtc->x;
+	backup_set->y = crtc->y;
+	backup_set->fb = crtc->primary->fb;
+
+	mode = drm_mode_create(dev);
+	if (!mode) {
+		return -ENOMEM;
+	}
+
+	*mode = crtc->mode;
+	backup_set->mode = mode;
+
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		if (!connector->encoder)
+			continue;
+		if (!connector->encoder->crtc)
+			continue;
+
+		if (connector->encoder->crtc == crtc)
+			num_connectors++;
+	}
+
+	backup_set->connectors = kmalloc(num_connectors * sizeof(struct drm_connector *), GFP_KERNEL);
+	if (!backup_set->connectors) {
+		drm_mode_destroy(dev, mode);
+		return -ENOMEM;
+	}
+
+	i = 0;
+	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+		if (!connector->encoder)
+			continue;
+		if (!connector->encoder->crtc)
+			continue;
+
+		if (connector->encoder->crtc == crtc)
+			backup_set->connectors[i++] = connector;
+	}
+
+	backup_set->num_connectors = i;
+	return 0;
+}
+
+static int drm_mode_reset_tiled_crtc(struct drm_mode_set *backup_set,
+				     struct drm_crtc *tile_master)
+{
+	struct drm_crtc *crtc2, *pick_crtc = NULL;
+	struct drm_device *dev = backup_set->crtc->dev;
+	int ret;
+	/* first up we need to find another crtc to use */
+	list_for_each_entry(crtc2, &dev->mode_config.crtc_list, head) {
+		if (crtc2 == backup_set->crtc)
+			continue;
+		if (crtc2->enabled && !crtc2->tile_master)
+			continue;
+		pick_crtc = crtc2;
+		break;
+	}
+
+	if (!pick_crtc) {
+		DRM_DEBUG_KMS("unable to find backup crtc\n");
+		goto out;
+
+	}
+
+	backup_set->crtc = pick_crtc;
+
+	pick_crtc->tile_master = tile_master;
+	list_add_tail(&pick_crtc->tile, &tile_master->tile_crtc_list);
+
+	ret = drm_mode_set_config_internal(backup_set);
+out:
+	kfree(backup_set->connectors);
+	return 0;
+}
+
 /* tiled variants */
 static int drm_mode_setcrtc_tiled(struct drm_mode_set *orig_set)
 {
@@ -2631,6 +2716,9 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 	struct drm_framebuffer *fb = NULL;
 	struct drm_display_mode *mode = NULL;
 	struct drm_mode_set set;
+	struct drm_mode_set tile_backup_set;
+	struct drm_crtc *backup_tile_master = NULL;
+	bool rework_backup = false;
 	uint32_t __user *set_connectors_ptr;
 	int ret;
 	int i;
@@ -2653,12 +2741,17 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 	DRM_DEBUG_KMS("[CRTC:%d]\n", crtc->base.id);
 
 	if (crtc->tile_master) {
-		if (crtc_req->mode_valid)
-			ret = -EBUSY;
-		else
+		if (!crtc_req->mode_valid) {
 			ret = 0;
-		DRM_DEBUG_KMS("[CRTC:%d] refused due to tile %d\n", crtc->base.id, ret);
-		goto out;
+			goto out;
+		}
+
+		drm_mode_get_crtc_set(crtc, &tile_backup_set);
+		DRM_DEBUG_KMS("[CRTC:%d] backing up tiling\n", crtc->base.id);
+		rework_backup = true;
+		backup_tile_master = crtc->tile_master;
+		crtc->tile_master = false;
+		list_del(&crtc->tile);
 	}
 
 	if (crtc_req->mode_valid) {
@@ -2790,6 +2883,10 @@ int drm_mode_setcrtc(struct drm_device *dev, void *data,
 			}
 		}
 		ret = drm_mode_set_config_internal(&set);
+	}
+
+	if (rework_backup) {
+		drm_mode_reset_tiled_crtc(&tile_backup_set, backup_tile_master);
 	}
 out:
 	if (fb)
