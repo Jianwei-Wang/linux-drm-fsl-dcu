@@ -2919,7 +2919,8 @@ out:
  */
 static int drm_mode_cursor_universal(struct drm_crtc *crtc,
 				     struct drm_mode_cursor2 *req,
-				     struct drm_file *file_priv)
+				     struct drm_file *file_priv,
+				     bool draw)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_framebuffer *fb = NULL;
@@ -2970,7 +2971,7 @@ static int drm_mode_cursor_universal(struct drm_crtc *crtc,
 		crtc_y = crtc->cursor_y;
 	}
 
-	if (fb) {
+	if (fb && draw) {
 		crtc_w = fb->width;
 		crtc_h = fb->height;
 		src_w = fb->width << 16;
@@ -2981,7 +2982,7 @@ static int drm_mode_cursor_universal(struct drm_crtc *crtc,
 	 * setplane_internal will take care of deref'ing either the old or new
 	 * framebuffer depending on success.
 	 */
-	ret = setplane_internal(crtc->cursor, crtc, fb,
+	ret = setplane_internal(crtc->cursor, crtc, draw ? fb : NULL,
 				crtc_x, crtc_y, crtc_w, crtc_h,
 				0, 0, src_w, src_h);
 
@@ -3017,8 +3018,30 @@ static int drm_mode_cursor_common(struct drm_device *dev,
 	 * If this crtc has a universal cursor plane, call that plane's update
 	 * handler rather than using legacy cursor handlers.
 	 */
-	if (crtc->cursor)
-		return drm_mode_cursor_universal(crtc, req, file_priv);
+	if (crtc->cursor) {
+		struct drm_mode_cursor2 req2;
+		struct drm_crtc *tile_crtc;
+		list_for_each_entry(tile_crtc, &crtc->tile_crtc_list, tile) {
+			req2 = *req;
+
+			/* TODO broken for > 2 tiles */
+			if (req->flags & DRM_MODE_CURSOR_MOVE) {
+				bool do_move = false;
+				if (req->x > crtc->mode.hdisplay) {
+					do_move = true;
+					req2.x = req->x - crtc->mode.hdisplay;
+				}
+				if (req->y > crtc->mode.vdisplay) {
+					do_move = true;
+					req2.y = req->y - crtc->mode.vdisplay;
+				}
+				if (do_move)
+					ret = drm_mode_cursor_universal(tile_crtc, &req2, file_priv, true);
+			} else
+				ret = drm_mode_cursor_universal(tile_crtc, &req2, file_priv, true);
+		}
+		return drm_mode_cursor_universal(crtc, req, file_priv, true);
+	}
 
 	drm_modeset_lock(&crtc->mutex, NULL);
 	if (req->flags & DRM_MODE_CURSOR_BO) {
