@@ -4771,7 +4771,7 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 	struct drm_pending_vblank_event *e = NULL;
 	unsigned long flags;
 	int ret = -EINVAL;
-
+	int crtc_count = 1;
 	if (page_flip->flags & ~DRM_MODE_PAGE_FLIP_FLAGS ||
 	    page_flip->reserved != 0)
 		return -EINVAL;
@@ -4833,14 +4833,43 @@ int drm_mode_page_flip_ioctl(struct drm_device *dev,
 		e->event.base.type = DRM_EVENT_FLIP_COMPLETE;
 		e->event.base.length = sizeof e->event;
 		e->event.user_data = page_flip->user_data;
+		e->master = crtc;
 		e->base.event = &e->event.base;
 		e->base.file_priv = file_priv;
 		e->base.destroy =
 			(void (*) (struct drm_pending_event *)) kfree;
 	}
 
+	if (!list_empty(&crtc->tile_crtc_list)) {
+		struct drm_crtc *tile;
+
+		list_for_each_entry(tile, &crtc->tile_crtc_list, tile) {
+			crtc_count++;
+		}
+		if (e)
+			e->crtc_count = crtc_count;
+		list_for_each_entry(tile, &crtc->tile_crtc_list, tile) {
+			struct drm_framebuffer *tile_fb = fb;
+
+			drm_framebuffer_reference(fb);
+			old_fb = tile->primary->fb;
+
+			ret = tile->funcs->page_flip(tile, fb, e, page_flip->flags);
+			if (ret) {
+				old_fb = NULL;
+			} else {
+				tile_fb = NULL;
+			}
+			if (tile_fb)
+				drm_framebuffer_unreference(tile_fb);
+			if (old_fb)
+				drm_framebuffer_unreference(old_fb);
+		}
+	}
 	old_fb = crtc->primary->fb;
+
 	ret = crtc->funcs->page_flip(crtc, fb, e, page_flip->flags);
+
 	if (ret) {
 		if (page_flip->flags & DRM_MODE_PAGE_FLIP_EVENT) {
 			spin_lock_irqsave(&dev->event_lock, flags);

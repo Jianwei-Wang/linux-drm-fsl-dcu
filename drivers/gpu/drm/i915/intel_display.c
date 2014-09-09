@@ -9153,8 +9153,10 @@ static void do_intel_finish_page_flip(struct drm_device *dev,
 
 	intel_crtc->unpin_work = NULL;
 
-	if (work->event)
-		drm_send_vblank_event(dev, intel_crtc->pipe, work->event);
+	if (work->event) {
+		struct intel_crtc *tmp = to_intel_crtc(work->event->master);
+		drm_send_vblank_event(dev, tmp->pipe, work->event);
+	}
 
 	drm_crtc_vblank_put(crtc);
 
@@ -9795,8 +9797,10 @@ free_work:
 out_hang:
 		intel_crtc_wait_for_pending_flips(crtc);
 		ret = intel_pipe_set_base(crtc, crtc->x, crtc->y, fb);
-		if (ret == 0 && event)
-			drm_send_vblank_event(dev, pipe, event);
+		if (ret == 0 && event) {
+			struct intel_crtc *tmp = to_intel_crtc(event->master);
+			drm_send_vblank_event(dev, tmp->pipe, event);
+		}
 	}
 	return ret;
 }

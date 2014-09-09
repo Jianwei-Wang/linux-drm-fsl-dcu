@@ -783,10 +783,15 @@ static void send_vblank_event(struct drm_device *dev,
  * Caller must hold event lock.
  */
 void drm_send_vblank_event(struct drm_device *dev, int crtc,
-		struct drm_pending_vblank_event *e)
+			   struct drm_pending_vblank_event *e)
 {
 	struct timeval now;
 	unsigned int seq;
+
+	e->crtc_count--;
+	if (e->crtc_count > 0)
+		return;
+  
 	if (crtc >= 0) {
 		seq = drm_vblank_count_and_time(dev, crtc, &now);
 	} else {

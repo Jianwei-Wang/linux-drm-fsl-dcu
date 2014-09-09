@@ -982,6 +982,8 @@ struct drm_pending_vblank_event {
 	struct drm_pending_event base;
 	int pipe;
 	struct drm_event_vblank event;
+	int crtc_count;
+	struct drm_crtc *master;
 };
 
 struct drm_vblank_crtc {
