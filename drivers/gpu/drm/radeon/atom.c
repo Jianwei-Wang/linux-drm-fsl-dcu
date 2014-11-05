@@ -63,6 +63,7 @@ typedef struct {
 } atom_exec_context;
 
 int atom_debug = 0;
+int atom_reg_debug = 0;
 static int atom_execute_table_locked(struct atom_context *ctx, int index, uint32_t * params);
 int atom_execute_table(struct atom_context *ctx, int index, uint32_t * params);
 

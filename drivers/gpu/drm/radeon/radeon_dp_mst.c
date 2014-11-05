@@ -464,6 +464,7 @@ radeon_mst_encoder_dpms(struct drm_encoder *encoder, int mode)
 
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
+		atom_reg_debug = 1;
 		dig_enc->active_mst_links++;
 
 		radeon_crtc = to_radeon_crtc(crtc);
@@ -487,6 +488,7 @@ radeon_mst_encoder_dpms(struct drm_encoder *encoder, int mode)
 			mst_enc->fe_from_be = false;
 			atombios_set_mst_encoder_crtc_source(encoder, mst_enc->fe);
 		}
+		atom_reg_debug = 1;
 		
 		DRM_DEBUG_KMS("dig encoder is %d %d %d\n", dig_enc->dig_encoder, dig_enc->linkb, radeon_crtc->crtc_id);
 		
@@ -507,6 +509,7 @@ radeon_mst_encoder_dpms(struct drm_encoder *encoder, int mode)
 
 		ret = drm_dp_update_payload_part2(&radeon_connector->mst_port->mst_mgr);
 
+		atom_reg_debug = 0;
 		break;
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
@@ -600,7 +603,9 @@ static void radeon_mst_encoder_prepare(struct drm_encoder *encoder)
 	if (dig_enc->dig_encoder == -1) {
 		dig_enc->dig_encoder = radeon_atom_pick_dig_encoder(&primary->base, -1);
 		primary->offset = radeon_atom_set_enc_offset(dig_enc->dig_encoder);
+		atom_reg_debug = 1;
 		atombios_set_mst_encoder_crtc_source(encoder, dig_enc->dig_encoder);
+		atom_reg_debug = 0;
 
 
 	}

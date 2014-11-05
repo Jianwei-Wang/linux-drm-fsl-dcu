@@ -31,8 +31,6 @@
 #include "atom.h"
 #include <linux/backlight.h>
 
-extern int atom_debug;
-
 static u8
 radeon_atom_get_backlight_level_from_reg(struct radeon_device *rdev)
 {

@@ -143,6 +143,7 @@ struct atom_context {
 };
 
 extern int atom_debug;
+extern int atom_reg_debug;
 
 struct atom_context *atom_parse(struct card_info *, void *);
 int atom_execute_table(struct atom_context *, int, uint32_t *);

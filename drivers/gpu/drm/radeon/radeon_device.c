@@ -887,6 +887,8 @@ static void cail_reg_write(struct card_info *info, uint32_t reg, uint32_t val)
 {
 	struct radeon_device *rdev = info->dev->dev_private;
 
+	if (atom_reg_debug)
+		DRM_DEBUG_KMS("writing 0x%08x, 0x%08x\n", reg * 4, val);
 	WREG32(reg*4, val);
 }
 
