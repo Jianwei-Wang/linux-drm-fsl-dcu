@@ -404,19 +404,20 @@ void radeon_dp_mst_prepare_pll(struct drm_crtc *crtc, struct drm_display_mode *m
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
-	struct radeon_encoder *radeon_encoder =
-		to_radeon_encoder(radeon_crtc->encoder);
+	struct radeon_encoder *radeon_encoder = to_radeon_encoder(radeon_crtc->encoder);
 	struct radeon_encoder_mst *mst_enc = radeon_encoder->enc_priv;
 	struct radeon_connector *radeon_connector = radeon_mst_find_connector(&radeon_encoder->base);
 	int dp_clock;
 	struct radeon_connector_atom_dig *dig_connector;
 	dig_connector = mst_enc->connector->con_priv;
 
-	radeon_connector->pixelclock_for_modeset = mode->clock;
-	if (radeon_connector->base.display_info.bpc)
-		radeon_crtc->bpc = radeon_connector->base.display_info.bpc;
-	else
-		radeon_crtc->bpc = 8;
+	if (radeon_connector) {
+		radeon_connector->pixelclock_for_modeset = mode->clock;
+		if (radeon_connector->base.display_info.bpc)
+			radeon_crtc->bpc = radeon_connector->base.display_info.bpc;
+		else
+			radeon_crtc->bpc = 8;
+	}
 
 	DRM_DEBUG_KMS("dp_clock %p %d\n", dig_connector, dig_connector->dp_clock);
 	dp_clock = dig_connector->dp_clock;
