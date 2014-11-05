@@ -1008,7 +1008,11 @@ static void drm_dp_check_port_guid(struct drm_dp_mst_branch *mstb,
 			ret = drm_dp_send_dpcd_write(mstb->mgr,
 						     port,
 						     DP_GUID,
-						     16, port->guid);
+						     8, port->guid);
+			ret = drm_dp_send_dpcd_write(mstb->mgr,
+						     port,
+						     DP_GUID + 8,
+						     8, &port->guid[8]);
 			port->guid_valid = true;
 		}
 	}
@@ -1906,7 +1910,8 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 
 		mgr->guid_valid = drm_dp_validate_guid(mgr, mgr->guid);
 		if (!mgr->guid_valid) {
-			ret = drm_dp_dpcd_write(mgr->aux, DP_GUID, mgr->guid, 16);
+			ret = drm_dp_dpcd_write(mgr->aux, DP_GUID, mgr->guid, 8);
+			ret = drm_dp_dpcd_write(mgr->aux, DP_GUID + 8, &mgr->guid[8], 8);
 			mgr->guid_valid = true;
 		}
 
