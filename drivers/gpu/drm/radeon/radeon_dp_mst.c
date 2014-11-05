@@ -154,13 +154,12 @@ static int radeon_dp_mst_set_stream_attrib(struct radeon_encoder *primary,
 	return 0;
 }
 
-static int radeon_dp_mst_update_stream_attribs(struct radeon_connector *mst_conn)
+static int radeon_dp_mst_update_stream_attribs(struct radeon_connector *mst_conn, struct radeon_encoder *primary)
 {
 	struct drm_device *dev = mst_conn->base.dev;
 	struct stream_attribs new_attribs[6];
 	int i;
 	int idx = 0;
-	struct radeon_encoder *primary = NULL;
 	struct radeon_connector *radeon_connector;
 	struct drm_connector *connector;
 
@@ -178,8 +177,9 @@ static int radeon_dp_mst_update_stream_attribs(struct radeon_connector *mst_conn
 		subenc = radeon_connector->mst_encoder;
 		mst_enc = subenc->enc_priv;
 
-		if (!primary)
-			primary = mst_enc->primary;
+		if (!mst_enc->enc_active)
+			continue;
+
 		new_attribs[idx].fe = mst_enc->fe;
 		new_attribs[idx].slots = drm_dp_mst_get_vcpi_slots(&mst_conn->mst_mgr, mst_enc->port);
 		idx++;
@@ -501,7 +501,7 @@ radeon_mst_encoder_dpms(struct drm_encoder *encoder, int mode)
 		radeon_dp_mst_set_be_cntl(primary, mst_enc, radeon_connector->mst_port->hpd.hpd, true);
 
 		mst_enc->enc_active = true;
-		radeon_dp_mst_update_stream_attribs(radeon_connector->mst_port);
+		radeon_dp_mst_update_stream_attribs(radeon_connector->mst_port, primary);
 		radeon_dp_mst_set_vcp_size(radeon_encoder, slots, 0);
 
 		atombios_dig_encoder_setup2(&primary->base, ATOM_ENCODER_CMD_DP_VIDEO_ON, 0, mst_enc->fe);		
@@ -529,7 +529,7 @@ radeon_mst_encoder_dpms(struct drm_encoder *encoder, int mode)
 		drm_dp_mst_deallocate_vcpi(&radeon_connector->mst_port->mst_mgr, mst_enc->port);
 
 		mst_enc->enc_active = false;
-		radeon_dp_mst_update_stream_attribs(radeon_connector->mst_port);
+		radeon_dp_mst_update_stream_attribs(radeon_connector->mst_port, primary);
 
 		radeon_dp_mst_set_be_cntl(primary, mst_enc, radeon_connector->mst_port->hpd.hpd, false);
 		atombios_dig_encoder_setup2(&primary->base, ATOM_ENCODER_CMD_DP_VIDEO_OFF, 0, mst_enc->fe);
