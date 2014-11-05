@@ -711,12 +711,16 @@ extern int radeon_dp_get_panel_mode(struct drm_encoder *encoder,
 extern void radeon_dp_set_rx_power_state(struct drm_connector *connector,
 					 u8 power_state);
 extern void radeon_dp_aux_init(struct radeon_connector *radeon_connector);
+extern void atombios_dig_encoder_setup2(struct drm_encoder *encoder, int action, int panel_mode, int enc_override);
 extern void atombios_dig_encoder_setup(struct drm_encoder *encoder, int action, int panel_mode);
 extern void radeon_atom_encoder_init(struct radeon_device *rdev);
 extern void radeon_atom_disp_eng_pll_init(struct radeon_device *rdev);
 extern void atombios_dig_transmitter_setup(struct drm_encoder *encoder,
 					   int action, uint8_t lane_num,
 					   uint8_t lane_set);
+extern void atombios_dig_transmitter_setup2(struct drm_encoder *encoder,
+					    int action, uint8_t lane_num,
+					    uint8_t lane_set, int fe);
 extern void radeon_atom_ext_encoder_setup_ddc(struct drm_encoder *encoder);
 extern struct drm_encoder *radeon_get_external_encoder(struct drm_encoder *encoder);
 void radeon_atom_copy_swap(u8 *dst, u8 *src, u8 num_bytes, bool to_le);
