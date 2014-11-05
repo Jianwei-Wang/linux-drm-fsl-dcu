@@ -671,7 +671,17 @@ atombios_get_encoder_mode(struct drm_encoder *encoder)
 	struct drm_connector *connector;
 	struct radeon_connector *radeon_connector;
 	struct radeon_connector_atom_dig *dig_connector;
+	struct radeon_encoder_atom_dig *dig_enc;
 
+	if (radeon_encoder_is_digital(encoder))
+	{
+		dig_enc = radeon_encoder->enc_priv;
+		if (dig_enc->active_mst_links) {
+			return ATOM_ENCODER_MODE_DP_MST;
+		}
+	}
+	if (radeon_encoder->is_mst_encoder || radeon_encoder->offset)
+		return ATOM_ENCODER_MODE_DP_MST;
 	/* dp bridges are always DP */
 	if (radeon_encoder_get_dp_bridge_encoder_id(encoder) != ENCODER_OBJECT_ID_NONE)
 		return ATOM_ENCODER_MODE_DP;
@@ -1703,6 +1713,11 @@ radeon_atom_encoder_dpms_dig(struct drm_encoder *encoder, int mode)
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
 	case DRM_MODE_DPMS_OFF:
+
+		/* don't power off encoders with active MST links */
+		if (dig->active_mst_links)
+			return;
+
 		if (ASIC_IS_DCE4(rdev)) {
 			if (ENCODER_MODE_IS_DP(atombios_get_encoder_mode(encoder)) && connector)
 				atombios_dig_encoder_setup(encoder, ATOM_ENCODER_CMD_DP_VIDEO_OFF, 0);
