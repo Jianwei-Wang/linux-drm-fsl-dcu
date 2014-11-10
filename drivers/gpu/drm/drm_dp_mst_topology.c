@@ -882,8 +882,10 @@ static struct drm_dp_mst_branch *drm_dp_mst_get_validated_mstb_ref_locked(struct
 	struct drm_dp_mst_port *port;
 	struct drm_dp_mst_branch *rmstb;
 	if (to_find == mstb) {
-		kref_get(&mstb->kref);
-		return mstb;
+		if (!kref_get_unless_zero(&mstb->kref))
+			return NULL;
+		else
+			return mstb;
 	}
 	list_for_each_entry(port, &mstb->ports, next) {
 		if (port->mstb) {
