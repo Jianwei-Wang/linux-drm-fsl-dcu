@@ -223,7 +223,10 @@ void radeon_dp_aux_init(struct radeon_connector *radeon_connector)
 
 	radeon_connector->ddc_bus->rec.hpd = radeon_connector->hpd.hpd;
 	radeon_connector->ddc_bus->aux.dev = radeon_connector->base.kdev;
-	radeon_connector->ddc_bus->aux.transfer = radeon_dp_aux_transfer;
+	if (radeon_auxch)
+		radeon_connector->ddc_bus->aux.transfer = radeon_dp_aux_transfer_native;
+	else
+		radeon_connector->ddc_bus->aux.transfer = radeon_dp_aux_transfer;
 
 	ret = drm_dp_aux_register(&radeon_connector->ddc_bus->aux);
 	if (!ret)

@@ -112,6 +112,7 @@ extern int radeon_use_pflipirq;
 extern int radeon_bapm;
 extern int radeon_backlight;
 extern int radeon_mst;
+extern int radeon_auxch;
 
 /*
  * Copy from radeon_drv.h so we don't have to include both and have conflicting
@@ -3114,6 +3115,8 @@ int r600_cs_common_vline_parse(struct radeon_cs_parser *p,
 			       uint32_t *vline_start_end,
 			       uint32_t *vline_status);
 
+ssize_t
+radeon_dp_aux_transfer_native(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg);
 #include "radeon_object.h"
 
 #endif
