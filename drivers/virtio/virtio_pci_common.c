@@ -510,7 +510,12 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 		goto err_enable_device;
 
 	rc = pci_request_regions(pci_dev, "virtio-pci");
-	if (rc)
+	/*
+	 * virtio-vga: vesafb/efifb might hold vga framebuffer
+	 * resource, but don't fail on that, we'll kick out vesafb
+	 * later on.
+	 */
+	if (rc && ((pci_dev->class >> 8) != PCI_CLASS_DISPLAY_VGA))
 		goto err_request_regions;
 
 	if (force_legacy) {
