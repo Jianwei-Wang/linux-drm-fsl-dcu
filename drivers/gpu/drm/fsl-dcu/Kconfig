@@ -1,0 +1,17 @@
+config DRM_FSL_DCU
+	tristate "DRM Support for Freescale DCU"
+	depends on DRM && OF && ARM
+	select DRM_KMS_HELPER
+	select DRM_KMS_CMA_HELPER
+	select VIDEOMODE_HELPERS
+	select BACKLIGHT_CLASS_DEVICE
+	select BACKLIGHT_LCD_SUPPORT
+	select REGMAP_MMIO
+	select DRM_KMS_FB_HELPER
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+	select FB_SYS_FOPS
+	help
+	  Choose this option if you have an Freescale DCU chipset.
+	  If M is selected the module will be called fsl-dcu-drm.

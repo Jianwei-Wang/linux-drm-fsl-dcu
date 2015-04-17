@@ -1,0 +1,49 @@
+Device Tree bindings for Freescale DCU DRM Driver
+
+Required properties:
+- compatible:           Should be one of
+	* "fsl,ls1021a-dcu".
+	* "fsl,vf610-dcu".
+- reg:                  Address and length of the register set for dcu.
+- clocks:               From common clock binding: handle to dcu clock.
+- clock-names:          From common clock binding: Shall be "dcu".
+- display:              The phandle to display node.
+
+Required properties:
+- bits-per-pixel:       <16> for RGB565,
+			<24> for RGB888,
+			<32> for RGB8888.
+
+Required timing node for dispplay sub-node:
+- display-timings:      Refer to binding doc display-timing.txt for details.
+
+Examples:
+dcu: dcu@2ce0000 {
+	compatible = "fsl,ls1021a-dcu";
+	reg = <0x0 0x2ce0000 0x0 0x10000>;
+	clocks = <&platform_clk 0>;
+	clock-names = "dcu";
+	big-endian;
+	display = <&display>;
+
+	display: display@0 {
+		bits-per-pixel = <24>;
+
+		display-timings {
+			native-mode = <&timing0>;
+			timing0: nl4827hc19 {
+				clock-frequency = <10870000>;
+				hactive = <480>;
+				vactive = <272>;
+				hback-porch = <2>;
+				hfront-porch = <2>;
+				vback-porch = <1>;
+				vfront-porch = <1>;
+				hsync-len = <41>;
+				vsync-len = <2>;
+				hsync-active = <1>;
+				vsync-active = <1>;
+			};
+		};
+	};
+};

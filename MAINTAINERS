@@ -3404,6 +3404,14 @@ S:	Maintained
 F:	drivers/gpu/drm/imx/
 F:	Documentation/devicetree/bindings/drm/imx/
 
+DRM DRIVERS FOR FREESCALE DCU
+M:	Jianwei Wang <jianwei.wang@freescale.com>
+M:	Alison Wang <alison.wang@freescale.com>
+L:	dri-devel@lists.freedesktop.org
+S:	Supported
+F:	drivers/gpu/drm/fsl-dcu/
+F:	Documentation/devicetree/bindings/drm/fsl-dcu/
+
 DRM DRIVERS FOR NVIDIA TEGRA
 M:	Thierry Reding <thierry.reding@gmail.com>
 M:	Terje Bergström <tbergstrom@nvidia.com>
