@@ -482,6 +482,7 @@ int snd_hda_get_devices(struct hda_codec *codec, hda_nid_t nid,
 	}
 	return devices;
 }
+EXPORT_SYMBOL_GPL(snd_hda_get_devices);
 
 /*
  * destructor

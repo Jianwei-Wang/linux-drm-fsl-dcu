@@ -75,6 +75,7 @@ enum {
 #define AC_VERB_GET_HDMI_CHAN_SLOT		0x0f34
 #define AC_VERB_GET_DEVICE_SEL			0xf35
 #define AC_VERB_GET_DEVICE_LIST			0xf36
+#define AC_VERB_GET_DP_STREAM_ID		0xf3c
 
 /*
  * SET verbs
@@ -115,6 +116,7 @@ enum {
 #define AC_VERB_SET_HDMI_CP_CTRL		0x733
 #define AC_VERB_SET_HDMI_CHAN_SLOT		0x734
 #define AC_VERB_SET_DEVICE_SEL			0x735
+#define AC_VERB_SET_DP_STREAM_ID		0x73C
 
 /*
  * Parameter IDs

@@ -644,10 +644,13 @@ static void print_device_list(struct snd_info_buffer *buffer,
 	int i, curr = -1;
 	u8 dev_list[AC_MAX_DEV_LIST_LEN];
 	int devlist_len;
+        int dp_s_id;
 
+	dp_s_id = snd_hda_codec_read(codec, nid, 0,
+				AC_VERB_GET_DP_STREAM_ID, 0);
 	devlist_len = snd_hda_get_devices(codec, nid, dev_list,
 					AC_MAX_DEV_LIST_LEN);
-	snd_iprintf(buffer, "  Devices: %d\n", devlist_len);
+	snd_iprintf(buffer, "  Devices: %d: 0x%x\n", devlist_len, dp_s_id);
 	if (devlist_len <= 0)
 		return;
 
