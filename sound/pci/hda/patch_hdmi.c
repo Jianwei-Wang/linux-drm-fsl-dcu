@@ -1411,6 +1411,7 @@ static void intel_not_share_assigned_cvt(struct hda_codec *codec,
 	int cvt_idx, curr;
 	struct hdmi_spec_per_cvt *per_cvt;
 
+	return;
 	/* configure all pins, including "no physical connection" ones */
 	for_each_hda_codec_node(nid, codec) {
 		unsigned int wid_caps = get_wcaps(codec, nid);
