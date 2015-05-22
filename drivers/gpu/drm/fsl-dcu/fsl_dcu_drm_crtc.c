@@ -129,8 +129,12 @@ static const struct drm_crtc_helper_funcs fsl_dcu_drm_crtc_helper_funcs = {
 int fsl_dcu_drm_crtc_create(struct fsl_dcu_drm_device *fsl_dev)
 {
 	struct drm_plane *primary;
-	struct drm_crtc *crtc = &fsl_dev->crtc;
+	struct drm_crtc *crtc;
 	int i, ret;
+
+	crtc = devm_kzalloc(fsl_dev->dev, sizeof(*crtc), GFP_KERNEL);
+	if (!crtc)
+		return -ENOMEM;
 
 	primary = fsl_dcu_drm_primary_create_plane(fsl_dev->ddev);
 	ret = drm_crtc_init_with_planes(fsl_dev->ddev, crtc, primary, NULL,

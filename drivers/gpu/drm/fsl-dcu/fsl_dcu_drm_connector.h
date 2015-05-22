@@ -21,10 +21,19 @@ struct fsl_dcu_drm_connector {
 	struct drm_connector connector;
 	struct drm_encoder *encoder;
 };
+struct fsl_dcu_drm_hdmicon {
+	struct drm_connector connector;
+	struct i2c_client *client;
+	enum drm_connector_status status;
+};
 
 int fsl_dcu_drm_encoder_create(struct fsl_dcu_drm_device *fsl_dev,
 			       struct drm_crtc *crtc);
 int fsl_dcu_drm_connector_create(struct fsl_dcu_drm_device *fsl_dev,
 				 struct drm_encoder *encoder);
+int fsl_dcu_drm_hdmienc_create(struct fsl_dcu_drm_device *fsl_dev,
+			       struct drm_crtc *crtc);
+int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev);
+
 
 #endif /* __FSL_DCU_DRM_CONNECTOR_H__ */
