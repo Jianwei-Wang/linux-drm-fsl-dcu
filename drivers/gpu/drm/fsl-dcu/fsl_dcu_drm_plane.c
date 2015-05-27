@@ -62,6 +62,8 @@ void fsl_dcu_drm_plane_atomic_update(struct drm_plane *plane,
 	struct fsl_dcu_drm_plane *fsl_plane = to_fsl_dcu_plane(plane);
 
 	index = fsl_plane->index;
+	if (!fb)	
+		return;
 	gem = drm_fb_cma_get_gem_obj(fb, 0);
 
 	switch (fb->pixel_format) {
