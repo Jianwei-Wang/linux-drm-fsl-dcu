@@ -19,6 +19,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
+#include <linux/clk-provider.h>
 
 #include <drm/drmP.h>
 
@@ -84,17 +85,34 @@ static int fsl_dcu_bypass_tcon(struct fsl_dcu_drm_device *fsl_dev,
 	return 0;
 }
 
-static void dcu_pixclk_enable(void)
+static int pixclk_register(struct fsl_dcu_drm_device *fsl_dev,
+			   struct device_node *np)
 {
-	struct regmap *scfg_regmap;
+	struct device_node *scfg_np;
+	struct platform_device *pdev;
+	struct resource *res;
+	void __iomem *base;
 
-	scfg_regmap = syscon_regmap_lookup_by_compatible("fsl,ls1021a-scfg");
-	if (IS_ERR(scfg_regmap)) {
-		pr_err("No syscfg phandle specified\n");
-		return;
-	}
+	scfg_np = of_parse_phandle(np, "scfg-controller", 0);
+	if (!scfg_np)
+		return 0;
 
-	regmap_write(scfg_regmap, SCFG_PIXCLKCR, PXCK_ENABLE);
+	pdev = of_find_device_by_node(scfg_np);
+	if (!pdev)
+		return -EINVAL;
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res)
+		return -ENODEV;
+
+	base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	fsl_dev->pixclk = clk_register_gate(fsl_dev->dev,
+			"pixclk", NULL, 0,base + SCFG_PIXCLKCR,
+			7, 0, NULL);
+	return 0;
 }
 
 static int fsl_dcu_drm_irq_init(struct drm_device *dev)
@@ -169,8 +187,12 @@ static int fsl_dcu_load(struct drm_device *dev, unsigned long flags)
 	 * through TCON unchanged */
 	fsl_dcu_bypass_tcon(fsl_dev, fsl_dev->np);
 
-	if (of_device_is_compatible(fsl_dev->np, "fsl,ls1021a-dcu"))
-		dcu_pixclk_enable();
+	if (of_device_is_compatible(fsl_dev->np, "fsl,ls1021a-dcu")) {
+		pixclk_register(fsl_dev, fsl_dev->np);
+		clk_prepare(fsl_dev->pixclk);
+		clk_enable(fsl_dev->pixclk);
+	}
+
 	ret = fsl_dcu_drm_modeset_init(fsl_dev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to initialize mode setting\n");
@@ -273,25 +295,12 @@ static struct drm_driver fsl_dcu_drm_driver = {
 };
 
 #ifdef CONFIG_PM_SLEEP
-static void dcu_pixclk_disable(void)
-{
-	struct regmap *scfg_regmap;
-
-	scfg_regmap = syscon_regmap_lookup_by_compatible("fsl,ls1021a-scfg");
-	if (IS_ERR(scfg_regmap)) {
-		pr_err("No syscfg phandle specified\n");
-		return;
-	}
-
-	regmap_write(scfg_regmap, SCFG_PIXCLKCR, PXCK_DISABLE);
-}
-
 static int fsl_dcu_drm_pm_suspend(struct device *dev)
 {
 	struct fsl_dcu_drm_device *fsl_dev = dev_get_drvdata(dev);
 
 	if (of_device_is_compatible(fsl_dev->np, "fsl,ls1021a-dcu"))
-		dcu_pixclk_disable();
+		clk_disable(fsl_dev->pixclk);
 
 	drm_kms_helper_poll_disable(fsl_dev->ddev);
 	regcache_cache_only(fsl_dev->regmap, true);
@@ -324,7 +333,7 @@ static int fsl_dcu_drm_pm_resume(struct device *dev)
 	regcache_sync(fsl_dev->regmap);
 
 	if (of_device_is_compatible(fsl_dev->np, "fsl,ls1021a-dcu"))
-		dcu_pixclk_enable();
+		clk_enable(fsl_dev->pixclk);
 
 	return 0;
 }

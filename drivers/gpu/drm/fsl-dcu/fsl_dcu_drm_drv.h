@@ -209,6 +209,7 @@ struct fsl_dcu_drm_device {
 	unsigned int irq;
 	struct clk *clk;
 	struct clk *tcon_clk;
+	struct clk *pixclk;
 	/*protects hardware register*/
 	spinlock_t irq_lock;
 	struct drm_device *ddev;
