@@ -38,11 +38,6 @@
 #define XRES_MAX  8192
 #define YRES_MAX  8192
 
-static int virtio_gpu_fbdev = 1;
-
-MODULE_PARM_DESC(fbdev, "Disable/Enable framebuffer device & console");
-module_param_named(fbdev, virtio_gpu_fbdev, int, 0400);
-
 static void virtio_gpu_crtc_gamma_set(struct drm_crtc *crtc,
 				      u16 *red, u16 *green, u16 *blue,
 				      uint32_t start, uint32_t size)
@@ -453,7 +448,7 @@ static const struct drm_mode_config_funcs virtio_gpu_mode_funcs = {
 
 int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 {
-	int i, ret;
+	int i;
 
 	drm_mode_config_init(vgdev->ddev);
 	vgdev->ddev->mode_config.funcs = (void *)&virtio_gpu_mode_funcs;
@@ -468,13 +463,6 @@ int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 		vgdev_output_init(vgdev, i);
 
         drm_mode_config_reset(vgdev->ddev);
-
-	if (virtio_gpu_fbdev) {
-		ret = virtio_gpu_fbdev_init(vgdev);
-		if (ret)
-			return ret;
-	}
-
 	return 0;
 }
 
