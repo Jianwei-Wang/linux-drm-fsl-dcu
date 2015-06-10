@@ -46,8 +46,8 @@ static void virtio_pci_kick_out_firmware_fb(struct pci_dev *pci_dev)
 	if (!ap)
 		return;
 
-	ap->ranges[0].base = pci_resource_start(pci_dev, 2);
-	ap->ranges[0].size = pci_resource_len(pci_dev, 2);
+	ap->ranges[0].base = pci_resource_start(pci_dev, 0);
+	ap->ranges[0].size = pci_resource_len(pci_dev, 0);
 
 	primary = pci_dev->resource[PCI_ROM_RESOURCE].flags
 		& IORESOURCE_ROM_SHADOW;
