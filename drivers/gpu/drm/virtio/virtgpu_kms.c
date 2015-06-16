@@ -107,7 +107,7 @@ static void virtio_gpu_get_capsets(struct virtio_gpu_device *vgdev,
 		DRM_ERROR("failed to allocate cap sets\n");
 		return;
 	}
-	for (i = 0; i < vgdev->num_capsets; i++) {
+	for (i = 0; i < num_capsets; i++) {
 		virtio_gpu_cmd_get_capset_info(vgdev, i);
 		ret = wait_event_timeout(vgdev->resp_wq,
 					 vgdev->capsets[i].id > 0, 5 * HZ);
