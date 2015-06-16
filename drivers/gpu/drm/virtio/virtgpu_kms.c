@@ -213,11 +213,12 @@ int virtio_gpu_driver_load(struct drm_device *dev, unsigned long flags)
 	virtio_device_ready(vgdev->vdev);
 	vgdev->vqs_ready = true;
 
-	if (virtio_gpu_fbdev)
-		virtio_gpu_fbdev_init(vgdev);
 	if (num_capsets)
 		virtio_gpu_get_capsets(vgdev, num_capsets);
+
 	virtio_gpu_cmd_get_display_info(vgdev);
+	if (virtio_gpu_fbdev)
+		virtio_gpu_fbdev_init(vgdev);
 
 	return 0;
 
