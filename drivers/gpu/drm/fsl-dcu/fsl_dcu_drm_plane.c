@@ -62,6 +62,8 @@ void fsl_dcu_drm_plane_atomic_update(struct drm_plane *plane,
 	struct fsl_dcu_drm_plane *fsl_plane = to_fsl_dcu_plane(plane);
 
 	index = fsl_plane->index;
+	index = 4 - index;
+	printk("[fsl]----------layer index = %d\n", index);
 	if (!fb)	
 		return;
 	gem = drm_fb_cma_get_gem_obj(fb, 0);
@@ -170,7 +172,8 @@ static const struct drm_plane_helper_funcs fsl_dcu_drm_plane_helper_funcs = {
 struct drm_plane *fsl_dcu_drm_primary_create_plane(struct drm_device *dev)
 {
 	struct drm_plane *primary;
-	int ret;
+	struct fsl_dcu_drm_plane *fsl_plane[3];
+	int i, ret;
 
 	primary = kzalloc(sizeof(*primary), GFP_KERNEL);
 	if (!primary) {
@@ -189,6 +192,27 @@ struct drm_plane *fsl_dcu_drm_primary_create_plane(struct drm_device *dev)
 		primary = NULL;
 	}
 	drm_plane_helper_add(primary, &fsl_dcu_drm_plane_helper_funcs);
+
+	for(i = 0; i < 3; i++)
+	{
+		fsl_plane[i] = kzalloc(sizeof(struct fsl_dcu_drm_plane), GFP_KERNEL);
+		if (!fsl_plane[i]) {
+			DRM_DEBUG_KMS("Failed to allocate primary plane\n");
+			return NULL;
+		}
+		fsl_plane[i]->index = 1 + i;
+
+		ret = drm_universal_plane_init(dev, &fsl_plane[i]->plane, 1,
+					       &fsl_dcu_drm_plane_funcs,
+					       fsl_dcu_drm_plane_formats,
+					       ARRAY_SIZE(fsl_dcu_drm_plane_formats),
+					       DRM_PLANE_TYPE_OVERLAY);
+		if (ret) {
+			kfree(fsl_plane[i]);
+			fsl_plane[i] = NULL;
+		}
+		drm_plane_helper_add(&fsl_plane[i]->plane, &fsl_dcu_drm_plane_helper_funcs);
+	}
 
 	return primary;
 }
