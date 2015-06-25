@@ -178,7 +178,6 @@ static void det_worker(struct work_struct *work)
 	/* cable connection changes */
 	if (val & SII902X_TPI_INT_PLUG_IN || g_enable_hdmi) {
 		hdmicon->status = connector_status_connected;
-		printk("[fsl,drm_hdmicon]------EVENT=plugin\n");
 
 		/* make sure fb is powerdown */
 		console_lock();
@@ -190,7 +189,6 @@ static void det_worker(struct work_struct *work)
 		console_unlock();
 	} else {
 //		hdmicon->status = connector_status_disconnected;
-		printk("[fsl,drm_hdmicon]------EVENT=plugout\n");
 		console_lock();
 		fb_blank(fbi, FB_BLANK_POWERDOWN);
 		console_unlock();
@@ -230,10 +228,8 @@ static int sii902x_fb_event(struct notifier_block *nb,
 	struct fb_event *event = v;
 	struct fb_info *fbi = event->info;
 
-	printk("[fsl,hdmicon]------FB_EVENT_MODE:%d \n", val);
 	switch (val) {
 	case FB_EVENT_FB_REGISTERED:
-		printk("[fsl,hdmicon]------FB_EVENT_FB_REGISTERED\n");
 		if (sii902x->fbi != NULL)
 			break;
 		sii902x->fbi = fbi;

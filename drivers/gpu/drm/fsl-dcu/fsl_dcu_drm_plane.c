@@ -63,7 +63,6 @@ void fsl_dcu_drm_plane_atomic_update(struct drm_plane *plane,
 
 	index = fsl_plane->index;
 	index = 4 - index;
-	printk("[fsl]----------layer index = %d\n", index);
 	if (!fb)	
 		return;
 	gem = drm_fb_cma_get_gem_obj(fb, 0);
