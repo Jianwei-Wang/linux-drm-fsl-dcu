@@ -18,6 +18,12 @@ struct fsl_dcu_drm_connector {
 	struct drm_panel *panel;
 };
 
+struct fsl_dcu_drm_hdmicon {
+	struct drm_connector connector;
+	struct i2c_client *client;
+	enum drm_connector_status status;
+};
+
 static inline struct fsl_dcu_drm_connector *
 to_fsl_dcu_connector(struct drm_connector *con)
 {
@@ -29,5 +35,9 @@ int fsl_dcu_drm_connector_create(struct fsl_dcu_drm_device *fsl_dev,
 				 struct drm_encoder *encoder);
 int fsl_dcu_drm_encoder_create(struct fsl_dcu_drm_device *fsl_dev,
 			       struct drm_crtc *crtc);
+int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev);
+int fsl_dcu_drm_hdmienc_create(struct fsl_dcu_drm_device *fsl_dev,
+			       struct drm_crtc *crtc);
+
 
 #endif /* __FSL_DCU_DRM_CONNECTOR_H__ */
