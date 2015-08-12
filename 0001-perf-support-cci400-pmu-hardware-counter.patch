@@ -1,0 +1,657 @@
+From 060f86a6b25dd312a76051c33c2eb7c48f09bca6 Mon Sep 17 00:00:00 2001
+From: wangjw <b52261@freescale.com>
+Date: Thu, 11 Dec 2014 13:50:33 +0800
+Subject: [PATCH] perf support cci400 pmu hardware counter
+
+In order to easy debug cci400, add cci400 pmu support to perf.
+Use "perf stat" command to list cci400 pmu counter number.
+
+Signed-off-by: wangjw <b52261@freescale.com>
+---
+ arch/arm/boot/dts/ls1021a.dtsi   |  15 ++
+ arch/arm/kernel/perf_event.c     |   5 +-
+ arch/arm/kernel/perf_event_cpu.c |  21 ++-
+ arch/arm/kernel/perf_event_v7.c  | 300 +++++++++++++++++++++++++++++++++++++--
+ include/uapi/linux/perf_event.h  |   3 +
+ tools/perf/builtin-stat.c        |  10 ++
+ tools/perf/util/evsel.c          |   3 +
+ tools/perf/util/parse-events.c   |  12 ++
+ tools/perf/util/parse-events.l   |   3 +
+ tools/perf/util/python.c         |   3 +
+ 10 files changed, 359 insertions(+), 16 deletions(-)
+
+diff --git a/arch/arm/boot/dts/ls1021a.dtsi b/arch/arm/boot/dts/ls1021a.dtsi
+index 67909b1..193a4f9 100644
+--- a/arch/arm/boot/dts/ls1021a.dtsi
++++ b/arch/arm/boot/dts/ls1021a.dtsi
+@@ -67,6 +67,21 @@
+ 				<GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(2) | IRQ_TYPE_LEVEL_LOW)>;
+ 	};
+ 
++	cci: cci@1180000{
++		compatible = "arm,cci-400";
++		reg = <0x0 0x1180000 0x0 0x200>,
++			<0x0 0x1181000 0x0 0x200>,
++			<0x0 0x1182000 0x0 0x200>,
++			<0x0 0x1183000 0x0 0x200>,
++			<0x0 0x1184000 0x0 0x200>,
++			<0x0 0x1185000 0x0 0x200>,
++			<0x0 0x1189004 0x0 0x20>,
++			<0x0 0x118a000 0x0 0x20>,
++			<0x0 0x118b000 0x0 0x20>,
++			<0x0 0x118c000 0x0 0x20>,
++			<0x0 0x118d000 0x0 0x20>;
++		};
++
+ 	pmu {
+ 		compatible = "arm,cortex-a7-pmu";
+ 		interrupts = <GIC_SPI 138 IRQ_TYPE_LEVEL_HIGH>,
+diff --git a/arch/arm/kernel/perf_event.c b/arch/arm/kernel/perf_event.c
+index e186ee1..e83a5c6 100644
+--- a/arch/arm/kernel/perf_event.c
++++ b/arch/arm/kernel/perf_event.c
+@@ -208,7 +208,10 @@ armpmu_del(struct perf_event *event, int flags)
+ 
+ 	armpmu_stop(event, PERF_EF_UPDATE);
+ 	hw_events->events[idx] = NULL;
+-	clear_bit(idx, hw_events->used_mask);
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		clear_bit(idx+8, hw_events->used_mask);
++	else
++		clear_bit(idx, hw_events->used_mask);
+ 
+ 	perf_event_update_userpage(event);
+ }
+diff --git a/arch/arm/kernel/perf_event_cpu.c b/arch/arm/kernel/perf_event_cpu.c
+index 8d6147b..cf3c9ce 100644
+--- a/arch/arm/kernel/perf_event_cpu.c
++++ b/arch/arm/kernel/perf_event_cpu.c
+@@ -188,6 +188,7 @@ static struct of_device_id cpu_pmu_of_device_ids[] = {
+ 	{.compatible = "arm,arm11mpcore-pmu",	.data = armv6mpcore_pmu_init},
+ 	{.compatible = "arm,arm1176-pmu",	.data = armv6pmu_init},
+ 	{.compatible = "arm,arm1136-pmu",	.data = armv6pmu_init},
++	{.compatible = "arm,cci-400",   .data = cci400_pmu_init},
+ 	{},
+ };
+ 
+@@ -257,6 +258,7 @@ static int cpu_pmu_device_probe(struct platform_device *pdev)
+ 	int (*init_fn)(struct arm_pmu *);
+ 	struct device_node *node = pdev->dev.of_node;
+ 	struct arm_pmu *pmu;
++	int arm_pmu_init_sign = 0;
+ 	int ret = -ENODEV;
+ 
+ 	if (cpu_pmu) {
+@@ -272,7 +274,13 @@ static int cpu_pmu_device_probe(struct platform_device *pdev)
+ 
+ 	if (node && (of_id = of_match_node(cpu_pmu_of_device_ids, pdev->dev.of_node))) {
+ 		init_fn = of_id->data;
+-		ret = init_fn(pmu);
++		if (!strcmp(of_id->compatible, "arm,cci-400"))
++			ret = cci400_pmu_init(pdev);
++		else{
++			ret = init_fn(pmu);
++			arm_pmu_init_sign = 1;
++		}
++
+ 	} else {
+ 		ret = probe_current_pmu(pmu);
+ 	}
+@@ -281,11 +289,12 @@ static int cpu_pmu_device_probe(struct platform_device *pdev)
+ 		pr_info("failed to probe PMU!");
+ 		goto out_free;
+ 	}
+-
+-	cpu_pmu = pmu;
+-	cpu_pmu->plat_device = pdev;
+-	cpu_pmu_init(cpu_pmu);
+-	ret = armpmu_register(cpu_pmu, PERF_TYPE_RAW);
++	if (arm_pmu_init_sign) {
++		cpu_pmu = pmu;
++		cpu_pmu->plat_device = pdev;
++		cpu_pmu_init(cpu_pmu);
++		ret = armpmu_register(cpu_pmu, PERF_TYPE_RAW);
++	}
+ 
+ 	if (!ret)
+ 		return 0;
+diff --git a/arch/arm/kernel/perf_event_v7.c b/arch/arm/kernel/perf_event_v7.c
+index 039cffb..d7d5850 100644
+--- a/arch/arm/kernel/perf_event_v7.c
++++ b/arch/arm/kernel/perf_event_v7.c
+@@ -18,6 +18,10 @@
+ 
+ #ifdef CONFIG_CPU_V7
+ 
++#include <linux/module.h>
++#include <linux/init.h>
++#include <asm/io.h>
++
+ /*
+  * Common ARMv7 event types
+  *
+@@ -67,6 +71,36 @@ enum armv7_perf_types {
+ 	ARMV7_PERFCTR_TTBR_WRITE			= 0x1C,
+ 	ARMV7_PERFCTR_BUS_CYCLES			= 0x1D,
+ 
++	/*cci400 pum events  */
++	ARMV7_CCI_RRH_ANY					= 0xAA00,
++	ARMV7_CCI_RRH_NONCACHEABLE			= 0xAA01,
++	ARMV7_CCI_RRH_NONSHAREABLE			= 0xAA02,
++	ARMV7_CCI_RRH_INOUTSHAREABLE		= 0xAA03,
++	ARMV7_CCI_RRH_CACHEMAINT			= 0xAA04,
++	ARMV7_CCI_RRH_MEMBARRIER			= 0xAA05,
++	ARMV7_CCI_RRH_SYNCBARRIER			= 0xAA06,
++	ARMV7_CCI_RRH_DVMOP					= 0xAA07,
++	ARMV7_CCI_RRH_DVMSYNC				= 0xAA08,
++	ARMV7_CCI_RRH_RRSC					= 0xAA09,
++	ARMV7_CCI_RRH_SNOOP					= 0xAA0A,
++	ARMV7_CCI_RRH_RDSC					= 0xAA0B,
++	ARMV7_CCI_WRH_ANY					= 0xAA0C,
++	ARMV7_CCI_WRH_NONCACHEABLE			= 0XAA0D,
++	ARMV7_CCI_WRH_NONSHAREABLE			= 0XAA0E,
++	ARMV7_CCI_WRH_INOUTSHAREABLE		= 0XAA0F,
++	ARMV7_CCI_WRH_WRUNIQUE				= 0XAA10,
++	ARMV7_CCI_WRH_WRLINEUNIQUE			= 0XAA11,
++	ARMV7_CCI_WRH_EVICT					= 0XAA12,
++	ARMV7_CCI_WRH_WRSC1					= 0XAA13,
++	ARMV7_CCI_WRH_RETRY					= 0XAA14,
++	ARMV7_CCI_WRH_RRSC1					= 0XAA15,
++	ARMV7_CCI_WRH_RRSC2					= 0XAA16,
++	ARMV7_CCI_WRH_RRSC3					= 0XAA17,
++	ARMV7_CCI_WRH_RRSC4					= 0XAA18,
++	ARMV7_CCI_WRH_WRSC2					= 0XAA19,
++	ARMV7_CCI_WRH_WRSC3					= 0XAA1A,
++	ARMV7_CCI_CYCLE						= 0XAAFF,
++
+ 	ARMV7_PERFCTR_CPU_CYCLES			= 0xFF
+ };
+ 
+@@ -620,6 +654,9 @@ static const unsigned armv7_a7_perf_map[PERF_COUNT_HW_MAX] = {
+ 	[PERF_COUNT_HW_BUS_CYCLES]		= ARMV7_PERFCTR_BUS_CYCLES,
+ 	[PERF_COUNT_HW_STALLED_CYCLES_FRONTEND]	= HW_OP_UNSUPPORTED,
+ 	[PERF_COUNT_HW_STALLED_CYCLES_BACKEND]	= HW_OP_UNSUPPORTED,
++	[PERF_COUNT_HW_CCI_CYCLE]		= ARMV7_CCI_CYCLE,
++	[PERF_COUNT_HW_CCI_SNOOP]		= ARMV7_CCI_RRH_SNOOP,
++	[PERF_COUNT_HW_CCI_RRH]		= ARMV7_CCI_RRH_ANY,
+ };
+ 
+ static const unsigned armv7_a7_perf_cache_map[PERF_COUNT_HW_CACHE_MAX]
+@@ -784,6 +821,37 @@ static const unsigned armv7_a7_perf_cache_map[PERF_COUNT_HW_CACHE_MAX]
+ #define	ARMV7_EXCLUDE_USER	(1 << 30)
+ #define	ARMV7_INCLUDE_HYP	(1 << 27)
+ 
++#define ARMV7_CCI_PMNC_E	(1 << 0) /* Enable all counters */
++#define ARMV7_CCI_PMNC_P	(1 << 1) /* Reset all counters */
++#define ARMV7_CCI_PMNC_C	(1 << 2) /* Cycle counter reset */
++/* CCNT counts every 64th cpu cycle */
++#define ARMV7_CCI_PMNC_D	(1 << 3)
++#define ARMV7_CCI_PMNC_X	(1 << 4) /* Export to ETM */
++/* Disable CCNT if non-invasive debug*/
++#define ARMV7_CCI_PMNC_DP	(1 << 5)
++#define	ARMV7_CCI_PMNC_N_SHIFT	11	 /* Number of counters supported */
++#define	ARMV7_CCI_PMNC_N_MASK	0x1f
++#define	ARMV7_CCI_PMNC_MASK	0x3f	 /* Mask for writable bits */
++
++/*cci400 CCR*/
++#define cycle_count		0
++#define cycle_ctrl		4
++#define cycle_overflow	8
++/*cci400 PERF Counter*/
++#define event_select	0
++#define event_count		4
++#define event_ctrl		8
++#define event_overflow	12
++
++struct CCI_pmu {
++	void __iomem *PMCR;
++	void __iomem *cycle_counter;
++	void __iomem *counter0;
++	void __iomem *counter1;
++	void __iomem *counter2;
++	void __iomem *counter3;
++} cci_pmu;
++
+ static inline u32 armv7_pmnc_read(void)
+ {
+ 	u32 val;
+@@ -833,6 +901,26 @@ static inline u32 armv7pmu_read_counter(struct perf_event *event)
+ 	if (!armv7_pmnc_counter_valid(cpu_pmu, idx))
+ 		pr_err("CPU%u reading wrong counter %d\n",
+ 			smp_processor_id(), idx);
++	else if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 0:
++			value = ioread32(cci_pmu.cycle_counter + cycle_count);
++			break;
++		case 1:
++			value = ioread32(cci_pmu.counter0 + event_count);
++			break;
++		case 2:
++			value = ioread32(cci_pmu.counter1 + event_count);
++			break;
++		case 3:
++			value = ioread32(cci_pmu.counter2 + event_count);
++			break;
++		case 4:
++			value = ioread32(cci_pmu.counter3 + event_count);
++			break;
++		default:
++			break;
++		}
+ 	else if (idx == ARMV7_IDX_CYCLE_COUNTER)
+ 		asm volatile("mrc p15, 0, %0, c9, c13, 0" : "=r" (value));
+ 	else if (armv7_pmnc_select_counter(idx) == idx)
+@@ -850,6 +938,26 @@ static inline void armv7pmu_write_counter(struct perf_event *event, u32 value)
+ 	if (!armv7_pmnc_counter_valid(cpu_pmu, idx))
+ 		pr_err("CPU%u writing wrong counter %d\n",
+ 			smp_processor_id(), idx);
++	else if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 0:
++			iowrite32(value , cci_pmu.cycle_counter + cycle_count);
++			break;
++		case 1:
++			iowrite32(value , cci_pmu.counter0 + event_count);
++			break;
++		case 2:
++			iowrite32(value , cci_pmu.counter1 + event_count);
++			break;
++		case 3:
++			iowrite32(value , cci_pmu.counter2 + event_count);
++			break;
++		case 4:
++			iowrite32(value , cci_pmu.counter3 + event_count);
++			break;
++		default:
++			break;
++		}
+ 	else if (idx == ARMV7_IDX_CYCLE_COUNTER)
+ 		asm volatile("mcr p15, 0, %0, c9, c13, 0" : : "r" (value));
+ 	else if (armv7_pmnc_select_counter(idx) == idx)
+@@ -973,25 +1081,107 @@ static void armv7pmu_enable_event(struct perf_event *event)
+ 	/*
+ 	 * Disable counter
+ 	 */
+-	armv7_pmnc_disable_counter(idx);
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 0:
++			iowrite32(0x00 , cci_pmu.cycle_counter + cycle_ctrl);
++			break;
++		case 1:
++			iowrite32(0x00 , cci_pmu.counter0 + event_ctrl);
++			break;
++		case 2:
++			iowrite32(0x00 , cci_pmu.counter1 + event_ctrl);
++			break;
++		case 3:
++			iowrite32(0x00 , cci_pmu.counter2 + event_ctrl);
++			break;
++		case 4:
++			iowrite32(0x00 , cci_pmu.counter3 + event_ctrl);
++			break;
++		default:
++			break;
++		}
++	else
++		armv7_pmnc_disable_counter(idx);
+ 
+ 	/*
+ 	 * Set event (if destined for PMNx counters)
+ 	 * We only need to set the event for the cycle counter if we
+ 	 * have the ability to perform event filtering.
+ 	 */
++	if ((hwc->config_base & 0xAA00) == 0xaa00) {
++		switch (idx) {
++		case 0:
++			goto out_evtsel;
++			break;
++		case 1:
++			iowrite32(hwc->config_base & 0xff,
++					cci_pmu.counter0+event_select);
++			break;
++		case 2:
++			iowrite32(hwc->config_base & 0xff,
++					cci_pmu.counter1+event_select);
++			break;
++		case 3:
++			iowrite32(hwc->config_base & 0xff,
++					cci_pmu.counter2+event_select);
++			break;
++		case 4:
++			iowrite32(hwc->config_base & 0xff,
++					cci_pmu.counter3+event_select);
++			break;
++		default:
++			break;
++		}
++		goto out_evtsel;
++	}
+ 	if (cpu_pmu->set_event_filter || idx != ARMV7_IDX_CYCLE_COUNTER)
+ 		armv7_pmnc_write_evtsel(idx, hwc->config_base);
+-
+ 	/*
+ 	 * Enable interrupt for this counter
+ 	 */
+-	armv7_pmnc_enable_intens(idx);
++out_evtsel:
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 1:
++			break;
++		case 2:
++			break;
++		case 3:
++			break;
++		case 4:
++			break;
++		default:
++			break;
++		}
++	else
++		armv7_pmnc_enable_intens(idx);
+ 
+ 	/*
+ 	 * Enable counter
+ 	 */
+-	armv7_pmnc_enable_counter(idx);
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 0:
++			iowrite32(0x01 , cci_pmu.cycle_counter + cycle_ctrl);
++			break;
++		case 1:
++			iowrite32(0x01 , cci_pmu.counter0 + event_ctrl);
++			break;
++		case 2:
++			iowrite32(0x01 , cci_pmu.counter1 + event_ctrl);
++			break;
++		case 3:
++			iowrite32(0x01 , cci_pmu.counter2 + event_ctrl);
++			break;
++		case 4:
++			iowrite32(0x01 , cci_pmu.counter3 + event_ctrl);
++			break;
++		default:
++			break;
++		}
++	else
++		armv7_pmnc_enable_counter(idx);
+ 
+ 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
+ }
+@@ -1018,12 +1208,47 @@ static void armv7pmu_disable_event(struct perf_event *event)
+ 	/*
+ 	 * Disable counter
+ 	 */
+-	armv7_pmnc_disable_counter(idx);
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 0:
++			iowrite32(0x00 , cci_pmu.cycle_counter + cycle_ctrl);
++			break;
++		case 1:
++			iowrite32(0x00 , cci_pmu.counter0 + event_ctrl);
++			break;
++		case 2:
++			iowrite32(0x00 , cci_pmu.counter1 + event_ctrl);
++			break;
++		case 3:
++			iowrite32(0x00 , cci_pmu.counter2 + event_ctrl);
++			break;
++		case 4:
++			iowrite32(0x00 , cci_pmu.counter3 + event_ctrl);
++			break;
++		default:
++			break;
++		}
++	else
++		armv7_pmnc_disable_counter(idx);
+ 
+ 	/*
+ 	 * Disable interrupt for this counter
+ 	 */
+-	armv7_pmnc_disable_intens(idx);
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		switch (idx) {
++		case 1:
++			break;
++		case 2:
++			break;
++		case 3:
++			break;
++		case 4:
++			break;
++		default:
++			break;
++		}
++	else
++		armv7_pmnc_disable_intens(idx);
+ 
+ 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
+ }
+@@ -1098,6 +1323,7 @@ static void armv7pmu_start(struct arm_pmu *cpu_pmu)
+ 	raw_spin_lock_irqsave(&events->pmu_lock, flags);
+ 	/* Enable all counters */
+ 	armv7_pmnc_write(armv7_pmnc_read() | ARMV7_PMNC_E);
++	iowrite32(ioread32(cci_pmu.PMCR) | ARMV7_CCI_PMNC_E, cci_pmu.PMCR);
+ 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
+ }
+ 
+@@ -1109,6 +1335,7 @@ static void armv7pmu_stop(struct arm_pmu *cpu_pmu)
+ 	raw_spin_lock_irqsave(&events->pmu_lock, flags);
+ 	/* Disable all counters */
+ 	armv7_pmnc_write(armv7_pmnc_read() & ~ARMV7_PMNC_E);
++	iowrite32(ioread32(cci_pmu.PMCR) & ~ARMV7_CCI_PMNC_E, cci_pmu.PMCR);
+ 	raw_spin_unlock_irqrestore(&events->pmu_lock, flags);
+ }
+ 
+@@ -1120,6 +1347,12 @@ static int armv7pmu_get_event_idx(struct pmu_hw_events *cpuc,
+ 	struct hw_perf_event *hwc = &event->hw;
+ 	unsigned long evtype = hwc->config_base & ARMV7_EVTYPE_EVENT;
+ 
++	if ((hwc->config_base & 0xffff) == ARMV7_CCI_CYCLE) {
++		if (test_and_set_bit((ARMV7_IDX_CYCLE_COUNTER+8),
++					cpuc->used_mask))
++			return -EAGAIN;
++		return ARMV7_IDX_CYCLE_COUNTER;
++	}
+ 	/* Always place a cycle counter into the cycle counter. */
+ 	if (evtype == ARMV7_PERFCTR_CPU_CYCLES) {
+ 		if (test_and_set_bit(ARMV7_IDX_CYCLE_COUNTER, cpuc->used_mask))
+@@ -1132,10 +1365,14 @@ static int armv7pmu_get_event_idx(struct pmu_hw_events *cpuc,
+ 	 * For anything other than a cycle counter, try and use
+ 	 * the events counters
+ 	 */
+-	for (idx = ARMV7_IDX_COUNTER0; idx < cpu_pmu->num_events; ++idx) {
++	if ((hwc->config_base & 0xAA00) == 0xaa00)
++		for (idx = ARMV7_IDX_COUNTER0; idx < cpu_pmu->num_events; ++idx)
++			if (!test_and_set_bit(idx+8, cpuc->used_mask))
++				return idx;
++
++	for (idx = ARMV7_IDX_COUNTER0; idx < cpu_pmu->num_events; ++idx)
+ 		if (!test_and_set_bit(idx, cpuc->used_mask))
+ 			return idx;
+-	}
+ 
+ 	/* The counters are all in use. */
+ 	return -EAGAIN;
+@@ -1180,6 +1417,13 @@ static void armv7pmu_reset(void *info)
+ 
+ 	/* Initialize & Reset PMNC: C and P bits */
+ 	armv7_pmnc_write(ARMV7_PMNC_P | ARMV7_PMNC_C);
++	iowrite32(0x00, cci_pmu.cycle_counter + cycle_ctrl);
++	iowrite32(0x00, cci_pmu.counter0 + event_ctrl);
++	iowrite32(0x00, cci_pmu.counter1 + event_ctrl);
++	iowrite32(0x00, cci_pmu.counter2 + event_ctrl);
++	iowrite32(0x00, cci_pmu.counter3 + event_ctrl);
++
++	iowrite32(ARMV7_CCI_PMNC_P | ARMV7_CCI_PMNC_C, cci_pmu.PMCR);
+ }
+ 
+ static int armv7_a8_map_event(struct perf_event *event)
+@@ -1232,7 +1476,6 @@ static u32 armv7_read_num_pmnc_events(void)
+ 
+ 	/* Read the nb of CNTx counters supported from PMNC */
+ 	nb_cnt = (armv7_pmnc_read() >> ARMV7_PMNC_N_SHIFT) & ARMV7_PMNC_N_MASK;
+-
+ 	/* Add the CPU cycles counter and return */
+ 	return nb_cnt + 1;
+ }
+@@ -1283,6 +1526,45 @@ static int armv7_a7_pmu_init(struct arm_pmu *cpu_pmu)
+ 	cpu_pmu->set_event_filter = armv7pmu_set_event_filter;
+ 	return 0;
+ }
++
++static int cci400_pmu_init(struct platform_device *pdev)
++{
++	struct resource *res;
++	void __iomem *base;
++
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++	cci_pmu.PMCR = base + 0x100;
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 6);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++	cci_pmu.cycle_counter = base;
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 7);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++	cci_pmu.counter0 = base;
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 8);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++	cci_pmu.counter1 = base;
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 9);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++	cci_pmu.counter2 = base;
++	res = platform_get_resource(pdev, IORESOURCE_MEM, 10);
++	base = devm_ioremap_resource(&pdev->dev, res);
++	if (IS_ERR(base))
++		return PTR_ERR(base);
++	cci_pmu.counter3 = base;
++
++	return 0;
++}
+ #else
+ static inline int armv7_a8_pmu_init(struct arm_pmu *cpu_pmu)
+ {
+diff --git a/include/uapi/linux/perf_event.h b/include/uapi/linux/perf_event.h
+index 2fc1602..2d5711b 100644
+--- a/include/uapi/linux/perf_event.h
++++ b/include/uapi/linux/perf_event.h
+@@ -55,6 +55,9 @@ enum perf_hw_id {
+ 	PERF_COUNT_HW_STALLED_CYCLES_FRONTEND	= 7,
+ 	PERF_COUNT_HW_STALLED_CYCLES_BACKEND	= 8,
+ 	PERF_COUNT_HW_REF_CPU_CYCLES		= 9,
++	PERF_COUNT_HW_CCI_CYCLE = 10,
++	PERF_COUNT_HW_CCI_SNOOP = 11,
++	PERF_COUNT_HW_CCI_RRH	= 12,
+ 
+ 	PERF_COUNT_HW_MAX,			/* non-ABI */
+ };
+diff --git a/tools/perf/builtin-stat.c b/tools/perf/builtin-stat.c
+index 5098f14..7bb3389 100644
+--- a/tools/perf/builtin-stat.c
++++ b/tools/perf/builtin-stat.c
+@@ -924,6 +924,13 @@ static void abs_printout(int cpu, int nr, struct perf_evsel *evsel, double avg)
+ 			ratio = 1.0 * avg / total;
+ 
+ 		fprintf(output, " # %8.3f GHz                    ", ratio);
++	}  else if (perf_evsel__match(evsel, HARDWARE, HW_CCI_CYCLE)) {
++		total = avg_stats(&runtime_nsecs_stats[cpu]);
++
++		if (total)
++			ratio = 1.0 * avg / total;
++
++		fprintf(output, " # %8.3f GHz                    ", ratio);
+ 	} else if (runtime_nsecs_stats[cpu].n != 0) {
+ 		char unit = 'M';
+ 
+@@ -1257,6 +1264,9 @@ static int add_default_attributes(void)
+   { .type = PERF_TYPE_HARDWARE, .config = PERF_COUNT_HW_INSTRUCTIONS		},
+   { .type = PERF_TYPE_HARDWARE, .config = PERF_COUNT_HW_BRANCH_INSTRUCTIONS	},
+   { .type = PERF_TYPE_HARDWARE, .config = PERF_COUNT_HW_BRANCH_MISSES		},
++	{ .type = PERF_TYPE_HARDWARE, .config = PERF_COUNT_HW_CCI_CYCLE	},
++	{ .type = PERF_TYPE_HARDWARE, .config = PERF_COUNT_HW_CCI_SNOOP	},
++	{ .type = PERF_TYPE_HARDWARE, .config = PERF_COUNT_HW_CCI_RRH	},
+ 
+ };
+ 
+diff --git a/tools/perf/util/evsel.c b/tools/perf/util/evsel.c
+index 9f1ef9b..5f4e489 100644
+--- a/tools/perf/util/evsel.c
++++ b/tools/perf/util/evsel.c
+@@ -262,6 +262,9 @@ const char *perf_evsel__hw_names[PERF_COUNT_HW_MAX] = {
+ 	"stalled-cycles-frontend",
+ 	"stalled-cycles-backend",
+ 	"ref-cycles",
++	"cci-cycles",
++	"snoop",
++	"read-request-handshake",
+ };
+ 
+ static const char *__perf_evsel__hw_name(u64 config)
+diff --git a/tools/perf/util/parse-events.c b/tools/perf/util/parse-events.c
+index 9812531..553f361 100644
+--- a/tools/perf/util/parse-events.c
++++ b/tools/perf/util/parse-events.c
+@@ -70,6 +70,18 @@ static struct event_symbol event_symbols_hw[PERF_COUNT_HW_MAX] = {
+ 		.symbol = "ref-cycles",
+ 		.alias  = "",
+ 	},
++	[PERF_COUNT_HW_CCI_CYCLE] = {
++		.symbol = "cci-cycles",
++		.alias  = "",
++	},
++	[PERF_COUNT_HW_CCI_SNOOP] = {
++		.symbol = "snoop",
++		.alias  = "",
++	},
++	[PERF_COUNT_HW_CCI_RRH] = {
++		.symbol = "Read-request-handshake",
++		.alias  = "",
++	},
+ };
+ 
+ static struct event_symbol event_symbols_sw[PERF_COUNT_SW_MAX] = {
+diff --git a/tools/perf/util/parse-events.l b/tools/perf/util/parse-events.l
+index 91346b7..d54d7b7 100644
+--- a/tools/perf/util/parse-events.l
++++ b/tools/perf/util/parse-events.l
+@@ -136,6 +136,9 @@ branch-instructions|branches			{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_
+ branch-misses					{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_COUNT_HW_BRANCH_MISSES); }
+ bus-cycles					{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_COUNT_HW_BUS_CYCLES); }
+ ref-cycles					{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_COUNT_HW_REF_CPU_CYCLES); }
++cci-cycles					{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CCI_CYCLE); }
++snoop					{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CCI_SNOOP); }
++Read-request-handshake					{ return sym(yyscanner, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CCI_RRH); }
+ cpu-clock					{ return sym(yyscanner, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CPU_CLOCK); }
+ task-clock					{ return sym(yyscanner, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_TASK_CLOCK); }
+ page-faults|faults				{ return sym(yyscanner, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_PAGE_FAULTS); }
+diff --git a/tools/perf/util/python.c b/tools/perf/util/python.c
+index 2ac4bc9..6ed31ce 100644
+--- a/tools/perf/util/python.c
++++ b/tools/perf/util/python.c
+@@ -965,6 +965,9 @@ static struct {
+ 	{ "COUNT_HW_BRANCH_INSTRUCTIONS", PERF_COUNT_HW_BRANCH_INSTRUCTIONS },
+ 	{ "COUNT_HW_BRANCH_MISSES",	  PERF_COUNT_HW_BRANCH_MISSES },
+ 	{ "COUNT_HW_BUS_CYCLES",	  PERF_COUNT_HW_BUS_CYCLES },
++	{ "COUNT_HW_CCI_CYCLE",		PERF_COUNT_HW_CCI_CYCLE},
++	{ "COUNT_HW_CCI_SNOOP",		PERF_COUNT_HW_CCI_SNOOP},
++	{ "COUNT_HW_CCI_RRH",		PERF_COUNT_HW_CCI_RRH},
+ 	{ "COUNT_HW_CACHE_L1D",		  PERF_COUNT_HW_CACHE_L1D },
+ 	{ "COUNT_HW_CACHE_L1I",		  PERF_COUNT_HW_CACHE_L1I },
+ 	{ "COUNT_HW_CACHE_LL",	  	  PERF_COUNT_HW_CACHE_LL },
+-- 
+2.1.0.27.g96db324
+
