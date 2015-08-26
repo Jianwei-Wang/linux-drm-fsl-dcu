@@ -27,7 +27,7 @@
 #include <drm/drmP.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_edid.h> 
+#include <drm/drm_edid.h>
 
 #include "fsl_dcu_drm_drv.h"
 #include "fsl_dcu_drm_output.h"
@@ -70,7 +70,7 @@ static struct i2c_client *sii902x_to_i2c(struct sii902x_data *sii902x)
 }
 
 static s32 sii902x_write(const struct i2c_client *client,
-			u8 command, u8 value)
+			 u8 command, u8 value)
 {
 	return i2c_smbus_write_byte_data(client, command, value);
 }
@@ -101,7 +101,7 @@ static int sii902x_get_edid_preconfig(void)
 	old = sii902x_read(sii902x->client, SII902X_SYS_CONTROL);
 
 	sii902x_write(sii902x->client, SII902X_SYS_CONTROL,
-			old | SII902X_SYS_CTR_DDC_REQ);
+		      old | SII902X_SYS_CTR_DDC_REQ);
 	do {
 		cnt--;
 		msleep(20);
@@ -114,7 +114,7 @@ static int sii902x_get_edid_preconfig(void)
 	}
 
 	sii902x_write(sii902x->client, SII902X_SYS_CONTROL,
-			old | SII902X_SYS_CTR_DDC_BUS_AVAI);
+		      old | SII902X_SYS_CTR_DDC_BUS_AVAI);
 
 done:
 	sii902x_write(sii902x->client, SII902X_SYS_CONTROL, old);
@@ -130,7 +130,7 @@ struct edid *sii902x_drm_get_edid(struct drm_connector *connector,
 	old = sii902x_read(sii902x->client, SII902X_SYS_CONTROL);
 
 	sii902x_write(sii902x->client, SII902X_SYS_CONTROL,
-			old | SII902X_SYS_CTR_DDC_REQ);
+		      old | SII902X_SYS_CTR_DDC_REQ);
 	do {
 		cnt--;
 		msleep(20);
@@ -143,7 +143,7 @@ struct edid *sii902x_drm_get_edid(struct drm_connector *connector,
 	}
 
 	sii902x_write(sii902x->client, SII902X_SYS_CONTROL,
-			old | SII902X_SYS_CTR_DDC_BUS_AVAI);
+		      old | SII902X_SYS_CTR_DDC_BUS_AVAI);
 
 	/* edid reading */
 	edid = drm_get_edid(connector, adapter);
@@ -152,7 +152,7 @@ struct edid *sii902x_drm_get_edid(struct drm_connector *connector,
 	do {
 		cnt--;
 		sii902x_write(sii902x->client, SII902X_SYS_CONTROL,
-				old & ~SII902X_SYS_CTR_DDC_BUS_AVAI);
+			      old & ~SII902X_SYS_CTR_DDC_BUS_AVAI);
 		msleep(20);
 		dat = sii902x_read(sii902x->client, SII902X_SYS_CONTROL);
 	} while ((dat & 0x6) && cnt);
@@ -189,7 +189,6 @@ static void det_worker(struct work_struct *work)
 		fb_blank(fbi, FB_BLANK_UNBLANK);
 		console_unlock();
 	} else {
-//		hdmicon->status = connector_status_disconnected;
 		console_lock();
 		fb_blank(fbi, FB_BLANK_POWERDOWN);
 		console_unlock();
@@ -206,8 +205,8 @@ static irqreturn_t sii902x_detect_handler(int irq, void *data)
 		g_enable_hdmi = false;
 
 	if (sii902x->fbi)
-		schedule_delayed_work(&(sii902x->det_work),
-				msecs_to_jiffies(20));
+		schedule_delayed_work(&sii902x->det_work,
+				      msecs_to_jiffies(20));
 	return IRQ_HANDLED;
 }
 
@@ -231,12 +230,12 @@ static int sii902x_fb_event(struct notifier_block *nb,
 
 	switch (val) {
 	case FB_EVENT_FB_REGISTERED:
-		if (sii902x->fbi != NULL)
+		if (sii902x->fbi)
 			break;
 		sii902x->fbi = fbi;
 		if (g_enable_hdmi && sii902x->fbi) {
-			schedule_delayed_work(&(sii902x->det_work),
-					msecs_to_jiffies(20));
+			schedule_delayed_work(&sii902x->det_work,
+					      msecs_to_jiffies(20));
 		}
 		break;
 	case FB_EVENT_MODE_CHANGE:
@@ -302,7 +301,7 @@ static struct notifier_block nb = {
 };
 
 static int sii902x_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+			 const struct i2c_device_id *id)
 {
 	struct i2c_adapter *adap = to_i2c_adapter(client->dev.parent);
 	int ret, err;
@@ -335,14 +334,14 @@ static int sii902x_probe(struct i2c_client *client,
 
 	if (client->irq) {
 		ret = devm_request_irq(&client->dev, client->irq,
-				sii902x_detect_handler, 0,
-				"SII902x_det", sii902x);
+				       sii902x_detect_handler, 0,
+				       "SII902x_det", sii902x);
 		if (ret < 0)
 			dev_warn(&client->dev,
-				"cound not request det irq %d\n",
-				client->irq);
+				 "cound not request det irq %d\n",
+				 client->irq);
 		else {
-			INIT_DELAYED_WORK(&(sii902x->det_work), det_worker);
+			INIT_DELAYED_WORK(&sii902x->det_work, det_worker);
 			/*enable cable hot plug irq*/
 			sii902x_write(client, SII902X_TPI_INT_ENABLE, 0x01);
 		}
@@ -491,12 +490,12 @@ int fsl_dcu_drm_hdmienc_create(struct fsl_dcu_drm_device *fsl_dev,
 static struct drm_encoder *fsl_dcu_drm_hdmi_find_encoder(struct drm_device *dev)
 {
 	struct drm_encoder *encoder;
-	
+
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		if (encoder->encoder_type == DRM_MODE_ENCODER_TMDS)
 			return encoder;
 	}
-	
+
 	return NULL;
 }
 
@@ -551,10 +550,11 @@ static int fsl_dcu_drm_hdmicon_get_modes(struct drm_connector *connector)
 	} else {
 		dev_dbg(dev->dev, "failed to get edid\n");
 	}
+
 	list_for_each_entry(mode, &connector->probed_modes, head) {
-		if (mode->hdisplay == 1024 || mode->vdisplay == 768) {
+		if (mode->hdisplay == 1024 || mode->vdisplay == 768)
 			mode->type |= DRM_MODE_TYPE_PREFERRED;
-		} else
+		else
 			mode->type &= ~DRM_MODE_TYPE_PREFERRED;
 	}
 
@@ -562,7 +562,7 @@ static int fsl_dcu_drm_hdmicon_get_modes(struct drm_connector *connector)
 }
 
 static int fsl_dcu_drm_hdmicon_mode_valid(struct drm_connector *connector,
-					    struct drm_display_mode *mode)
+					  struct drm_display_mode *mode)
 {
 	if (mode->hdisplay > 1024)
 		return MODE_VIRTUAL_X;
@@ -580,7 +580,7 @@ static const struct drm_connector_helper_funcs connector_helper_funcs = {
 
 int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev)
 {
-	struct drm_device *dev = fsl_dev->drm; 
+	struct drm_device *dev = fsl_dev->drm;
 	struct fsl_dcu_drm_hdmicon *hdmicon;
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
@@ -588,8 +588,9 @@ int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev)
 
 	i2c_add_driver(&sii902x_i2c_driver);
 
-	hdmicon = devm_kzalloc(fsl_dev->dev, sizeof(struct fsl_dcu_drm_hdmicon), GFP_KERNEL);
-	if (hdmicon == NULL)
+	hdmicon = devm_kzalloc(fsl_dev->dev,
+			       sizeof(struct fsl_dcu_drm_hdmicon), GFP_KERNEL);
+	if (!hdmicon)
 		return -ENOMEM;
 
 	connector = &hdmicon->connector;
