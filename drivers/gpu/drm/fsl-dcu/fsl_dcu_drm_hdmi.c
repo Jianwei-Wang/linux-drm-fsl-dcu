@@ -586,7 +586,11 @@ int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev)
 	struct drm_encoder *encoder;
 	int ret;
 
-	i2c_add_driver(&sii902x_i2c_driver);
+	ret = i2c_add_driver(&sii902x_i2c_driver);
+	if (!ret) {
+		dev_err(fsl_dev->dev, "Register i2c driver failed\n");
+		return ret;
+	}
 
 	hdmicon = devm_kzalloc(fsl_dev->dev,
 			       sizeof(struct fsl_dcu_drm_hdmicon), GFP_KERNEL);
