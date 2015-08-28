@@ -38,7 +38,6 @@ static const struct regmap_config fsl_dcu_regmap_config = {
 static int fsl_dcu_drm_irq_init(struct drm_device *dev)
 {
 	struct fsl_dcu_drm_device *fsl_dev = dev->dev_private;
-	unsigned int value;
 	int ret;
 
 	ret = drm_irq_install(dev, fsl_dev->irq);
@@ -48,11 +47,8 @@ static int fsl_dcu_drm_irq_init(struct drm_device *dev)
 	ret = regmap_write(fsl_dev->regmap, DCU_INT_STATUS, 0);
 	if (ret)
 		dev_err(dev->dev, "set DCU_INT_STATUS failed\n");
-	ret = regmap_read(fsl_dev->regmap, DCU_INT_MASK, &value);
-	if (ret)
-		dev_err(dev->dev, "read DCU_INT_MASK failed\n");
-	value &= DCU_INT_MASK_VBLANK;
-	ret = regmap_write(fsl_dev->regmap, DCU_INT_MASK, value);
+	ret = regmap_update_bits(fsl_dev->regmap, DCU_INT_MASK,
+				 DCU_INT_MASK_VBLANK, ~DCU_INT_MASK_VBLANK);
 	if (ret)
 		dev_err(dev->dev, "set DCU_INT_MASK failed\n");
 	ret = regmap_write(fsl_dev->regmap, DCU_UPDATE_MODE,
@@ -143,14 +139,10 @@ static irqreturn_t fsl_dcu_drm_irq(int irq, void *arg)
 static int fsl_dcu_drm_enable_vblank(struct drm_device *dev, int crtc)
 {
 	struct fsl_dcu_drm_device *fsl_dev = dev->dev_private;
-	unsigned int value;
 	int ret;
 
-	ret = regmap_read(fsl_dev->regmap, DCU_INT_MASK, &value);
-	if (ret)
-		dev_err(dev->dev, "read DCU_INT_MASK failed\n");
-	value &= ~DCU_INT_MASK_VBLANK;
-	ret = regmap_write(fsl_dev->regmap, DCU_INT_MASK, value);
+	ret = regmap_update_bits(fsl_dev->regmap, DCU_INT_MASK,
+				 DCU_INT_MASK_VBLANK, ~DCU_INT_MASK_VBLANK);
 	if (ret)
 		dev_err(dev->dev, "set DCU_INT_MASK failed\n");
 	return 0;
@@ -159,14 +151,10 @@ static int fsl_dcu_drm_enable_vblank(struct drm_device *dev, int crtc)
 static void fsl_dcu_drm_disable_vblank(struct drm_device *dev, int crtc)
 {
 	struct fsl_dcu_drm_device *fsl_dev = dev->dev_private;
-	unsigned int value;
 	int ret;
 
-	ret = regmap_read(fsl_dev->regmap, DCU_INT_MASK, &value);
-	if (ret)
-		dev_err(dev->dev, "read DCU_INT_MASK failed\n");
-	value |= DCU_INT_MASK_VBLANK;
-	ret = regmap_write(fsl_dev->regmap, DCU_INT_MASK, value);
+	ret = regmap_update_bits(fsl_dev->regmap, DCU_INT_MASK,
+				 DCU_INT_MASK_VBLANK, DCU_INT_MASK_VBLANK);
 	if (ret)
 		dev_err(dev->dev, "set DCU_INT_MASK failed\n");
 }
