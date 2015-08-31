@@ -587,7 +587,7 @@ int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev)
 	int ret;
 
 	ret = i2c_add_driver(&sii902x_i2c_driver);
-	if (!ret) {
+	if (ret) {
 		dev_err(fsl_dev->dev, "Register i2c driver failed\n");
 		return ret;
 	}
@@ -629,6 +629,7 @@ int fsl_dcu_drm_hdmicon_create(struct fsl_dcu_drm_device *fsl_dev)
 		(&connector->base, fsl_dev->drm->mode_config.dpms_property,
 		DRM_MODE_DPMS_OFF);
 
+//	drm_helper_hpd_irq_event(dev);
 	return 0;
 
 err_sysfs:
