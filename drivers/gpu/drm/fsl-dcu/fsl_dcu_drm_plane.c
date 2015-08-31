@@ -236,7 +236,10 @@ static const u32 fsl_dcu_drm_plane_formats[] = {
 
 struct drm_plane *fsl_dcu_drm_primary_create_plane(struct drm_device *dev)
 {
+	struct fsl_dcu_drm_device *fsl_dev = dev->dev_private;
 	struct drm_plane *primary;
+	struct drm_plane *overlay;
+	unsigned int total_layer, i;
 	int ret;
 
 	primary = kzalloc(sizeof(*primary), GFP_KERNEL);
@@ -257,5 +260,27 @@ struct drm_plane *fsl_dcu_drm_primary_create_plane(struct drm_device *dev)
 	}
 	drm_plane_helper_add(primary, &fsl_dcu_drm_plane_helper_funcs);
 
+	total_layer = fsl_dev->soc->total_layer;
+	for(i = 0; i < total_layer - 1; i++)
+	{
+		overlay = kzalloc(sizeof(struct drm_plane), GFP_KERNEL);
+		if (!overlay) {
+			DRM_DEBUG_KMS("Failed to allocate overlay plane\n");
+			goto out;
+		}
+
+		ret = drm_universal_plane_init(dev, overlay, 1,
+					       &fsl_dcu_drm_plane_funcs,
+					       fsl_dcu_drm_plane_formats,
+					       ARRAY_SIZE(fsl_dcu_drm_plane_formats),
+					       DRM_PLANE_TYPE_OVERLAY);
+		if (ret) {
+			kfree(overlay);
+			goto out;
+		}
+		drm_plane_helper_add(overlay, &fsl_dcu_drm_plane_helper_funcs);
+	}
+
+out:
 	return primary;
 }
